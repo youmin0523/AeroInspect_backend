@@ -1,0 +1,235 @@
+# =============================================
+# postprocess_config.yaml
+# 역할: 후처리 강도 정책 — baseline 동일, 약한 모델만 추가 가중
+#
+# 정책 (feedback_postprocess_strength_policy.md 참조):
+#   - 모든 모델 baseline 후처리 강도는 동일
+#   - 0.9에 미달하는 모델일수록 추가 가중치 적용
+#   - 강한 모델의 후처리는 절대 약화 X (모노톤 비감소)
+#
+# 사용:
+#   from app.services.postprocess_config import load_postprocess_config
+#   cfg = load_postprocess_config()
+#   tf_params = cfg.temporal_filter_params(class_name="vertical_crack")
+# =============================================
+
+version: 1
+last_updated: "2026-05-02"
+
+# ─────────────────────────────────────────────
+# 1) Baseline (모든 모델 공통 - 절대 약화 금지)
+# ─────────────────────────────────────────────
+baseline:
+  temporal_filter:
+    window_size: 5                    # 윈도우 프레임 수
+    min_detections: 2                 # 보고 최소 탐지 수
+    instant_threshold: 0.85           # 즉시 보고 conf 임계
+    spatial_dedup_radius: 0.3         # LiDAR 3D 중복 보고 방지 (m)
+    iou_threshold: 0.3                # 공간 매칭 IoU
+    window_time_sec: 2.0              # 윈도우 시간 한계
+
+  object_tracker:
+    min_hits: 3                       # 트랙 확정 최소 탐지
+    max_age: 15                       # 미탐지 허용 프레임
+    iou_threshold: 0.3
+
+  ensemble:
+    # 측정 결과 (2026-05-04 새벽 multi_model_voting eval) 기반 안전 값으로 조정:
+    # - boost_factor=0.50, iou=0.25 조합은 M3 mAP -0.045, M2 -0.058로 mAP 저하
+    # - 원인: 너무 낮은 IoU에서 너무 강한 boost → false positive conf 증폭
+    cross_model_nms_iou: 0.5              # 0.4 → 0.5 (보수적, 중복 제거 약화)
+    cross_model_boost_iou: 0.4            # 0.25 → 0.4 (실제 같은 위치만 boost)
+    cross_model_boost_factor: 0.15        # 0.50 → 0.15 (소폭 boost로 회귀)
+    cross_model_boost_min_conf: 0.3       # 신규: baseline conf < 0.3이면 boost X (noise FP 보호)
+    patchcore_low_conf_threshold: 0.35    # 0.45 → 0.35 (보수적)
+    patchcore_roi_score_threshold: 0.5    # 0.4 → 0.5 (anomaly mask 보수적)
+
+  conf_threshold:
+    M1_YOLO: 0.25
+    M2_YOLO: 0.25
+    M3_YOLO: 0.25
+    M4_CONTEXT: 0.25
+    M5_SEG: 0.25
+    M6_PATCHCORE: 0.5
+
+# ─────────────────────────────────────────────
+# 2) 모델별 강도 등급 (학습 mAP 기반)
+# ─────────────────────────────────────────────
+# strength: high | medium | low | very_low
+#   - high: mAP >= 0.85 → baseline 그대로
+#   - medium: mAP >= 0.75 → 가벼운 추가 가중
+#   - low: mAP >= 0.6 → 중간 추가 가중
+#   - very_low: mAP < 0.6 → 강한 추가 가중
+
+model_strength:
+  # 학습 mAP 측정 후 매번 갱신
+  M1_YOLO: medium       # Plan A 진행 중, 0.78~0.85 예상
+  M1_RESNET: high       # 분류기, 정확도 높음
+  M2_YOLO: medium       # 0.794
+  M2_RESNET: medium     # 0.85+
+  M3_YOLO: medium       # 0.804
+  M3_RESNET: medium     # 0.85+
+  M4_UNET: medium       # 0.85+ 추정
+  M4_CONTEXT: very_low  # 0.527 → 학습 후 0.55~0.6 예상
+  M5_SEG: low           # 0.626
+  M6_PATCHCORE: high    # anomaly score는 별도 잣대
+  furniture_aware: medium  # 학습 중, 0.80~0.88 예상
+
+# ─────────────────────────────────────────────
+# 3) 강도 등급별 가중치 (baseline에 추가)
+# ─────────────────────────────────────────────
+strength_modifiers:
+  high:
+    # baseline 그대로
+    temporal_filter:
+      window_size_delta: 0
+      min_detections_delta: 0
+      instant_threshold_delta: 0.0
+      iou_threshold_delta: 0.0
+    object_tracker:
+      min_hits_delta: 0
+      max_age_delta: 0
+    ensemble:
+      cross_model_boost_factor_delta: 0.0
+      patchcore_low_conf_threshold_delta: 0.0
+
+  medium:
+    # 약간 더 누적, 약간 더 보수적
+    temporal_filter:
+      window_size_delta: 2              # 5 → 7
+      min_detections_delta: 0           # 2 유지
+      instant_threshold_delta: -0.05    # 0.85 → 0.80
+      iou_threshold_delta: -0.05        # 0.3 → 0.25 (작은 객체 매칭 완화)
+    object_tracker:
+      min_hits_delta: 0
+      max_age_delta: 5                  # 15 → 20
+    ensemble:
+      cross_model_boost_factor_delta: 0.05  # 0.15 → 0.20
+      patchcore_low_conf_threshold_delta: 0.05  # 0.35 → 0.40
+
+  low:
+    # 더 길게 누적, 더 낮은 conf도 통과
+    temporal_filter:
+      window_size_delta: 4              # 5 → 9
+      min_detections_delta: 1           # 2 → 3 (더 보수적, 오탐 줄이기)
+      instant_threshold_delta: -0.10    # 0.85 → 0.75
+      iou_threshold_delta: -0.10        # 0.3 → 0.20
+    object_tracker:
+      min_hits_delta: 1                 # 3 → 4
+      max_age_delta: 10                 # 15 → 25
+    ensemble:
+      cross_model_boost_factor_delta: 0.10  # 0.15 → 0.25
+      patchcore_low_conf_threshold_delta: 0.10  # 0.35 → 0.45
+
+  very_low:
+    # 시간 누적 + cross-model 의존 최대화
+    temporal_filter:
+      window_size_delta: 7              # 5 → 12
+      min_detections_delta: 2           # 2 → 4 (오탐 폭증 방지)
+      instant_threshold_delta: -0.15    # 0.85 → 0.70 (단발 즉시보고 거의 안 함)
+      iou_threshold_delta: -0.15        # 0.3 → 0.15 (작은 결함 매칭 매우 완화)
+    object_tracker:
+      min_hits_delta: 2                 # 3 → 5 (트랙 확정 더 까다롭게 → 오탐 감소)
+      max_age_delta: 15                 # 15 → 30 (긴 가림 허용)
+    ensemble:
+      cross_model_boost_factor_delta: 0.15  # 0.15 → 0.30
+      patchcore_low_conf_threshold_delta: 0.15  # 0.35 → 0.50
+
+# ─────────────────────────────────────────────
+# 4) 클래스별 오버라이드 (특수 안전·민감 케이스)
+# ─────────────────────────────────────────────
+# 특정 하자는 미탐 비용이 매우 크므로 추가로 더 빡세게:
+# - 구조 균열(A-02): 안전 직결 → 단발성도 신중하게 보고
+# - 누수(B-04): 감지 누락 시 큰 보상 분쟁
+# - 단열 결함(B-01, B-02): 거주 환경 직결
+class_overrides:
+  crack_structural:
+    # A-02 구조 균열: instant_threshold 낮춰서 한 번이라도 잡으면 신속 보고
+    instant_threshold: 0.65            # 0.85 → 0.65
+    min_detections: 1                  # 2 → 1 (안전 우선)
+    note: "구조 균열은 미탐 비용이 매우 큼 → 즉시 보고 임계 낮춤"
+
+  waterproof_defect:
+    # B-04 방수/누수: 누수 신호는 가급적 잡아야 함
+    instant_threshold: 0.70
+    min_detections: 1
+    note: "누수 미탐 시 보상 분쟁 — 즉시 보고 임계 낮춤"
+
+  caulking_defect:
+    # B-03 코킹 누락
+    instant_threshold: 0.75
+    note: "코킹 결함은 누수 원인 → 보수적으로 잡기"
+
+  wall_insulation_gap:
+    # B-02 벽체 단열 공백
+    instant_threshold: 0.70
+    min_detections: 1
+    note: "단열 결함은 거주 환경 직결"
+
+  window_insulation_defect:
+    # B-01 창호 단열 (열교)
+    instant_threshold: 0.70
+    min_detections: 1
+
+# ─────────────────────────────────────────────
+# 5) 가구 인식 게이트 (false positive 차단)
+# ─────────────────────────────────────────────
+furniture_gate:
+  enabled: true
+  furniture_classes:
+    - cabinet_builtin
+    - kitchen_appliance
+    - countertop_sink
+    - kitchen_island
+    - shelf
+  iou_with_furniture_threshold: 0.5    # 검출의 50% 이상이 가구 위면 차단
+  exempt_classes:                       # 가구 위에서도 유효한 하자 (열교 등)
+    - window_insulation_defect
+    - wall_insulation_gap
+
+# ─────────────────────────────────────────────
+# 6) Geometric Gate (M4 Context 기반)
+# ─────────────────────────────────────────────
+geometric_gate:
+  enabled: true
+  # 검출 클래스가 어떤 컨텍스트(wall/ceiling/floor/window/door) 위에서만 유효한가
+  valid_context:
+    crack_structural:        ["wall", "ceiling", "floor"]
+    crack_finishing:         ["wall", "ceiling"]
+    caulking_defect:         ["window", "door"]
+    waterproof_defect:       ["wall", "ceiling", "floor"]
+    wallpaper_seam:          ["wall", "ceiling"]
+    wallpaper_bubble:        ["wall", "ceiling"]
+    paint_stain:             ["wall", "ceiling", "door", "window"]
+    scratch:                 ["wall", "ceiling", "floor", "door", "window"]
+    baseboard_damage:        ["wall", "floor"]
+    floor_stain:             ["floor"]
+    grout_defect:            ["floor", "wall"]
+    glass_scratch:           ["window"]
+    frame_paint_defect:      ["window", "door"]
+    window_insulation_defect: ["window"]
+    wall_insulation_gap:     ["wall"]
+    window_airtight_defect:  ["window"]
+    floor_heating_defect:    ["floor"]
+    vertical_horizontal_defect: ["wall", "ceiling"]
+    frame_squareness_defect: ["window", "door"]
+    floor_lifting:           ["floor"]
+  # 검출의 IoU가 컨텍스트 mask와 이 임계 이상이어야 통과
+  context_iou_threshold: 0.4
+  # M4 Context가 미로드/실패 시 게이트 비활성화 (graceful degradation)
+  fallback_when_unavailable: pass  # pass = 게이트 무시, block = 검출 차단
+
+# ─────────────────────────────────────────────
+# 7) TTA (Test-Time Augmentation)
+# ─────────────────────────────────────────────
+# 학습 mAP가 낮은 모델 추론 시 TTA로 강화
+tta:
+  enabled_for:
+    - M4_CONTEXT              # 학습 mAP 0.55 — TTA 강화 필요
+    - M5_SEG                  # 학습 mAP 0.626
+  augmentations:
+    - horizontal_flip
+    - scale_0_8
+    - scale_1_2
+  merge_method: max_conf      # max_conf | wbf (weighted box fusion)
+  iou_merge_threshold: 0.5

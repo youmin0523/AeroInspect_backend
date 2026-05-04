@@ -1,0 +1,26 @@
+# 학습 산출물 (대용량)
+runs/
+datasets/
+test_external/
+gdrive_raw/
+__temp_preview__/
+
+# 평가 결과
+eval/evaluation_results.json
+
+# 모델 가중치
+*.onnx
+*.pt
+*.pth
+*.h5
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 데이터 리포트
+data_report.json

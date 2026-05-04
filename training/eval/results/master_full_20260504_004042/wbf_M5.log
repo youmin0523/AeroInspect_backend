@@ -1,0 +1,775 @@
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8767335891723633, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9017088890075684, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.93651123046875, 1.0, 0.9994885444641113, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.15170568227767944, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.24415204524993897, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17103198766708375, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.2499345064163208, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.5973508358001709, 1.0, 0.8504706382751465, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7958737850189209, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.27312397956848145, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8806096076965332, 1.0, 0.999506664276123, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.20817763805389405, 1.0, 0.4923732280731201, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9277342796325684, 1.0, 0.9991984367370605, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17656112909317018, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.14003924131393433, 1.0, 0.3830998182296753, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.2731847047805786, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7542237758636474, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17620258331298827, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.43044319152832033, 1.0, 0.6844335079193116, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9016310691833496, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8768202781677246, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8914248466491699, 1.0, 0.9994247436523438, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9472809791564941, 1.0, 0.9998007774353027, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7542933940887451, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17260795831680298, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.011174984276294708, 1.0, 0.2256293773651123, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17797956466674805, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.7219157695770264, 0.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.42435240745544434, 1.0, 0.6889260292053223, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8586080551147461, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7654166698455811, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.06251945495605468, 1.0, 0.3541689395904541, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1623624801635742, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.3987898588180542, 1.0, 0.644325590133667, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.11068443059921265, 1.0, 0.3849207401275635, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9011906623840332, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.876469898223877, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9472149848937989, 1.0, 0.9998839378356934, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1741921305656433, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.4666712284088135, 1.0, 0.7034217834472656, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.5653424263000488, 1.0, 0.7593539714813232, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.00012759686214849352, 0.0, 0.11907618045806885].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17585490942001342, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.159468674659729, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.0014901399612426759, 0.0, 0.11225616931915283].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1708844780921936, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.017449875175952912, 1.0, 0.2235799551010132, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.14893660545349122, 1.0, 0.4316409587860107, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9018743515014649, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8609519004821777, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.2501861095428467, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.6981578826904297, 0.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8765686988830567, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.5322383403778076, 1.0, 0.7553847789764404, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9013842582702637, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1768662691116333, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.934846305847168, 1.0, 0.9994782447814942, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17461540699005126, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.2516572713851929, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.26651065349578856, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.18842747211456298, 1.0, 0.4763518810272217, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7609114170074462, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.26740739345550535, 1.0, 0.5487514495849609, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8755622863769531, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.14936269521713258, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17262276411056518, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.2507683038711548, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9015185356140136, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8759456634521484, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.5664002895355225, 1.0, 0.8056254386901855, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7934998512268067, 1.0, 0.98086576461792, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8888743400573731, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1788758873939514, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9332442283630371, 1.0, 0.9992193222045899, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6892424106597901, 1.0, 0.9507628440856933, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9010464668273925, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8763294219970703, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.947267723083496, 1.0, 0.9999085426330566, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.24991776943206787, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8168060302734375, 1.0, 0.9993300437927246, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.26624810695648193, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.0, 0.0, 0.376661491394043].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8737994194030761, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9264079093933105, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8869696617126465, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1784166932106018, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7892473697662353, 1.0, 0.9979815483093262, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1869552969932556, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8760428428649902, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9005960464477539, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9357447624206543, 1.0, 0.9995673179626465, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.15460580587387085, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.24962737560272216, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8332725524902344, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7243385314941406, 1.0, 0.9784622192382812, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.21611111164093016, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.901547908782959, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8764183998107911, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9344291687011719, 1.0, 0.9994585990905762, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.18146733045578003, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9011883735656738, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.875582504272461, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9483186721801757, 1.0, 0.9999030113220215, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.6443331241607666, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.67441725730896, 0.0, 0.9946688652038574].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.2536077260971069, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.185711669921875, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.07999500632286072, 1.0, 0.2915771245956421, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.1405004382133484, 1.0, 0.3724005937576294, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.00014531612396240234, 0.0, 0.12244453430175781].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17840477228164672, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7396864414215087, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9007352828979492, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8749723434448242, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8155470848083496, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.02355593740940094, 0.0, 0.3345536947250366].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17582610845565796, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.4321634292602539, 1.0, 0.6688443660736084, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8730764389038086, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.25049116611480715, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6442965984344482, 1.0, 0.895880126953125, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8874880790710449, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.33957111835479736, 1.0, 0.6269944667816162, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7315898895263672, 1.0, 0.9464214324951172, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.18060978651046752, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.01184118315577507, 1.0, 0.2760601282119751, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.12345881462097168, 1.0, 0.4059448719024658, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8149291038513183, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.24718549251556396, 1.0, 0.521111249923706, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6935426235198975, 1.0, 0.8688209533691407, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.13868793249130248, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9387736320495605, 1.0, 0.9998676300048828, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1743510127067566, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8511519432067871, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6480006694793701, 1.0, 0.9261824607849121, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17122650146484375, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.15343188047409057, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7759429931640625, 1.0, 0.9490182876586915, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8248234748840332, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9278995513916015, 1.0, 0.9995049476623535, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.909888744354248, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9015746116638184, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8756818771362305, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1746533989906311, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.19160960912704467, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.6972209930419921, 0.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17663185596466063, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.4039344310760498, 1.0, 0.6697831630706788, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17392927408218384, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.5525425434112549, 0.0, 0.8638138771057129].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.24049890041351318, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8162696838378907, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8741083145141602, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9004082679748535, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.5209255218505859, 1.0, 0.7959200382232666, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1746295928955078, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.15689924955368043, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8647809028625488, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7151162624359131, 1.0, 0.955987548828125, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9149589538574219, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.11616591215133668, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9019556999206543, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1252480149269104, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.18334156274795532, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.41922917366027834, 1.0, 0.6066390037536621, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.3793625354766846, 1.0, 0.5586578845977783, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.04183773100376129, 1.0, 0.3331383228302002, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8765578269958496, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.14377233982086182, 1.0, 0.4054234981536865, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9012907981872559, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9361286163330078, 1.0, 0.9995116233825684, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.06252807974815369, 1.0, 0.31531586647033694, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17423746585845948, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.25082740783691404, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8476973533630371, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9123274803161621, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17585655450820922, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.12745879888534545, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17485793828964233, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17789337635040284, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8242331504821777, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6739759922027588, 1.0, 0.8580596923828125, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9011392593383789, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8750776290893555, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17467135190963745, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.0005047416780143976, 0.0, 0.06461240649223328].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17541239261627198, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1552873969078064, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.2501025438308716, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8757000923156738, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9264391899108887, 1.0, 0.9996281623840332, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6958722591400146, 1.0, 0.9801542282104492, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7278076171875, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17721961736679076, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.12615445852279664, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.07037283778190613, 1.0, 0.29481666088104247, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9012842178344727, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8764906883239746, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.18250608444213867, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.13945333957672118, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8734906196594239, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.27782440185546875, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8637022018432617, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7410519599914551, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.168121337890625, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.19337158203125, 1.0, 0.45403566360473635, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7212135314941406, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.6960442543029786, 0.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8173415184020996, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8554726600646972, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17818243503570558, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.90115385055542, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8171356201171875, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17473224401474, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.44648942947387693, 0.0, 0.756359052658081].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17285293340682983, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8698298454284668, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9018112182617187, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8765730857849121, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1745756149291992, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9060593605041504, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.26989097595214845, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17218952178955077, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.829641056060791, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6205912590026855, 1.0, 0.8246879577636719, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.012570972740650176, 1.0, 0.2268292188644409, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17857156991958617, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1262920618057251, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9014737129211425, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8766887664794922, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9378809928894043, 1.0, 0.9994844436645508, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17403196096420287, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.3302870512008667, 1.0, 0.6183788776397705, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.2067471742630005, 1.0, 0.433597993850708, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.2880342721939087, 1.0, 0.4762570381164551, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9006427764892578, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.06627047657966614, 1.0, 0.2550437688827515, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.0019496411085128784, 0.0, 0.09810594320297242].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.26565463542938234, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.19948402643203736, 1.0, 0.4504104137420654, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.17956039905548096, 1.0, 0.45705275535583495, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.16006561517715454, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.000556325912475586, 0.0, 0.10271506309509278].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8760725975036621, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9011105537414551, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9365362167358399, 1.0, 0.9995397567749024, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.0005353093147277832, 0.0, 0.058231353759765625].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8994421005249024, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9373611450195313, 1.0, 0.9995086669921875, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.16614216566085815, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.6197108268737793, 0.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.003551197052001953, 0.0, 0.25735976696014407].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.0015237092971801757, 0.0, 0.15739470720291138].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.0008945167064666748, 0.0, 0.13545527458190917].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.24446642398834229, 0.0, 0.6302492141723632].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.3669991731643677, 0.0, 0.7485369682312012].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.1410900354385376, 0.0, 0.523504638671875].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.5038577079772949, 0.0, 0.8850691795349122].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8002233505249023, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.20880439281463622, 1.0, 0.5012920379638672, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.4547337532043457, 0.0, 0.8047854423522949].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1721624732017517, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.18296005725860595, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9012721061706543, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17058340311050416, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.24737980365753173, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8877652168273926, 1.0, 0.9997405052185059, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8870327949523926, 1.0, 0.9992388725280762, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6826646327972412, 1.0, 0.9619234085083008, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8059880256652832, 1.0, 0.9779963493347168, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.5249089241027832, 1.0, 0.7473148345947266, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1588279128074646, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17641700506210328, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1797311782836914, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8571909904479981, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.2661825895309448, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7663894176483155, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9341673851013184, 1.0, 0.9997567176818848, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0943401038646698, 1.0, 0.3559864521026611, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.159526526927948, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.21578564643859863, 1.0, 0.4692093372344971, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.5623724460601807, 1.0, 0.8139750480651855, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.37292096614837644, 1.0, 0.6252768516540528, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6405531406402588, 1.0, 0.8497454643249511, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7046447277069092, 1.0, 0.9487918853759766, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.29115283489227295, 1.0, 0.5710581779479981, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17824970483779906, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9010540008544922, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8741042137145996, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9032313346862793, 1.0, 0.9990267753601074, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8272637367248535, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9018234252929688, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8767501831054687, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7787086486816406, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.26901195049285886, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.43492660522460935, 0.0, 0.7427403450012207].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8754176139831543, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.0001747608184814453, 0.0, 0.12633213996887208].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8763986587524414, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7680329799652099, 1.0, 0.9869547843933105, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7406919002532959, 1.0, 0.9812978744506836, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17496566772460936, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8346412658691407, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1581025242805481, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.5829015254974366, 1.0, 0.8593918800354003, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6449865818023681, 1.0, 0.793584156036377, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.444457483291626, 1.0, 0.7165793895721435, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.2996384143829346, 0.0, 0.6109885215759278].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.740162992477417, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.3346735715866089, 0.0, 0.5931750297546386].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.876416015625, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9019844055175781, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17625783681869506, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9369603157043457, 1.0, 0.9994616508483887, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.48284287452697755, 0.0, 0.7980015754699707].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17489979267120362, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.7378915309906006, 0.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.909269905090332, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.011755867302417755, 1.0, 0.228348970413208, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17581237554550172, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1581684947013855, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8458468437194824, 1.0, 0.9997885704040528, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17777055501937866, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1626848816871643, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6592532634735108, 1.0, 0.9597970962524414, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.444102144241333, 1.0, 0.7219544887542725, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.11215204000473022, 1.0, 0.4006351470947266, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.22572684288024902, 1.0, 0.506524133682251, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1779431700706482, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 6.027698400430381e-05, 0.0, 0.1284705400466919].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8905756950378418, 1.0, 0.9999167442321777, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8159686088562011, 1.0, 0.9902822494506835, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9426816940307617, 1.0, 0.9999492645263672, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17362393140792848, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8510841369628906, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7548360347747802, 1.0, 0.9944634437561035, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.24661946296691895, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6201453685760498, 1.0, 0.901363468170166, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9244961738586426, 1.0, 0.9995718955993652, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.6058948040008545, 0.0, 0.8597024917602539].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.25501911640167235, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.42286906242370603, 1.0, 0.6736874580383301, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1257326126098633, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.2533836364746094, 1.0, 0.5229087352752686, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.3831294298171997, 1.0, 0.5937474727630615, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.14466968774795533, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.05904151797294617, 1.0, 0.30896339416503904, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.51351900100708, 1.0, 0.7025868415832519, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8469244956970214, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9013102531433106, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17491686344146729, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.878597354888916, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7474671840667725, 1.0, 0.9271446228027344, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8116522789001465, 1.0, 0.9960443496704101, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9351500511169434, 1.0, 0.9997119903564453, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.4777095317840576, 1.0, 0.7500923156738282, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.7333552837371826, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8523845672607422, 1.0, 0.999948787689209, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.18101681470870973, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9165810585021973, 1.0, 0.9994869232177734, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.00041095972992479803, 0.0, 0.05123904347419739].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.3839632511138916, 1.0, 0.679747486114502, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.23231303691864014, 1.0, 0.5398358821868896, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.17393906116485597, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.38806350231170655, 1.0, 0.679994535446167, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8663230895996094, 1.0, 0.9996447563171387, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.1315795063972473, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.6006825923919678, 1.0, 0.8432908058166504, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8002510070800781, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 1.0, 0.2698341369628906, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.0, 0.0017979979515075684, 0.0, 0.10691368579864502].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8765816688537598, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9013562202453613, 1.0, 1.0, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.9351653099060059, 1.0, 0.9994841575622558, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+=== M5 WBF 평가 (141 images, imgsz=[480, 640, 800]) ===
+GT 로딩...
+Multi-scale × TTA 추론...
+  imgsz=480 tta=X: 3160 detections
+  imgsz=480 tta=O: 4948 detections
+  imgsz=640 tta=X: 3240 detections
+  imgsz=640 tta=O: 5032 detections
+  imgsz=800 tta=X: 3476 detections
+  imgsz=800 tta=O: 8274 detections
+추론 완료: 21.7s
+
+[단일 config baseline]
+  imgsz=480 tta=X: mAP50=0.0002 P=0.0008 R=0.0072
+  imgsz=480 tta=O: mAP50=0.0002 P=0.0010 R=0.0145
+  imgsz=640 tta=X: mAP50=0.0003 P=0.0010 R=0.0097
+  imgsz=640 tta=O: mAP50=0.0002 P=0.0008 R=0.0121
+  imgsz=800 tta=X: mAP50=0.0002 P=0.0012 R=0.0121
+  imgsz=800 tta=O: mAP50=0.0002 P=0.0005 R=0.0133
+
+[WBF fusion]
+  📉 WBF: mAP50=0.0002 P=0.0007 R=0.0217 (Δ from best single: -0.0001)
+
+  Best single config: imgsz=640 tta=X → 0.0003
+  WBF                 → 0.0002
+  0.85 갭             → -0.8498
+
+결과: C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\training\eval\results\wbf_M5_20260504_022353.json

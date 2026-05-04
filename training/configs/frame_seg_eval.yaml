@@ -1,0 +1,11 @@
+path: C:/Users/Codelab/Desktop/PROJECT/TEAM_PROJECT_2_Drone_project/backend/training/datasets/frames
+train: images/train
+val: images/val
+test: images/test
+
+nc: 4
+names:
+  0: wall_edge
+  1: ceiling_edge
+  2: door_frame
+  3: window_frame

@@ -1,0 +1,10 @@
+=== 최종 종합 리포트 생성 ===
+리포트 저장: C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\training\eval\results\FINAL_REPORT_20260504_022335.md
+
+=== 모델별 BEST mAP50 ===
+  ❌ M1_YOLO: 0.6127
+  ❌ M2_YOLO: 0.8193
+  ❌ M3_YOLO: 0.8445
+  ❌ M4_CONTEXT: 0.5871
+  ❌ M5_SEG: 0.7295
+  ❌ furniture_aware: 0.6224

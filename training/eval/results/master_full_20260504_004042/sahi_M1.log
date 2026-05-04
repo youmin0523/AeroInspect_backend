@@ -1,0 +1,13 @@
+=== M1 SAHI Tiled (tile=640, overlap=0.2, 200 images) ===
+GT 로딩...
+
+[A] Whole-image baseline 추론...
+Loading C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\models_weights\m1_yolo_structural.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.25.0 with CUDAExecutionProvider
+  baseline: mAP50=0.8411 P=0.0468 R=0.9749 (4.4s)
+
+[B] Tiled 추론...
+  tiled: mAP50=0.8391 P=0.0725 R=0.9582 (3.0s)
+
+📉 M1: baseline 0.8411 → tiled 0.8391 (Δ -0.0019) | 0.85 갭 -0.0109
+결과: C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\training\eval\results\sahi_M1_20260504_022653.json

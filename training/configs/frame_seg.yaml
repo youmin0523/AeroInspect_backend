@@ -1,0 +1,21 @@
+# =============================================
+# M5: 기하학 프레임 세그멘테이션 데이터셋 설정
+# 모델: YOLOv8m-seg (인스턴스 세그멘테이션) → ONNX
+# 클래스: wall_edge, ceiling_edge, door_frame, window_frame
+# G1 기하학 모듈이 세그멘테이션 결과로 수직수평/직각도 분석
+# =============================================
+
+path: ./datasets/frames
+train: images/train
+val: images/val
+test: images/test
+
+nc: 4
+names:
+  0: wall_edge
+  1: ceiling_edge
+  2: door_frame
+  3: window_frame
+
+# 데이터 분할: train 70% / val 15% / test 15%
+# 목표 수량: 3,000장 (polygon 세그멘테이션 어노테이션)

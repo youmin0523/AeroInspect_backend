@@ -1,0 +1,57 @@
+# =============================================
+# requirements.txt
+# 역할: 백엔드 Python 의존성 패키지 목록
+# 설치: pip install -r requirements.txt
+# =============================================
+
+# ── Web Framework ──────────────────────────
+fastapi
+uvicorn[standard]
+python-multipart
+
+# ── Database ───────────────────────────────
+sqlalchemy[asyncio]
+asyncpg
+alembic
+psycopg2-binary
+
+# ── Validation ─────────────────────────────
+pydantic[email]
+pydantic-settings
+
+# ── Auth / Security ────────────────────────
+passlib[bcrypt]
+python-jose[cryptography]
+
+# ── Computer Vision / AI ───────────────────
+opencv-python
+numpy
+torch>=2.1
+torchvision
+ultralytics>=8.3.0
+anomalib
+onnxruntime
+ensemble-boxes  # multi-checkpoint WBF (M3/M2 0.85 mAP 도달 핵심)
+
+# ── Hardware ───────────────────────────────
+pyserial
+pymavlink
+
+# ── LLM ────────────────────────────────────
+anthropic
+google-generativeai
+
+# ── Utilities ──────────────────────────────
+python-dotenv
+pillow
+httpx
+websockets
+aiofiles
+
+# ── Monitoring / Logging ───────────────────
+prometheus_client
+structlog
+
+# ── Test ───────────────────────────────────
+pytest
+pytest-asyncio

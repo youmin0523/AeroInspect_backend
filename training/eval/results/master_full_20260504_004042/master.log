@@ -1,0 +1,45 @@
+[00:40:42] === 확장 마스터 시작 ===
+[00:40:42] Step 1: extreme_boost 대기
+[02:16:49]   extreme_boost 완료: eval/results/extreme_boost_20260504_021627.json
+[02:16:50] Step 2.M3: WBF M3 full
+  📈 WBF: mAP50=0.7991 P=0.0660 R=0.9459 (Δ from best single: +0.0058)
+  0.85 갭             → -0.0509
+[02:20:09] Step 2.M2: WBF M2 full
+  📈 WBF: mAP50=0.7998 P=0.0515 R=0.9692 (Δ from best single: +0.0139)
+  0.85 갭             → -0.0502
+[02:23:28] Step 2.M5: WBF M5 full
+  📉 WBF: mAP50=0.0002 P=0.0007 R=0.0217 (Δ from best single: -0.0001)
+  0.85 갭             → -0.8498
+[02:23:53] Step 3.M3: Multi-model voting (target=M3)
+    M3 alone:                 mAP50=0.8018 P=0.0687 R=0.9410
+[B] 전체 모델 detections 합치기 + cross_model_nms
+    + cross_model_nms (target classes 만): mAP50=0.7829 P=0.1226 R=0.9122
+[C] + cross_model_spatial_boost
+    + cross_model_spatial_boost:           mAP50=0.7565 P=0.1226 R=0.9122
+[02:24:52] Step 3.M2: Multi-model voting (target=M2)
+    M2 alone:                 mAP50=0.8324 P=0.1500 R=0.9399
+[B] 전체 모델 detections 합치기 + cross_model_nms
+    + cross_model_nms (target classes 만): mAP50=0.8369 P=0.2703 R=0.9254
+[C] + cross_model_spatial_boost
+    + cross_model_spatial_boost:           mAP50=0.7740 P=0.2703 R=0.9254
+[02:26:15] Step 3.M5: Multi-model voting (target=M5)
+    M5 alone:                 mAP50=0.0003 P=0.0010 R=0.0097
+[B] 전체 모델 detections 합치기 + cross_model_nms
+    + cross_model_nms (target classes 만): mAP50=0.0003 P=0.0014 R=0.0097
+[C] + cross_model_spatial_boost
+    + cross_model_spatial_boost:           mAP50=0.0003 P=0.0014 R=0.0097
+[02:26:35] Step 4.M5: SAHI tiled M5
+  baseline: mAP50=0.0003 P=0.0010 R=0.0097 (3.5s)
+  tiled: mAP50=0.0003 P=0.0011 R=0.0085 (2.1s)
+📈 M5: baseline 0.0003 → tiled 0.0003 (Δ +0.0000) | 0.85 갭 -0.8497
+[02:26:43] Step 4.M1: SAHI tiled M1
+  baseline: mAP50=0.8411 P=0.0468 R=0.9749 (4.4s)
+  tiled: mAP50=0.8391 P=0.0725 R=0.9582 (3.0s)
+📉 M1: baseline 0.8411 → tiled 0.8391 (Δ -0.0019) | 0.85 갭 -0.0109
+[02:26:53] Step 4.furniture: SAHI tiled furniture
+  baseline: mAP50=0.1862 P=0.0112 R=0.2906 (12.7s)
+  tiled: mAP50=0.1435 P=0.0026 R=0.3149 (177.8s)
+📉 furniture: baseline 0.1862 → tiled 0.1435 (Δ -0.0427) | 0.85 갭 -0.7065
+[02:30:09] Step 5: FINAL_REPORT 생성
+[02:30:09] === 확장 마스터 완료 ===
+[02:30:09] 결과: eval/results/master_full_20260504_004042

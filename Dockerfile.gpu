@@ -1,0 +1,52 @@
+# =============================================
+# Dockerfile.gpu
+# 역할: GCP Compute Engine + L4 GPU용 백엔드 컨테이너
+# 베이스: NVIDIA CUDA 12.4.1 cuDNN runtime (onnxruntime-gpu 1.20+ 호환)
+# 빌드: sudo docker build -f Dockerfile.gpu -t drone-inspect-api:latest .
+# 실행: sudo docker run -d --gpus all --restart unless-stopped \
+#        -p 8000:8000 -v /cloudsql:/cloudsql --env-file .env \
+#        drone-inspect-api:latest
+# =============================================
+
+FROM nvcr.io/nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# 시스템 패키지 + Python 3.11
+RUN apt-get update && apt-get install -y \
+    python3.11 python3.11-venv python3.11-dev python3-pip \
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 \
+    curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python && \
+    ln -sf /usr/bin/python3.11 /usr/bin/python3
+
+WORKDIR /app
+
+# Python 의존성 (GPU 빌드)
+COPY requirements.gpu.txt .
+RUN pip install --no-cache-dir -r requirements.gpu.txt
+
+# 백엔드 코드
+COPY app/ ./app/
+COPY alembic.ini .
+COPY alembic/ ./alembic/
+
+# ONNX 모델 가중치 (이미지에 포함)
+COPY models_weights/ ./models_weights/
+
+# 저장 디렉토리
+RUN mkdir -p captured_frames
+
+EXPOSE 8000
+
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# workers=1: WebSocket 단일 프로세스 + GPU 메모리 공유
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

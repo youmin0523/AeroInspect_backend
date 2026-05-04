@@ -1,0 +1,20 @@
+# =============================================
+# M3: 바닥·창호 하자 YOLO 데이터셋 설정
+# 모델: YOLOv8m → ONNX
+# 클래스: floor_defect(바닥), glass_defect(유리), frame_defect(틀)
+# 세부 유형은 Stage 2 ResNet50에서 분류
+# =============================================
+
+path: ./datasets/floor_window
+train: images/train
+val: images/val
+test: images/test
+
+nc: 3
+names:
+  0: floor_defect
+  1: glass_defect
+  2: frame_defect
+
+# 데이터 분할: train 70% / val 15% / test 15%
+# 목표 수량: 4,000장

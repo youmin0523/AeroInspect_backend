@@ -1,0 +1,61 @@
+# =============================================
+# requirements.gpu.txt
+# 역할: GCP Compute Engine GPU 인스턴스용 백엔드 의존성
+# requirements.txt 와 차이:
+#   - onnxruntime → onnxruntime-gpu (CUDA Provider 활성화)
+#   - 버전 명시 (재현성)
+#
+# 주의: torch는 GCP Deep Learning VM에 사전 설치된 것 활용 가능,
+#       또는 명시 설치 (CUDA 12.4 호환 wheel)
+# =============================================
+
+# ── Web Framework ──────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.20
+
+# ── Database ───────────────────────────────
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+psycopg2-binary==2.9.10
+
+# ── Validation ─────────────────────────────
+pydantic[email]==2.10.0
+pydantic-settings==2.6.1
+
+# ── Auth / Security ────────────────────────
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+
+# ── Computer Vision / AI (GPU) ─────────────
+opencv-python-headless==4.10.0.84
+numpy==2.0.2
+torch==2.5.1
+torchvision==0.20.1
+ultralytics==8.4.37
+# 주의: onnxruntime (CPU) 와 동시 설치 시 CPU 우선 import. GPU 단독 설치 필수.
+onnxruntime-gpu==1.20.1
+anomalib
+ensemble-boxes==1.0.9  # multi-checkpoint WBF (M3/M2 0.85 mAP 도달 핵심)
+
+# ── Hardware ───────────────────────────────
+pyserial
+pymavlink
+
+# ── LLM ────────────────────────────────────
+anthropic
+google-generativeai
+
+# ── Utilities ──────────────────────────────
+python-dotenv
+pillow
+httpx==0.28.1
+websockets==13.1
+aiofiles
+pyyaml==6.0.2
+boto3==1.35.81
+
+# ── Monitoring / Logging ───────────────────
+prometheus_client
+structlog

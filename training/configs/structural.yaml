@@ -1,0 +1,20 @@
+# =============================================
+# M1: 구조·방수 하자 YOLO 데이터셋 설정
+# 모델: YOLOv8m → ONNX
+# 클래스: crack(균열), caulking_defect(코킹불량), waterproof_defect(방수/누수)
+# 균열의 구조/마감 분류는 Stage 2 ResNet50에서 수행
+# =============================================
+
+path: ./datasets/structural
+train: images/train
+val: images/val
+test: images/test
+
+nc: 3
+names:
+  0: crack
+  1: caulking_defect
+  2: waterproof_defect
+
+# 데이터 분할: train 70% / val 15% / test 15%
+# 목표 수량: 5,000장 (하자당 ~1,600장)

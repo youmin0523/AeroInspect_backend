@@ -1,0 +1,19 @@
+# =============================================
+# M2: 마감·표면 하자 YOLO 데이터셋 설정
+# 모델: YOLOv8m → ONNX
+# 클래스: surface_defect_wall(벽/천장 표면 하자), baseboard_defect(걸레받이)
+# 표면 하자 세부 유형은 Stage 2 ResNet50에서 분류
+# =============================================
+
+path: ./datasets/surface
+train: images/train
+val: images/val
+test: images/test
+
+nc: 2
+names:
+  0: surface_defect_wall
+  1: baseboard_defect
+
+# 데이터 분할: train 70% / val 15% / test 15%
+# 목표 수량: 6,000장

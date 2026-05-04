@@ -1,0 +1,33 @@
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.41244913736979166, 1.0, 0.6203694152832031, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [0.8796986304274084, 1.0, 0.99971519687606, 1.0].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [1.0, 0.06710319682296775, 1.0, 0.7074345522022111].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+=== M2 WBF 평가 (488 images, imgsz=[480, 640, 800]) ===
+GT 로딩...
+Multi-scale × TTA 추론...
+  imgsz=480 tta=X: 18104 detections
+  imgsz=480 tta=O: 24470 detections
+  imgsz=640 tta=X: 21648 detections
+  imgsz=640 tta=O: 28535 detections
+  imgsz=800 tta=X: 24891 detections
+  imgsz=800 tta=O: 31973 detections
+추론 완료: 169.9s
+
+[단일 config baseline]
+  imgsz=480 tta=X: mAP50=0.7681 P=0.0900 R=0.9442
+  imgsz=480 tta=O: mAP50=0.7703 P=0.0674 R=0.9529
+  imgsz=640 tta=X: mAP50=0.7851 P=0.0768 R=0.9605
+  imgsz=640 tta=O: mAP50=0.7859 P=0.0587 R=0.9663
+  imgsz=800 tta=X: mAP50=0.7746 P=0.0672 R=0.9640
+  imgsz=800 tta=O: mAP50=0.7841 P=0.0527 R=0.9704
+
+[WBF fusion]
+  📈 WBF: mAP50=0.7998 P=0.0515 R=0.9692 (Δ from best single: +0.0139)
+
+  Best single config: imgsz=640 tta=O → 0.7859
+  WBF                 → 0.7998
+  0.85 갭             → -0.0502
+
+결과: C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\training\eval\results\wbf_M2_20260504_022327.json

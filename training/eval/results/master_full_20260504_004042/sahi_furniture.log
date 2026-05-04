@@ -1,0 +1,13 @@
+=== furniture SAHI Tiled (tile=640, overlap=0.2, 200 images) ===
+GT 로딩...
+
+[A] Whole-image baseline 추론...
+Loading C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\models_weights\furniture_aware.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.25.0 with CUDAExecutionProvider
+  baseline: mAP50=0.1862 P=0.0112 R=0.2906 (12.7s)
+
+[B] Tiled 추론...
+  tiled: mAP50=0.1435 P=0.0026 R=0.3149 (177.8s)
+
+📉 furniture: baseline 0.1862 → tiled 0.1435 (Δ -0.0427) | 0.85 갭 -0.7065
+결과: C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\training\eval\results\sahi_furniture_20260504_023008.json

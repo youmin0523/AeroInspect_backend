@@ -1,0 +1,40 @@
+{
+  "timestamp": "20260503_100738",
+  "max_videos": 3,
+  "max_frames": 60,
+  "reports": [
+    {
+      "video_path": "C:\\Users\\Codelab\\Desktop\\PROJECT\\TEAM_PROJECT_2_Drone_project\\datasets\\defect_videos\\01_균열_크랙\\균열벽_크랙_보수방법.mp4",
+      "n_frames": 60,
+      "n_frames_with_detection": 58,
+      "n_unique_tracks": 2,
+      "n_confirmed_tracks": 2,
+      "avg_track_length": 58.0,
+      "longest_track": 58,
+      "avg_inference_ms": 1008.7529261906942,
+      "out_video_path": "C:\\Users\\Codelab\\Desktop\\PROJECT\\TEAM_PROJECT_2_Drone_project\\backend\\training\\eval\\results\\video_tracked\\균열벽_크랙_보수방법_tracked.mp4"
+    },
+    {
+      "video_path": "C:\\Users\\Codelab\\Desktop\\PROJECT\\TEAM_PROJECT_2_Drone_project\\datasets\\defect_videos\\02_누수\\건축물_하자_지하벽체_누수.mp4",
+      "n_frames": 60,
+      "n_frames_with_detection": 20,
+      "n_unique_tracks": 1,
+      "n_confirmed_tracks": 1,
+      "avg_track_length": 20.0,
+      "longest_track": 20,
+      "avg_inference_ms": 929.8917969067892,
+      "out_video_path": "C:\\Users\\Codelab\\Desktop\\PROJECT\\TEAM_PROJECT_2_Drone_project\\backend\\training\\eval\\results\\video_tracked\\건축물_하자_지하벽체_누수_tracked.mp4"
+    },
+    {
+      "video_path": "C:\\Users\\Codelab\\Desktop\\PROJECT\\TEAM_PROJECT_2_Drone_project\\datasets\\defect_videos\\03_결로_곰팡이\\결로_곰팡이벽_타일_해결.mp4",
+      "n_frames": 60,
+      "n_frames_with_detection": 58,
+      "n_unique_tracks": 2,
+      "n_confirmed_tracks": 2,
+      "avg_track_length": 47.5,
+      "longest_track": 58,
+      "avg_inference_ms": 902.0055214564005,
+      "out_video_path": "C:\\Users\\Codelab\\Desktop\\PROJECT\\TEAM_PROJECT_2_Drone_project\\backend\\training\\eval\\results\\video_tracked\\결로_곰팡이벽_타일_해결_tracked.mp4"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+[
+  {"key": "M2_YOLO", "mAP50": 0.8193, "imgsz": 640, "tta": true, "agnostic": false, "iou": 0.5, "max_det": 300, "note": "partial - extreme_boost killed early"},
+  {"key": "M3_YOLO", "mAP50": 0.8445, "imgsz": 800, "tta": true, "agnostic": true, "iou": 0.5, "max_det": 300, "note": "0.85까지 -0.0055"},
+  {"key": "M5_SEG", "mAP50": 0.7295, "imgsz": 800, "tta": true, "agnostic": false, "iou": 0.6, "max_det": 300},
+  {"key": "M4_CONTEXT", "mAP50": 0.5871, "imgsz": 960, "tta": false, "agnostic": false, "iou": 0.5, "max_det": 300, "note": "partial"}
+]

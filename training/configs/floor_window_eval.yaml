@@ -1,0 +1,11 @@
+# M3 평가 전용 (절대경로)
+path: C:/Users/Codelab/Desktop/PROJECT/TEAM_PROJECT_2_Drone_project/backend/training/datasets/floor_window
+train: images/train
+val: images/val
+test: images/test
+
+nc: 3
+names:
+  0: floor_defect
+  1: glass_defect
+  2: frame_defect

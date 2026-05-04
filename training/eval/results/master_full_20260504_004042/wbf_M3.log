@@ -1,0 +1,29 @@
+C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\venv\Lib\site-packages\ensemble_boxes\ensemble_boxes_wbf.py:66: UserWarning: Zero area box skipped: [1.0, 0.0020079731941223143, 1.0, 0.23730591994065506].
+  warnings.warn("Zero area box skipped: {}.".format(box_part))
+=== M3 WBF 평가 (463 images, imgsz=[640, 800, 960]) ===
+GT 로딩...
+Multi-scale × TTA 추론...
+  imgsz=640 tta=X: 31256 detections
+  imgsz=640 tta=O: 40846 detections
+  imgsz=800 tta=X: 36819 detections
+  imgsz=800 tta=O: 45387 detections
+  imgsz=960 tta=X: 41382 detections
+  imgsz=960 tta=O: 48985 detections
+추론 완료: 157.4s
+
+[단일 config baseline]
+  imgsz=640 tta=X: mAP50=0.7732 P=0.1316 R=0.9053
+  imgsz=640 tta=O: mAP50=0.7701 P=0.0991 R=0.9140
+  imgsz=800 tta=X: mAP50=0.7850 P=0.1200 R=0.9312
+  imgsz=800 tta=O: mAP50=0.7933 P=0.0983 R=0.9376
+  imgsz=960 tta=X: mAP50=0.7835 P=0.1137 R=0.9321
+  imgsz=960 tta=O: mAP50=0.7923 P=0.0934 R=0.9417
+
+[WBF fusion]
+  📈 WBF: mAP50=0.7991 P=0.0660 R=0.9459 (Δ from best single: +0.0058)
+
+  Best single config: imgsz=800 tta=O → 0.7933
+  WBF                 → 0.7991
+  0.85 갭             → -0.0509
+
+결과: C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\training\eval\results\wbf_M3_20260504_022008.json

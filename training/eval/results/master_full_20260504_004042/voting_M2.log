@@ -1,0 +1,32 @@
+=== Multi-model voting eval (target=M2, 200 images) ===
+  Target classes: ['baseboard_defect', 'surface_defect_wall']
+GT 로딩...
+
+전체 모델 추론...
+Loading C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\models_weights\m1_yolo_structural.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.25.0 with CUDAExecutionProvider
+  M1: 8940 detections
+Loading C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\models_weights\m2_yolo_surface.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.25.0 with CUDAExecutionProvider
+  M2: 5662 detections
+Loading C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\models_weights\m3_yolo_floor_window.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.25.0 with CUDAExecutionProvider
+  M3: 9479 detections
+Loading C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\models_weights\m4_yolo_context_elements.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.25.0 with CUDAExecutionProvider
+  M4_CONTEXT: 5111 detections
+Loading C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\models_weights\m5_yolo_seg_frames.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.25.0 with CUDAExecutionProvider
+  M5: 3667 detections
+추론 완료: 79.2s
+
+[A] Target 모델 단독 ── baseline
+    M2 alone:                 mAP50=0.8324 P=0.1500 R=0.9399
+
+[B] 전체 모델 detections 합치기 + cross_model_nms
+    + cross_model_nms (target classes 만): mAP50=0.8369 P=0.2703 R=0.9254
+
+[C] + cross_model_spatial_boost
+    + cross_model_spatial_boost:           mAP50=0.7740 P=0.2703 R=0.9254
+
+결과: C:\Users\Codelab\Desktop\PROJECT\TEAM_PROJECT_2_Drone_project\backend\training\eval\results\multi_model_voting_M2_20260504_022615.json

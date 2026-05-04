@@ -1,0 +1,9 @@
+path: C:/Users/Codelab/Desktop/PROJECT/TEAM_PROJECT_2_Drone_project/backend/training/datasets/surface
+train: images/train
+val: images/val
+test: images/test
+
+nc: 2
+names:
+  0: surface_defect_wall
+  1: baseboard_defect

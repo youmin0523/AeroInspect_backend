@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Build/dist
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 학습/평가 (배포 이미지에 절대 포함 X — 1GB+)
+training/
+runs/
+datasets/
+
+# 평가 결과/로그
+**/eval/results/
+*.log
+
+# Git/IDE
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 문서
+README.md
+*.md
+!Vibe_Coding_Log.md
+
+# Docker 자체
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# Tests (배포 이미지 슬림화)
+tests/
+test_*.py
+*_test.py
+
+# Notebook
+*.ipynb
+.ipynb_checkpoints/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Profiling
+*.prof
+*.cprof
+
+# Local config
+.env.local
+local_settings.py
