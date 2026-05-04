@@ -82,10 +82,19 @@ async def lifespan(app: FastAPI):
         await init_db()
         print("[AeroInspect] DB 초기화 완료")
 
-        # 슈퍼어드민 시드 계정 생성 (���으면 자동 생성)
+        # 슈퍼어드민 시드 계정 생성 (없으면 자동 생성)
         await _ensure_superadmin_seed()
     except Exception as e:
         print(f"[AeroInspect] DB 초기화 실패 (DB 연결 안 됨, 임시 무시): {e}")
+
+    # Pipeline20 자동 로드 (USE_20DEFECT_PIPELINE=true 시 — GCP GPU VM 등 정밀 추론 서버용)
+    if settings.USE_20DEFECT_PIPELINE:
+        try:
+            from app.services.inference_pipeline_20 import pipeline20 as _p20
+            _p20.load_models()
+            print("[AeroInspect] Pipeline20 로드 완료")
+        except Exception as _e:
+            print(f"[AeroInspect] Pipeline20 로드 실패: {_e}")
 
     if settings.DRONE_CONNECTED:
         # RGB 카메라 (USB Capture Card) 열기
