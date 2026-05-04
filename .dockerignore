@@ -25,6 +25,14 @@ training/
 runs/
 datasets/
 
+# 모델 가중치 (1.8GB) — Fly.io 빌드 컨텍스트에서 제외
+# GCP GPU는 Dockerfile.gpu에서 별도 처리 (또는 GCS 런타임 다운로드)
+models_weights/
+
+# 런타임 디렉토리
+captured_frames/
+uploads/
+
 # 평가 결과/로그
 **/eval/results/
 *.log
