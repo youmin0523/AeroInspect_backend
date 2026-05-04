@@ -219,7 +219,12 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "DRONE INSPECT"
 
     # ── CORS ─────────────────────────────────
-    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://www.aeroinspect.site",
+        "https://aeroinspect.site",
+    ]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
