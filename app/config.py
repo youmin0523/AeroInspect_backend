@@ -224,8 +224,21 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):
+        """JSON 배열 또는 콤마 구분 문자열 모두 허용.
+
+        허용 형식:
+        - '["https://a.com","https://b.com"]' (JSON)
+        - 'https://a.com,https://b.com' (콤마)
+        - '' (빈 문자열) → []
+        """
         if isinstance(v, str):
-            return json.loads(v)
+            v = v.strip()
+            if not v:
+                return []
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [s.strip() for s in v.split(",") if s.strip()]
         return v
 
     @model_validator(mode="after")
