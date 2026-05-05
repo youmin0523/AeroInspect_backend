@@ -189,6 +189,16 @@ class Settings(BaseSettings):
     WS_BACKEND: str = "memory"
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # ── GCP GPU VM 원격 제어 (관리자 콘솔) ────
+    # Fly.io 백엔드(항상 켜진 상태)에서 GCP Compute Engine REST API 를 호출해
+    # GPU L4 VM 의 ON/OFF 를 제어. 시간당 ~$0.71 비용 절감 + 상용 멀티유저 운영용.
+    # GCP_SERVICE_ACCOUNT_JSON: 서비스 계정 키(JSON) 원문 또는 base64.
+    #   - 권한: roles/compute.instanceAdmin.v1 (instances.start / instances.stop / instances.get)
+    GCP_SERVICE_ACCOUNT_JSON: str = ""
+    GCP_PROJECT_ID: str = ""
+    GCP_GPU_ZONE: str = "asia-northeast3-a"
+    GCP_GPU_INSTANCE: str = "drone-stream-api"
+
     # ── OAuth (SNS 로그인) ────────────────────
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""

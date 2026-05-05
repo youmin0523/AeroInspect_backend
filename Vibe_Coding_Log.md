@@ -2144,3 +2144,35 @@ API 시그니처 변경에 따른 Store 수정:
 5. **Cross-model voting은 단일 클래스 taxonomy에서만 부분 효과** — M2 +0.005, 다른 모델은 noise
 6. **0.85 도달의 유일한 길은 v1.1 재학습** — 5/6 1차 배포 후 사용자 신호로 진행
 
+
+
+---
+
+## 🛰 R28 — 브라우저 기반 GPU VM 원격 제어 (2026-05-04 오후)
+
+> 로컬 bat 파일 의존 제거 → 어떤 브라우저에서도 슈퍼어드민 권한이면 GCP L4 GPU VM 을 켜고/끌 수 있도록 플랫폼 내부에 통합. 상용 멀티유저 운영 전제.
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| R28.1 | 5/4 오후 | **GCP Compute REST 클라이언트** — 서비스 계정 JSON 으로 RS256 JWT 서명 → OAuth2 토큰 교환 → instances.{get,start,stop} 호출. 토큰은 만료 30초 전까지 메모리 캐시. base64 / JSON 원문 둘 다 입력 허용 | `app/services/gcp_compute.py` |
+| R28.2 | 5/4 오후 | **관리자 GPU API** — `GET/POST /api/v1/admin/gpu/{status,start,stop}` 슈퍼어드민(require_superadmin) 전용. 502 변환 가드 | `app/api/admin_gpu.py` + `app/api/router.py` |
+| R28.3 | 5/4 오후 | **config 확장** — `GCP_SERVICE_ACCOUNT_JSON` / `GCP_PROJECT_ID` / `GCP_GPU_ZONE` / `GCP_GPU_INSTANCE`. Fly.io secrets 로 주입 | `app/config.py` + `app/main.py` (Admin 태그) |
+| R28.4 | 5/4 오후 | **GCP IAM 셋업** — 서비스 계정 `drone-gpu-controller` 생성 + `roles/compute.instanceAdmin.v1` 바인딩. 조직 정책 `iam.disableServiceAccountKeyCreation` 가 키 발급을 차단 → orgpolicy API 활성화 + 사용자에 `roles/orgpolicy.policyAdmin` 부여 → 프로젝트 레벨 override 로 해제 후 키 발급. base64 인코딩하여 Fly secrets 로 등록 | (인프라 작업, 코드 산출물 없음) |
+| R28.5 | 5/4 오후 | **CI/CD 워크플로우 위치 수정** — `backend/.github/workflows/fly-deploy.yml` 은 GitHub Actions 가 인식하지 않음(레포 루트의 `.github/workflows/` 만 인식). 루트로 이동 + monorepo 대응(`paths: ["backend/**"]` 필터, `working-directory: backend`) | `.github/workflows/fly-deploy.yml` |
+
+### 📐 설계 결정 사항
+
+- **백엔드는 항상 켜짐, GPU 만 ON/OFF**: Fly.io 백엔드(`api.aeroinspect.site`)는 GPU 없이 항상 살아있어야 GPU 제어 호출을 받을 수 있다. GPU 추론용 Compute Engine VM (`drone-stream-api`) 만 점검 시작/종료 시점에 토글한다.
+- **권한은 슈퍼어드민으로 한정**: 일반 조직 admin/owner 는 자기 조직 멤버만 다룰 수 있고, 인프라 비용에 직접 영향 가는 GPU 제어는 플랫폼 슈퍼어드민(`is_superadmin=True`) 전용. `require_superadmin` 의존성으로 강제.
+- **서비스 계정 키 base64 저장**: Fly.io `secrets set` 가 multiline 값을 인자로 받지 못함 → 키 파일을 base64 한 줄로 인코딩하여 단일 secret 으로 주입. 백엔드는 첫 글자가 `{` 가 아니면 base64 로 간주하여 디코딩.
+- **조직 정책 우회는 프로젝트 레벨 override 로 최소 침습**: 조직 전체에 `disableServiceAccountKeyCreation` 을 끄지 않고 이 프로젝트만 해제. 다른 프로젝트 보안 영향 없음.
+- **워크플로우 paths 필터**: monorepo 라 frontend/ 만 변경된 PR 도 Fly 배포가 트리거되던 미해결 이슈 → `paths: ["backend/**", ".github/workflows/fly-deploy.yml"]` 로 backend 변경 시에만 실행.
+
+
+### R28.6 Fly.io 배포 설정 파일 main 반영 (CI 통과용) (2026-05-04)
+
+GitHub Actions Fly Deploy 가 `fly.toml` 미커밋으로 'missing app name' 실패 → 누락된 배포 설정을 main 에 반영.
+- `fly.toml`: aeroinspect-backend 앱 설정
+- `.dockerignore`: 1.8GB models_weights/ + captured_frames/ + uploads/ 제외
+- `Dockerfile`: `libgl1-mesa-glx` → `libgl1` (Debian trixie 호환)
+- `.gitignore`: 학습 로그/uploads/.onnx.data 추가

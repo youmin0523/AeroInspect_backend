@@ -7,7 +7,7 @@
 
 from fastapi import APIRouter
 
-from app.api import auth, oauth, defects, stream, websocket, report, telemetry, slam, floorplan, ai_webhook, sites, notifications, chat, organization, detect, ws_stream, coverage, employee
+from app.api import auth, oauth, defects, stream, websocket, report, telemetry, slam, floorplan, ai_webhook, sites, notifications, chat, organization, detect, ws_stream, coverage, employee, admin_gpu
 from app.schemas.common import PROTECTED_RESPONSES, PUBLIC_RESPONSES, WEBHOOK_RESPONSES
 
 api_router = APIRouter()
@@ -149,5 +149,13 @@ api_router.include_router(
     employee.router,
     prefix="/employee",
     tags=["Employee"],
+    responses=PROTECTED_RESPONSES,
+)
+
+# 관리자 — GCP GPU VM 원격 제어 (슈퍼어드민 전용)
+api_router.include_router(
+    admin_gpu.router,
+    prefix="/admin/gpu",
+    tags=["Admin"],
     responses=PROTECTED_RESPONSES,
 )

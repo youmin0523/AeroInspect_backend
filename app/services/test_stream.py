@@ -121,6 +121,11 @@ class TestStreamService:
         self._playing: bool = False
         self._paused: bool = False
 
+        # 첫 프레임 broadcast 지연 플래그 — 클라이언트 첫 프레임 onLoad 보장용 안전망.
+        # start/stop/set_source 시 False로 리셋. 첫 broadcast 직전에 1.2초(이미지) /
+        # 0.8초(영상) 지연 후 True로 마킹.
+        self._first_broadcast_done: bool = False
+
     # ── 재생 제어 ────────────────────────────
     @property
     def play_state(self) -> str:
@@ -133,6 +138,7 @@ class TestStreamService:
     def start_playback(self) -> None:
         self._playing = True
         self._paused = False
+        self._first_broadcast_done = False
         print("[TestStream] ▶ 재생 시작")
 
     def pause_playback(self) -> None:
@@ -147,6 +153,7 @@ class TestStreamService:
         self._playing = False
         self._paused = False
         self._frame_version = 0
+        self._first_broadcast_done = False
         # 카테고리별 인덱스 리셋
         for cat in self._category_indices:
             self._category_indices[cat] = 0
@@ -276,6 +283,8 @@ class TestStreamService:
             raise ValueError(f"Invalid source: {source}")
         self._source = source
         self._upload_index = 0
+        # 새 소스의 첫 프레임 onLoad를 다시 기다리도록 안전망 리셋
+        self._first_broadcast_done = False
         if source == "upload":
             self._scan_uploaded_files()
         print(f"[TestStream] 소스 전환: {source}")
@@ -643,12 +652,20 @@ class TestStreamService:
             # 4) 오버레이된 프레임 전송 (이미지가 먼저 보임)
             yield self._mjpeg_boundary(rgb_jpeg)
 
-            # 5) 렌더링 여유 후 하자 브로드캐스트
-            await asyncio.sleep(0.5)
+            # 5) 렌더링 여유 후 하자 브로드캐스트.
+            #    첫 회는 클라이언트의 첫 프레임 도착·디코딩·onLoad가 끝날 때까지 더 길게,
+            #    이후는 짧게. 프론트의 큐 게이트가 1차 방어선이지만 백엔드도 보조 마진을 둔다.
+            if not self._first_broadcast_done:
+                first_delay = 1.2
+                await asyncio.sleep(first_delay)
+                self._first_broadcast_done = True
+            else:
+                first_delay = 0.3
+                await asyncio.sleep(first_delay)
             if detection:
                 await self._broadcast_detection(detection)
 
-            await asyncio.sleep(max(0, settings.TEST_IMAGE_INTERVAL - 0.5))
+            await asyncio.sleep(max(0, settings.TEST_IMAGE_INTERVAL - first_delay))
 
     async def thermal_mjpeg_generator(self):
         """Thermal MJPEG 스트림. RGB 제너레이터와 프레임 버전으로 동기화."""
@@ -741,6 +758,11 @@ class TestStreamService:
             yield self._mjpeg_boundary(rgb_jpeg)
 
             if detection:
+                if not self._first_broadcast_done:
+                    await asyncio.sleep(0.8)
+                    self._first_broadcast_done = True
+                else:
+                    await asyncio.sleep(min(0.25, frame_interval))
                 await self._broadcast_detection(detection)
 
             await asyncio.sleep(frame_interval)
@@ -860,6 +882,7 @@ class TestStreamService:
             "defect_class_display_ko": info.get("defect_class_display_ko", info.get("defect_type", "")),
             "frame_id": self._frame_counter,
             "source_file": os.path.basename(detection["filepath"]),
+            "mode": self._detection_mode,
         }
         await ws_manager.broadcast("defects", {"type": "defect.new", "data": data})
 

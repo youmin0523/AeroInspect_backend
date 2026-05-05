@@ -170,6 +170,7 @@ tags_metadata = [
     {"name": "Notifications", "description": "사용자 알림 CRUD + 푸시(FCM/APNS) 발송."},
     {"name": "Chat", "description": "조직 내 메신저(채널/DM) + 파일 첨부."},
     {"name": "AI Webhook", "description": "외부 AI 추론 서버 → 백엔드 콜백. X-AI-Webhook-Secret 헤더 인증 필수."},
+    {"name": "Admin", "description": "플랫폼 관리자 전용 — GCP GPU VM 원격 제어 등 인프라 운영. 슈퍼어드민 권한 필수."},
 ]
 
 
@@ -233,8 +234,8 @@ app = FastAPI(
     lifespan=lifespan,
     openapi_tags=tags_metadata,
     servers=[
+        {"url": "https://aeroinspect-backend.fly.dev", "description": "Production (Fly.io)"},
         {"url": "http://localhost:8000", "description": "Local dev"},
-        # 운영/스테이징 도메인은 배포 확정 후 추가 (예시: {"url": "https://api.droneinspect.io", "description": "Production"}).
     ],
     swagger_ui_parameters={
         # 페이지 새로고침 후에도 Authorize 토큰 유지 — Swagger 사용성 핵심
