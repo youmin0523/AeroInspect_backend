@@ -139,15 +139,15 @@ class TestStreamService:
         self._playing = True
         self._paused = False
         self._first_broadcast_done = False
-        print("[TestStream] ▶ 재생 시작")
+        print("[TestStream] PLAY (start)")
 
     def pause_playback(self) -> None:
         self._paused = True
-        print("[TestStream] ⏸ 일시중지")
+        print("[TestStream] PAUSE")
 
     def resume_playback(self) -> None:
         self._paused = False
-        print("[TestStream] ▶ 재생 재개")
+        print("[TestStream] PLAY (resume)")
 
     def stop_playback(self) -> None:
         self._playing = False
@@ -160,7 +160,7 @@ class TestStreamService:
         self._upload_index = 0
         self._current_rgb_jpeg = None
         self._current_thermal_jpeg = None
-        print("[TestStream] ⏹ 정지")
+        print("[TestStream] STOP")
 
     # ── 이미지 스캔 (카테고리별 그룹핑) ────────────
     def scan_images(self) -> dict:
@@ -653,14 +653,15 @@ class TestStreamService:
             yield self._mjpeg_boundary(rgb_jpeg)
 
             # 5) 렌더링 여유 후 하자 브로드캐스트.
-            #    첫 회는 클라이언트의 첫 프레임 도착·디코딩·onLoad가 끝날 때까지 더 길게,
-            #    이후는 짧게. 프론트의 큐 게이트가 1차 방어선이지만 백엔드도 보조 마진을 둔다.
+            #    사용자 체감상 "영상이 먼저 보이고 그 다음 우측 카드 등장"을 보장하려면
+            #    매 프레임마다 충분한 마진(1.5초)이 필요. 첫 회는 더 길게 1.8초.
+            #    TEST_IMAGE_INTERVAL=3.0초 가정 — 이미지 노출의 절반 시점에 카드 등장.
             if not self._first_broadcast_done:
-                first_delay = 1.2
+                first_delay = 1.8
                 await asyncio.sleep(first_delay)
                 self._first_broadcast_done = True
             else:
-                first_delay = 0.3
+                first_delay = 1.5
                 await asyncio.sleep(first_delay)
             if detection:
                 await self._broadcast_detection(detection)
@@ -758,11 +759,12 @@ class TestStreamService:
             yield self._mjpeg_boundary(rgb_jpeg)
 
             if detection:
+                # 영상 프레임이 사용자 눈에 인지될 충분한 시간 확보 (영상 케이스도 동일 정책)
                 if not self._first_broadcast_done:
-                    await asyncio.sleep(0.8)
+                    await asyncio.sleep(1.5)
                     self._first_broadcast_done = True
                 else:
-                    await asyncio.sleep(min(0.25, frame_interval))
+                    await asyncio.sleep(min(1.0, max(0.5, frame_interval * 0.6)))
                 await self._broadcast_detection(detection)
 
             await asyncio.sleep(frame_interval)

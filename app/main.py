@@ -8,6 +8,15 @@
 # 실행: uvicorn app.main:app --reload --port 8000
 # =============================================
 
+# Windows cmd(cp949)에서 한글/이모지 print 시 UnicodeEncodeError → 500 에러 방지.
+# stdout/stderr를 UTF-8로 강제. 인코딩 불가 문자는 ?로 대체(errors='replace').
+import sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
