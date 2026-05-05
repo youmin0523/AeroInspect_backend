@@ -121,11 +121,6 @@ class TestStreamService:
         self._playing: bool = False
         self._paused: bool = False
 
-        # 첫 프레임 broadcast 지연 플래그 — 클라이언트 첫 프레임 onLoad 보장용 안전망.
-        # start/stop/set_source 시 False로 리셋. 첫 broadcast 직전에 1.2초(이미지) /
-        # 0.8초(영상) 지연 후 True로 마킹.
-        self._first_broadcast_done: bool = False
-
     # ── 재생 제어 ────────────────────────────
     @property
     def play_state(self) -> str:
@@ -138,7 +133,6 @@ class TestStreamService:
     def start_playback(self) -> None:
         self._playing = True
         self._paused = False
-        self._first_broadcast_done = False
         print("[TestStream] PLAY (start)")
 
     def pause_playback(self) -> None:
@@ -153,7 +147,6 @@ class TestStreamService:
         self._playing = False
         self._paused = False
         self._frame_version = 0
-        self._first_broadcast_done = False
         # 카테고리별 인덱스 리셋
         for cat in self._category_indices:
             self._category_indices[cat] = 0
@@ -283,8 +276,6 @@ class TestStreamService:
             raise ValueError(f"Invalid source: {source}")
         self._source = source
         self._upload_index = 0
-        # 새 소스의 첫 프레임 onLoad를 다시 기다리도록 안전망 리셋
-        self._first_broadcast_done = False
         if source == "upload":
             self._scan_uploaded_files()
         print(f"[TestStream] 소스 전환: {source}")
@@ -600,11 +591,22 @@ class TestStreamService:
 
     # ── MJPEG 제너레이터 ────────────────────────
     async def rgb_mjpeg_generator(self):
-        """RGB MJPEG 스트림. 추론 → 오버레이 → yield → broadcast."""
+        """RGB MJPEG 스트림.
+
+        ⚠ multipart/x-mixed-replace의 commit 타이밍:
+        Chromium 계열 브라우저는 frame N의 JPEG 바이트를 받아도 *다음* boundary가
+        도착해야 frame N을 화면에 paint한다. 따라서 frame N의 detection을 frame N
+        yield 직후에 broadcast하면 카드가 영상보다 먼저 보임. → 매 사이클마다
+        prev_detection을 1프레임 미뤄서 broadcast: "다음 yield" 직후에 이전 프레임의
+        카드를 보내야 영상이 먼저 보이고 그 다음 카드가 등장한다.
+        """
+        prev_detection: Optional[dict] = None
+
         while True:
             if not self._playing:
                 frame = self._stopped_frame("RGB", "Press START to begin")
                 yield self._mjpeg_boundary(self._encode_jpeg(frame))
+                prev_detection = None
                 await asyncio.sleep(1.0)
                 continue
 
@@ -614,6 +616,7 @@ class TestStreamService:
                 else:
                     frame = self._stopped_frame("RGB", "PAUSED")
                     yield self._mjpeg_boundary(self._encode_jpeg(frame))
+                prev_detection = None
                 await asyncio.sleep(0.5)
                 continue
 
@@ -629,6 +632,8 @@ class TestStreamService:
             if _is_video(filepath):
                 async for boundary in self._stream_video_frames(filepath):
                     yield boundary
+                # 영상 블록 종료 후 prev_detection은 영상 내부에서 처리됨 — 여기서 폐기
+                prev_detection = None
                 continue
 
             frame = await asyncio.to_thread(cv2.imread, filepath)
@@ -649,24 +654,22 @@ class TestStreamService:
             await self._prepare_thermal_frame(test_frame, detection)
             self._frame_version += 1
 
-            # 4) 오버레이된 프레임 전송 (이미지가 먼저 보임)
+            # 4) 새 boundary yield → 이 신호로 브라우저가 *직전* 프레임을 commit/paint한다.
             yield self._mjpeg_boundary(rgb_jpeg)
 
-            # 5) 렌더링 여유 후 하자 브로드캐스트.
-            #    사용자 체감상 "영상이 먼저 보이고 그 다음 우측 카드 등장"을 보장하려면
-            #    매 프레임마다 충분한 마진(1.5초)이 필요. 첫 회는 더 길게 1.8초.
-            #    TEST_IMAGE_INTERVAL=3.0초 가정 — 이미지 노출의 절반 시점에 카드 등장.
-            if not self._first_broadcast_done:
-                first_delay = 1.8
-                await asyncio.sleep(first_delay)
-                self._first_broadcast_done = True
-            else:
-                first_delay = 1.5
-                await asyncio.sleep(first_delay)
-            if detection:
-                await self._broadcast_detection(detection)
+            # 5) 방금 보낸 boundary가 이전 프레임의 commit 신호. paint/decode 여유
+            #    0.4초만 두고 이전 프레임의 detection을 broadcast → 영상 먼저, 카드 다음.
+            waited = 0.0
+            if prev_detection is not None:
+                await asyncio.sleep(0.4)
+                waited = 0.4
+                await self._broadcast_detection(prev_detection)
 
-            await asyncio.sleep(max(0, settings.TEST_IMAGE_INTERVAL - first_delay))
+            # 6) 이번 detection은 다음 yield(= 다음 프레임 commit) 직후에 broadcast
+            prev_detection = detection
+
+            # 7) 다음 프레임까지 잔여 시간 대기
+            await asyncio.sleep(max(0.5, settings.TEST_IMAGE_INTERVAL - waited))
 
     async def thermal_mjpeg_generator(self):
         """Thermal MJPEG 스트림. RGB 제너레이터와 프레임 버전으로 동기화."""
@@ -729,9 +732,13 @@ class TestStreamService:
 
     # ── 영상 프레임 스트리밍 ────────────────────
     async def _stream_video_frames(self, filepath: str):
+        """영상 케이스도 RGB와 동일 정책: 다음 yield 직후 이전 detection broadcast.
+        multipart commit 타이밍 때문에 매 frame yield가 *직전* frame의 paint 신호."""
         cap = cv2.VideoCapture(filepath)
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         frame_interval = 1.0 / min(fps, 10.0)
+
+        prev_detection: Optional[dict] = None
 
         while cap.isOpened():
             if not self._playing:
@@ -739,6 +746,7 @@ class TestStreamService:
             if self._paused:
                 if self._current_rgb_jpeg:
                     yield self._mjpeg_boundary(self._current_rgb_jpeg)
+                prev_detection = None
                 await asyncio.sleep(0.5)
                 continue
 
@@ -756,18 +764,25 @@ class TestStreamService:
             rgb_jpeg = self._encode_jpeg(annotated)
             self._current_rgb_jpeg = rgb_jpeg
 
+            # 새 boundary → 직전 프레임 commit
             yield self._mjpeg_boundary(rgb_jpeg)
 
-            if detection:
-                # 영상 프레임이 사용자 눈에 인지될 충분한 시간 확보 (영상 케이스도 동일 정책)
-                if not self._first_broadcast_done:
-                    await asyncio.sleep(1.5)
-                    self._first_broadcast_done = True
-                else:
-                    await asyncio.sleep(min(1.0, max(0.5, frame_interval * 0.6)))
-                await self._broadcast_detection(detection)
+            # 직전 프레임의 detection을 paint 여유 후 broadcast
+            waited = 0.0
+            if prev_detection is not None:
+                # frame_interval이 짧으면 그에 맞춰 더 적게 대기
+                lag = min(0.4, max(0.15, frame_interval * 0.5))
+                await asyncio.sleep(lag)
+                waited = lag
+                await self._broadcast_detection(prev_detection)
 
-            await asyncio.sleep(frame_interval)
+            # 이번 frame에 detection이 있을 때만 prev로 승격(없는 frame은 건너뜀)
+            if detection is not None:
+                prev_detection = detection
+
+            await asyncio.sleep(max(0.0, frame_interval - waited))
+
+        # 영상 종료 후 마지막 detection은 같은 generator의 다음 RGB 프레임이 yield될 때 broadcast됨
 
         cap.release()
 
