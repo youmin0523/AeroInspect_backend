@@ -160,6 +160,45 @@ async def require_superadmin(
     return current_user
 
 
+async def require_admin_or_superadmin(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    x_organization_id: Optional[str] = Header(None),
+):
+    """플랫폼 슈퍼어드민 OR 활성 조직의 owner/admin 일 때만 통과.
+
+    super_admin 은 조직 미소속이어도 통과 (분기 순서 중요).
+    그 외에는 활성 조직 멤버십에서 role ∈ {owner, admin} 확인.
+    """
+    if current_user.is_superadmin:
+        return current_user
+
+    from app.models.organization import OrganizationMember
+
+    query = (
+        select(OrganizationMember)
+        .where(OrganizationMember.user_id == current_user.id)
+        .where(OrganizationMember.status == "active")
+        .where(
+            (OrganizationMember.ended_at.is_(None))
+            | (OrganizationMember.ended_at > datetime.now(timezone.utc))
+        )
+    )
+    if x_organization_id:
+        query = query.where(OrganizationMember.organization_id == UUID(x_organization_id))
+    else:
+        query = query.order_by(OrganizationMember.joined_at.desc())
+
+    result = await db.execute(query)
+    member = result.scalars().first()
+    if member is None or member.role not in ("owner", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="조직 관리자 권한이 필요합니다.",
+        )
+    return current_user
+
+
 async def verify_ai_webhook(
     x_ai_webhook_secret: Optional[str] = Header(None, alias="X-AI-Webhook-Secret"),
 ):
