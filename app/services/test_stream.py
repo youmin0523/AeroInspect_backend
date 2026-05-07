@@ -353,12 +353,17 @@ class TestStreamService:
         bbox: Optional[dict] = None,
         label: str = "",
         severity: str = "HIGH",
+        rgb_jpeg: Optional[bytes] = None,
+        thermal_jpeg: Optional[bytes] = None,
     ) -> None:
-        """현재 RGB/Thermal raw JPEG + 메타데이터를 저장.
-        조회 시 모드(bbox/detection)에 따라 시각화를 적용."""
+        """하자 발생 시점의 RGB/Thermal JPEG + 메타데이터를 저장.
+        rgb_jpeg/thermal_jpeg가 주어지면 그것(=detection이 발생한 그 프레임의 raw 스냅샷)을
+        쓰고, 없으면 _current_*_jpeg로 폴백. 폴백은 프레임 드리프트 위험이 있으므로
+        호출자는 가급적 명시 전달할 것 (broadcast가 0.4s 지연되는 사이 _current_*_jpeg가
+        다음 프레임으로 바뀌어 bbox/이미지 짝이 어긋나는 사고를 방지)."""
         self._defect_frames[defect_id] = {
-            "rgb": self._current_rgb_jpeg,
-            "thermal": self._current_thermal_jpeg,
+            "rgb": rgb_jpeg if rgb_jpeg is not None else self._current_rgb_jpeg,
+            "thermal": thermal_jpeg if thermal_jpeg is not None else self._current_thermal_jpeg,
             "bbox": bbox,
             "label": label,
             "severity": severity,
@@ -370,7 +375,11 @@ class TestStreamService:
         self, defect_id: str, channel: str, mode: str = "bbox"
     ) -> Optional[bytes]:
         """저장된 하자 시점의 프레임을 mode에 따라 시각화하여 반환.
-        channel: 'rgb' | 'thermal', mode: 'bbox' | 'detection'."""
+        channel: 'rgb' | 'thermal', mode: 'bbox' | 'detection' | 'raw'.
+        - 'raw': 오버레이 없는 원본 JPEG. 프론트가 SVG로 자체 오버레이를 그릴 때 사용
+                 (스캔 sweep + SVG bbox/마스크 + 라벨 페이드인 같은 모션 UX).
+        - 'bbox': 단순 네모박스 + 한글 라벨이 burned-in 된 JPEG.
+        - 'detection': 반투명 마스크 + 윤곽 + 코너마커 + 심각도 색상이 burned-in 된 JPEG."""
         data = self._defect_frames.get(defect_id)
         if data is None:
             return None
@@ -378,6 +387,8 @@ class TestStreamService:
         bbox = data["bbox"]
         label = data["label"]
         severity = data["severity"]
+        if mode == "raw":
+            return jpeg
         if mode == "detection":
             return self._draw_detection_on_jpeg(jpeg, bbox, label, severity)
         return self._draw_bbox_on_jpeg(jpeg, bbox, label)
@@ -645,13 +656,22 @@ class TestStreamService:
             # 1) 추론 (브로드캐스트 없이 결과만 반환)
             detection = await self._detect(frame, filepath)
 
+            # 1.5) detection이 있으면 RAW RGB 스냅샷을 detection에 첨부.
+            #      broadcast(prev_detection)는 0.4s 후 호출되는데 그 사이 _current_rgb_jpeg가
+            #      다음 프레임(다음 image 파일)으로 갱신되어, bbox는 N의 좌표인데 JPEG는 N+1이
+            #      되는 프레임 드리프트가 발생. 이 시점에 raw frame을 굳혀두어 짝을 보존.
+            if detection is not None:
+                detection["_rgb_snapshot"] = self._encode_jpeg(frame)
+
             # 2) RGB 프레임에 오버레이 그리기
             annotated = self._apply_live_overlay(frame, detection)
             rgb_jpeg = self._encode_jpeg(annotated)
             self._current_rgb_jpeg = rgb_jpeg
 
-            # 3) Thermal 프레임 준비 + 오버레이
-            await self._prepare_thermal_frame(test_frame, detection)
+            # 3) Thermal 프레임 준비 + 오버레이 (raw thermal jpeg 반환)
+            raw_thermal_jpeg = await self._prepare_thermal_frame(test_frame, detection)
+            if detection is not None and raw_thermal_jpeg is not None:
+                detection["_thermal_snapshot"] = raw_thermal_jpeg
             self._frame_version += 1
 
             # 4) 새 boundary yield → 이 신호로 브라우저가 *직전* 프레임을 commit/paint한다.
@@ -705,30 +725,40 @@ class TestStreamService:
 
     async def _prepare_thermal_frame(
         self, test_frame: TestFrame, detection: Optional[dict] = None
-    ) -> None:
-        """RGB와 동기화된 Thermal 프레임을 준비. detection이 있으면 오버레이 적용."""
+    ) -> Optional[bytes]:
+        """RGB와 동기화된 Thermal 프레임을 준비. detection이 있으면 오버레이 적용.
+
+        반환: raw thermal JPEG (오버레이 없음). 호출자는 detection["_thermal_snapshot"]에
+        붙여서 store_defect_frame으로 전달 — 프레임 드리프트(다음 프레임 JPEG에 이전
+        bbox가 페어링되는 버그) 방지용. 라이브 스트림용 오버레이는 self._current_thermal_jpeg.
+        """
         if test_frame.thermal_path is None:
             frame = self._no_signal_frame("THERMAL")
-            self._current_thermal_jpeg = self._encode_jpeg(frame)
-            return
+            jpeg = self._encode_jpeg(frame)
+            self._current_thermal_jpeg = jpeg
+            return jpeg
 
         ir_frame = await asyncio.to_thread(cv2.imread, test_frame.thermal_path)
         if ir_frame is None:
             frame = self._no_signal_frame("THERMAL")
-            self._current_thermal_jpeg = self._encode_jpeg(frame)
-            return
+            jpeg = self._encode_jpeg(frame)
+            self._current_thermal_jpeg = jpeg
+            return jpeg
 
         if len(ir_frame.shape) == 3:
             gray = cv2.cvtColor(ir_frame, cv2.COLOR_BGR2GRAY)
         else:
             gray = ir_frame
-        thermal = cv2.applyColorMap(gray, cv2.COLORMAP_INFERNO)
+        thermal_raw = cv2.applyColorMap(gray, cv2.COLORMAP_INFERNO)
+        raw_jpeg = self._encode_jpeg(thermal_raw)
 
-        # Thermal에도 동일한 오버레이 적용
         if detection:
-            thermal = self._apply_live_overlay(thermal, detection)
+            thermal_with_overlay = self._apply_live_overlay(thermal_raw, detection)
+            self._current_thermal_jpeg = self._encode_jpeg(thermal_with_overlay)
+        else:
+            self._current_thermal_jpeg = raw_jpeg
 
-        self._current_thermal_jpeg = self._encode_jpeg(thermal)
+        return raw_jpeg
 
     # ── 영상 프레임 스트리밍 ────────────────────
     async def _stream_video_frames(self, filepath: str):
@@ -759,6 +789,12 @@ class TestStreamService:
             detection = None
             if self._frame_counter % 3 == 0:
                 detection = await self._detect(frame, filepath)
+                # RAW frame 스냅샷을 detection에 굳혀둠 — broadcast 지연 동안 다음 프레임이
+                # _current_rgb_jpeg를 덮어쓰는 것을 방지 (프레임 드리프트 방지).
+                # 비디오는 카메라가 연속 이동하므로 1~3프레임 차이도 bbox가 명확히 어긋남.
+                if detection is not None:
+                    detection["_rgb_snapshot"] = self._encode_jpeg(frame)
+                    # 비디오는 thermal 페어가 없으므로 thermal_snapshot은 생략.
 
             annotated = self._apply_live_overlay(frame, detection) if detection else frame
             rgb_jpeg = self._encode_jpeg(annotated)
@@ -876,10 +912,14 @@ class TestStreamService:
         now_iso = datetime.now(timezone.utc).isoformat()
         info = detection.get("defect_info", _PAIRED_DEFECT)
 
-        # raw 프레임 저장 (클릭 시 조회용)
+        # 하자 시점 프레임 저장 (클릭 시 조회용).
+        # _rgb_snapshot/_thermal_snapshot은 detection이 발생한 그 프레임의 raw JPEG.
+        # 이걸 명시 전달해야 _current_*_jpeg(다음 프레임으로 이미 갱신됨)와의 드리프트 방지.
         self.store_defect_frame(
             detection["id"], bbox=detection["bbox"],
             label=detection["label"], severity=detection["severity"],
+            rgb_jpeg=detection.get("_rgb_snapshot"),
+            thermal_jpeg=detection.get("_thermal_snapshot"),
         )
 
         # 브로드캐스트 데이터 구성

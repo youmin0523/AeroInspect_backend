@@ -397,12 +397,25 @@ async def get_test_defect_frame(
     defect_id: str, channel: str, mode: str = "bbox"
 ):
     """테스트 모드: 하자 탐지 시점의 프레임을 JPEG로 반환.
-    channel: 'rgb' | 'thermal', mode: 'bbox' | 'detection'"""
+    channel: 'rgb' | 'thermal', mode: 'bbox' | 'detection' | 'raw'.
+    'raw' 는 프론트가 SVG로 자체 오버레이를 그릴 때 사용 (스캔 sweep + bbox 페이드인 UX).
+
+    [v1.1 / R31 노트]
+    영상 수신기 도착 후 진짜 현장점검 활성 시 RealStreamService 가 동일 시그니처의
+    `GET /api/v1/stream/defect/{defect_id}/{channel}?mode=...` 를 노출해야 함.
+    프론트 LiveVideoFeed.jsx 는 isTestMode 분기로 testMode/real URL 을 자동 전환하도록
+    이미 source-agnostic 설계 — backend가 real 경로를 추가하면 프론트 수정 없이 동작.
+    구현 시 반드시 적용할 패턴 (test_stream R30 에서 확립):
+      1) detection 발생 시 raw 프레임 JPEG 를 detection 딕셔너리에 _rgb_snapshot/_thermal_snapshot
+         으로 굳혀둘 것 (broadcast 지연 사이 _current_*_jpeg 가 다음 프레임으로 갱신되어
+         bbox/jpeg 짝이 어긋나는 프레임 드리프트 방지).
+      2) store_defect_frame 호출 시 위 스냅샷을 명시 전달.
+      3) get_defect_frame 에서 mode='raw' 분기 지원."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")
     if channel not in ("rgb", "thermal"):
         raise HTTPException(status_code=400, detail="channel must be 'rgb' or 'thermal'")
-    if mode not in ("bbox", "detection"):
+    if mode not in ("bbox", "detection", "raw"):
         mode = "bbox"
 
     from app.services.test_stream import test_stream_service

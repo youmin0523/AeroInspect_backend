@@ -1,180 +1,19 @@
 # AeroInspect Backend
 
-드론 기반 자율 하자 점검 플랫폼 **AeroInspect**의 백엔드 서버입니다. FastAPI 위에 비전 AI 추론(YOLOv8·ResNet50·U-Net·PatchCore), 실시간 WebSocket 스트림, 인증·조직·보고서·채팅·드론 텔레메트리까지 통합 제공합니다.
+드론 기반 하자 점검 플랫폼 FastAPI 서버. 이 문서는 **3-모델 추론 파이프라인** (YOLOv8 × 2 + ResNet50) 관련 설정·엔드포인트·마이그레이션 절차를 다룹니다. 인증/사이트/보고서 등 다른 모듈은 [app/api/](app/api/) 코드 참고.
 
-> 본 README는 기술 스택 · 사용법 가이드 → 추론 파이프라인 · API · 운영 순으로 구성됩니다. 인증/사이트/보고서 등 도메인 모듈의 세부 동작은 [`app/api/`](app/api/) · [`app/services/`](app/services/) 코드를 참조하세요.
+## 실행
 
----
-
-## 🛠️ 기술 스택
-
-### 코어
-| 구분 | 라이브러리 | 용도 |
-|------|-----------|------|
-| Web Framework | **FastAPI** + **uvicorn[standard]** | ASGI 서버, 자동 OpenAPI 문서화 |
-| Async ORM | **SQLAlchemy 2.x (asyncio)** + **asyncpg** | PostgreSQL 비동기 접근 |
-| Migration | **Alembic** | DB 스키마 버전 관리 |
-| Validation | **Pydantic v2** + **pydantic-settings** | 요청/응답 스키마, .env 로드 |
-| Auth | **passlib[bcrypt]** + **python-jose** | 비밀번호 해시, JWT 발급/검증 |
-
-### AI · Computer Vision
-| 라이브러리 | 용도 |
-|------------|------|
-| **PyTorch 2.x** + **torchvision** | YOLOv8 / ResNet50 / U-Net 추론·학습 |
-| **Ultralytics ≥8.3** | YOLOv8 디텍션 / 세그멘테이션 |
-| **OpenCV (opencv-python)** | 이미지 디코딩, 시각화, geometric gate |
-| **ONNX Runtime** | 6-모델 ONNX 추론 (20-defect 파이프라인) |
-| **Anomalib (PatchCore)** | 이상치 검출 (M6) |
-| **ensemble-boxes** | WBF 멀티 체크포인트 박스 융합 |
-| **NumPy** + **Pillow** | 텐서/이미지 후처리 |
-
-### 하드웨어 · 통신
-| 라이브러리 | 용도 |
-|------------|------|
-| **pyserial** + **pymavlink** | 드론 비행 컨트롤러 통신 (MAVLink), LiDAR 시리얼 |
-| **websockets** | 라이브 영상 스트림 + 탐지 결과 broadcast |
-| **httpx** + **aiofiles** | 외부 API 호출, 비동기 파일 IO |
-
-### LLM · 부가 서비스
-| 라이브러리 | 용도 |
-|------------|------|
-| **anthropic** + **google-generativeai** | LLM 보고서 요약 ([`app/services/llm_report.py`](app/services/llm_report.py)) |
-| **GCP Compute** | GPU 인스턴스 동적 기동/종료 ([`app/services/gcp_compute.py`](app/services/gcp_compute.py)) |
-
-### 운영 · 관측성
-| 라이브러리 | 용도 |
-|------------|------|
-| **structlog** | 구조화 JSON 로그 (Loki/Datadog/CloudWatch 호환) |
-| **prometheus_client** | 메트릭 노출 |
-| **pytest** + **pytest-asyncio** | 단위·통합 테스트 |
-| **Dockerfile** + **Dockerfile.gpu** + **fly.toml** | 컨테이너 배포 (Fly.io / GCP) |
-
-전체 의존성: [`requirements.txt`](requirements.txt) · GPU 추가본: [`requirements.gpu.txt`](requirements.gpu.txt)
-
----
-
-## 🚀 사용법 (Quick Start)
-
-### 1) 사전 요구
-- **Python 3.10+** (권장 3.11)
-- **PostgreSQL 14+** (또는 SQLite는 로컬 개발용)
-- **CUDA GPU** (선택 — CPU도 동작하지만 추론 속도 ↓)
-- 모델 가중치 3종 → [`models_weights/`](models_weights/) 폴더에 배치
-
-### 2) 설치 & 실행
 ```bash
 cd backend
-python -m venv venv
-# Windows PowerShell
-.\venv\Scripts\Activate.ps1
-# Windows bash / macOS / Linux
-source venv/Scripts/activate          # 또는 source venv/bin/activate
-
+python -m venv venv && source venv/Scripts/activate  # Windows bash
 pip install -r requirements.txt
-cp .env.example .env                   # DB URL · JWT secret · 가중치 경로 수정
-# (선택) GPU 환경
-pip install -r requirements.gpu.txt
-
+cp .env.example .env          # DB URL, 가중치 경로 수정
+# weights 3개 파일을 models_weights/ 폴더에 배치
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-| 엔드포인트 | URL |
-|-----------|-----|
-| Swagger UI | http://localhost:8000/docs |
-| ReDoc | http://localhost:8000/redoc |
-| Health | http://localhost:8000/health |
-
-### 3) 주요 명령어
-| 명령 | 설명 |
-|------|------|
-| `uvicorn app.main:app --reload` | 개발 서버 (HMR) |
-| `alembic upgrade head` | DB 마이그레이션 적용 |
-| `alembic revision --autogenerate -m "..."` | 모델 변경 → 마이그레이션 생성 |
-| `pytest` / `pytest tests/test_inference_pipeline.py -v` | 테스트 |
-| `python scripts/sweep_wallpaper_thresholds.py ...` | 벽지 임계값 튜닝 |
-
-### 4) Docker / 배포
-```bash
-# CPU 이미지
-docker build -t aeroinspect-backend .
-# GPU 이미지 (CUDA)
-docker build -f Dockerfile.gpu -t aeroinspect-backend:gpu .
-
-# Fly.io 배포 (fly.toml 참조)
-fly deploy
-```
-
----
-
-## 📂 디렉터리 구조
-
-```
-backend/
-├── app/
-│   ├── main.py                FastAPI 진입점 (라우터 등록 · 미들웨어 · lifespan)
-│   ├── config.py              Pydantic Settings (.env 로드)
-│   ├── dependencies.py        DI: get_db, get_current_user 등
-│   ├── api/                   라우터 (도메인별 엔드포인트)
-│   │   ├── router.py             /api/v1 통합 라우터
-│   │   ├── auth.py · oauth.py    JWT 로그인 · Google/Kakao/Naver OAuth
-│   │   ├── employee.py · organization.py
-│   │   ├── sites.py · floorplan.py · slam.py · telemetry.py
-│   │   ├── detect.py             multipart 이미지 추론
-│   │   ├── stream.py · ws_stream.py   드론 영상 + 추론 WebSocket
-│   │   ├── websocket.py          /ws 채널 broadcast
-│   │   ├── defects.py · report.py · coverage.py
-│   │   ├── chat.py · notifications.py
-│   │   ├── admin_gpu.py          GPU 인스턴스 운영
-│   │   └── ai_webhook.py
-│   ├── services/              비즈니스 로직 + AI 추론
-│   │   ├── inference_pipeline.py        3-모델 파이프라인 (기본)
-│   │   ├── inference_pipeline_20.py     20-defect 파이프라인 (USE_20DEFECT_PIPELINE=true)
-│   │   ├── yolo_inference.py · wallpaper_classifier.py · onnx_inference.py
-│   │   ├── insulation_detector.py (M4 U-Net) · alignment_detector.py (M5+G1)
-│   │   ├── anomaly_detection.py (M6 PatchCore) · ensemble.py (WBF)
-│   │   ├── temporal_filter.py · object_tracker.py · tta.py · tiled_inference.py
-│   │   ├── furniture_gate.py · geometric_gate.py · active_learning.py
-│   │   ├── defect_taxonomy.py           코드 매핑·표시명·severity
-│   │   ├── defect_persistence.py · defect_processor.py
-│   │   ├── camera.py · thermal.py · lidar.py · recording.py
-│   │   ├── telemetry_cache.py · image_storage.py
-│   │   ├── llm_report.py                Anthropic/Gemini 보고서 요약
-│   │   ├── notification_service.py · push_notifications.py · email_service.py
-│   │   ├── gpu_usage.py · gcp_compute.py
-│   │   ├── floorplan_processor.py · test_stream.py
-│   │   └── postprocess_config.yaml
-│   ├── core/
-│   │   ├── jwt.py · security.py         JWT 발급/검증, 권한
-│   │   ├── middleware.py                request_id 자동 부여
-│   │   ├── logging.py                   structlog 설정 (LOG_JSON)
-│   │   ├── metrics.py                   Prometheus
-│   │   ├── stream_inference.py · streaming.py   드롭 큐·프레임 스킵 워커
-│   │   └── ws_manager.py · ws_manager_redis.py
-│   ├── models/                SQLAlchemy ORM 모델
-│   │   ├── user.py · organization.py · department.py · business_profile.py
-│   │   ├── site.py · floorplan.py · slam_map.py · telemetry.py
-│   │   ├── inspection_schedule.py · defect.py · report.py
-│   │   ├── conversation.py · conversation_member.py · message.py
-│   │   ├── notification.py · device_token.py
-│   │   ├── term.py · user_term_agreement.py
-│   ├── schemas/               Pydantic 요청/응답 스키마
-│   ├── db/                    init_db, 세션 팩토리
-│   └── utils/
-├── alembic/                   마이그레이션 (alembic.ini + versions/)
-├── training/                  ML 학습 스크립트 (자세히는 training/README.md)
-├── tests/                     pytest
-├── scripts/                   임계값 sweep 등 운영 유틸
-├── models_weights/            *.pt / *.onnx 가중치 (gitignore)
-├── captured_frames/ · uploads/   런타임 산출물 (gitignore)
-├── Dockerfile · Dockerfile.gpu     컨테이너 빌드
-├── fly.toml                   Fly.io 배포 설정
-├── requirements.txt · requirements.gpu.txt
-├── pytest.ini
-├── package.json               (Notion sync 스크립트용 Node deps)
-└── README.md
-```
-
----
+Swagger: `http://localhost:8000/docs`
 
 ## 3-모델 추론 파이프라인
 

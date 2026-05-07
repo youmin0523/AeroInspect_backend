@@ -8,6 +8,7 @@
 #       - GET  /auth/check-username   → 아이디 중복 확인
 # =============================================
 
+import asyncio
 import os
 import secrets
 import string
@@ -235,7 +236,8 @@ async def login(
     if user is None or user.password_hash is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
 
-    if not verify_password(payload.password, user.password_hash):
+    # bcrypt(rounds=12) 검증은 ~250ms 동기 CPU 작업 → 스레드로 오프로드해 이벤트 루프 블로킹 제거.
+    if not await asyncio.to_thread(verify_password, payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
 
     token = create_access_token(user.id)
