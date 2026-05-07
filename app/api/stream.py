@@ -14,6 +14,7 @@
 #       - DELETE /stream/record/{filename} → 녹화 파일 삭제
 # =============================================
 
+import asyncio
 import os
 from typing import Literal, List
 
@@ -268,16 +269,29 @@ async def init_test_mode():
 
 @router.post("/test/start")
 async def start_test_mode():
-    """테스트 모드 초기화 + 재생 시작."""
+    """테스트 모드 초기화 + 재생 시작.
+    모델 로드는 백그라운드 태스크로 분리 — Fly.io 콜드 스타트 시 11개 ONNX 로드가
+    10~20초 걸려 `await` 동기 대기하면 frontend `<img>` 가 first-boundary 오기 전
+    edge timeout으로 onError 발화 → '스트림 대기 중' 영구 표시. 즉시 응답해서
+    재생 상태(_playing=True) 만 켜놓고, 모델 로드는 generator 백그라운드에서 완료될 때까지
+    detection 없이 raw frame 만 흘림(`_detect`는 모델 미로드 시 None 반환).
+    사용자 체감: START 직후 영상은 흐름 + 모델 준비 완료 시점부터 검출 카드 등장."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")
 
     from app.services.test_stream import test_stream_service
     if not test_stream_service._scanned:
         test_stream_service.scan_images()
-        await test_stream_service.load_models()
+    # 모델 로드를 백그라운드로 비동기 실행 — 응답 블로킹 회피.
+    # 이미 로드 완료/진행 중이면 load_models 가 멱등(`already_loaded` 반환)하므로 중복 호출 안전.
+    if not test_stream_service._models_loaded:
+        asyncio.create_task(test_stream_service.load_models())
     test_stream_service.start_playback()
-    return {"status": "playing", "play_state": test_stream_service.play_state}
+    return {
+        "status": "playing",
+        "play_state": test_stream_service.play_state,
+        "models_loaded": test_stream_service._models_loaded,
+    }
 
 
 @router.post("/test/pause")
@@ -362,12 +376,18 @@ async def set_test_source(request: TestSourceRequest):
 
 @router.post("/test/upload")
 async def upload_test_files(files: List[UploadFile] = File(...)):
-    """테스트용 이미지/영상 파일 대량 업로드."""
+    """테스트용 이미지/영상 파일 대량 업로드.
+    저장 1건 이상이면 source='upload'로 자동 전환 — 머신 재시작/새 세션에서
+    백엔드 in-memory _source가 'project'로 초기화돼 화면이 AWAITING SIGNAL로
+    멎는 사고 재발 방지."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")
 
     from app.services.test_stream import test_stream_service
     result = await test_stream_service.add_uploaded_files(files)
+    if result.get("saved", 0) > 0 and test_stream_service.source != "upload":
+        test_stream_service.set_source("upload")
+        result["source"] = "upload"
     return result
 
 
