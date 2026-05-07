@@ -1,0 +1,49 @@
+#!/bin/bash
+# .githooks/commit-msg
+
+MSG_FILE=$1
+MSG=$(cat $MSG_FILE)
+
+# Merge commit은 자동 패스
+if echo "$MSG" | grep -qE "^Merge branch"; then
+    exit 0
+fi
+
+if echo "$MSG" | grep -qE "^Merge pull request"; then
+    exit 0
+fi
+
+# 정규표현식 검사 (Conventional Commits)
+if ! echo "$MSG" | grep -qE "^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|release|hotfix)(\(.+\))?:|^\[(feat|fix|docs|style|refactor|test|chore|perf|ci|build|release|hotfix)\]"; then
+    echo ""
+    echo "🚨 [Commit Rejected] 잘못된 커밋 메시지 형식입니다!"
+    echo "================================================================"
+    echo "❌ 막힌 이유: 누가, 어떤 의도로 수정한 코드인지 알 수 없습니다."
+    echo "❌ 현재 작성하신 내용: $MSG"
+    echo ""
+    echo "협업하는 팀원들이 알아볼 수 있도록, 반드시 아래 접두사 중 하나로 시작해 주세요:"
+    echo "  - feat: (또는 [feat]) 기획된 새로운 기능 추가"
+    echo "  - fix: (또는 [fix]) 버그 혹은 에러 수정"
+    echo "  - docs: (또는 [docs]) README나 문서 내용 수정"
+    echo "  - style: (또는 [style]) 코드 포맷팅 조절 (로직 변경 없음)"
+    echo "  - refactor: (또는 [refactor]) 코드 리팩토링 (성능 개선)"
+    echo "  - test: (또는 [test]) 테스트 코드 변경"
+    echo "  - chore: (또는 [chore]) 빌드 파일, 패키지 매니저(npm 등) 수정"
+    echo "================================================================"
+    echo "✅ 올바른 컴펌 예시: feat: 회원가입 시 비밀번호 유효성 검사 로직 추가"
+    echo "🚫 금지된 예시: 수정1, 파일 업데이트, 버그고침, ㅠㅠ"
+    echo ""
+    exit 1
+fi
+
+# 길이 검사 (10자 이상, 너무 짧은 공백 포함 방지)
+# 문자에서 공백 제거 후 길이 체크
+LEN=$(echo "$MSG" | tr -d ' ' | wc -c)
+
+if [ $LEN -lt 10 ]; then
+    echo "🚨 [Commit Rejected] 커밋 메시지가 너무 성의 없습니다! (최소 내용 10자 이상)"
+    echo "팀원들이 작업 내용을 이해할 수 있도록 조금 더 구체적으로(왜, 무엇을 수정했는지) 적어주세요."
+    exit 1
+fi
+
+exit 0

@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# =============================================
+# .githooks/pre-commit
+# 역할: 코드 변경이 있는 commit 에 Vibe_Coding_Log.md 갱신을 강제.
+#       통합 repo / 분리 repo 모두에서 동작 — Vibe_Coding_Log.md 위치를 자동 탐지.
+#
+# 동작:
+#   1) stage 된 파일 중 코드 변경(메타/락/문서/훅 자체 제외) 감지
+#   2) backend/* 변경이면 backend/Vibe_Coding_Log.md 또는 ./Vibe_Coding_Log.md 변경 필수
+#   3) frontend/* 변경이면 frontend/Vibe_Coding_Log.md 또는 ./Vibe_Coding_Log.md 변경 필수
+#   4) 그 외 (단일 repo 루트) 도 ./Vibe_Coding_Log.md 변경 필수
+#   5) 누락 시 차단 + 가이드 메시지
+#
+# 우회: 환경변수 SKIP_VIBE_LOG_CHECK=1 (긴급용. 사후 보강 필수)
+# =============================================
+set -euo pipefail
+
+if [ "${SKIP_VIBE_LOG_CHECK:-0}" = "1" ]; then
+  echo "[pre-commit] SKIP_VIBE_LOG_CHECK=1 → Vibe 로그 검사 우회 (사후 보강 잊지 말 것)" >&2
+  exit 0
+fi
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+if [ -z "$staged" ]; then exit 0; fi
+
+code_changed=0
+backend_changed=0
+frontend_changed=0
+log_changed=0
+backend_log_changed=0
+frontend_log_changed=0
+root_log_changed=0
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    # Vibe 로그 자체
+    backend/Vibe_Coding_Log.md) log_changed=1; backend_log_changed=1; continue;;
+    frontend/Vibe_Coding_Log.md) log_changed=1; frontend_log_changed=1; continue;;
+    Vibe_Coding_Log.md) log_changed=1; root_log_changed=1; continue;;
+    # 메타/훅/락 — 코드 변경 아님
+    .githooks/*|.git/*|*.lock|*.lockb|.gitignore|.gitattributes) continue;;
+    # 그 외는 코드 변경
+    *)
+      code_changed=1
+      case "$f" in
+        backend/*) backend_changed=1;;
+        frontend/*) frontend_changed=1;;
+      esac
+      ;;
+  esac
+done <<EOF
+$staged
+EOF
+
+if [ "$code_changed" = "0" ]; then exit 0; fi
+
+fail=0
+errs=""
+
+# 통합 repo: 영역별로 정확히 매칭
+if [ "$backend_changed" = "1" ] && [ "$backend_log_changed" = "0" ] && [ "$root_log_changed" = "0" ]; then
+  if [ -f "backend/Vibe_Coding_Log.md" ]; then
+    fail=1
+    errs="${errs}❌ backend/* 코드 변경이 있는데 backend/Vibe_Coding_Log.md 갱신이 누락됐습니다.\n"
+  fi
+fi
+if [ "$frontend_changed" = "1" ] && [ "$frontend_log_changed" = "0" ] && [ "$root_log_changed" = "0" ]; then
+  if [ -f "frontend/Vibe_Coding_Log.md" ]; then
+    fail=1
+    errs="${errs}❌ frontend/* 코드 변경이 있는데 frontend/Vibe_Coding_Log.md 갱신이 누락됐습니다.\n"
+  fi
+fi
+
+# 분리 repo (root 에 Vibe_Coding_Log.md 만 있는 경우)
+if [ -f "Vibe_Coding_Log.md" ] && [ ! -f "backend/Vibe_Coding_Log.md" ] && [ ! -f "frontend/Vibe_Coding_Log.md" ]; then
+  if [ "$log_changed" = "0" ]; then
+    fail=1
+    errs="${errs}❌ 코드 변경이 있는데 Vibe_Coding_Log.md 갱신이 누락됐습니다.\n"
+  fi
+fi
+
+# 통합 repo 인데 어떤 Vibe 로그도 변경 안 된 경우
+if [ -f "backend/Vibe_Coding_Log.md" ] && [ -f "frontend/Vibe_Coding_Log.md" ] && [ "$log_changed" = "0" ]; then
+  fail=1
+  errs="${errs}❌ 코드 변경이 있는데 어떤 Vibe_Coding_Log.md 도 갱신되지 않았습니다.\n"
+fi
+
+if [ "$fail" = "1" ]; then
+  printf "\n%b\n" "$errs" >&2
+  cat >&2 <<EOF
+💡 해결 방법:
+   1) 작업 영역의 Vibe_Coding_Log.md 에 시각과 함께 변경 요약을 append
+      (예: backend/Vibe_Coding_Log.md, frontend/Vibe_Coding_Log.md)
+   2) git add <변경한 로그 파일>
+   3) git commit 다시 시도
+
+🚧 정말 우회가 필요하면 SKIP_VIBE_LOG_CHECK=1 git commit ... (드물게만)
+EOF
+  exit 1
+fi
+
+exit 0
