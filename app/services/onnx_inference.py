@@ -327,6 +327,12 @@ class ONNXPatchCoreDetector:
         self.session = _create_session(onnx_path)
         self.threshold = threshold
         self.input_name = self.session.get_inputs()[0].name
+        # 모델의 실제 입력 H/W를 그래프에서 자동 추출 — 하드코딩 시 export shape와
+        # 어긋나면 매 frame INVALID_ARGUMENT로 추론 전체 실패. shape: [N, C, H, W].
+        # dynamic axis(str)면 fallback 224 (anomalib 기본 backbone).
+        shape = self.session.get_inputs()[0].shape
+        self.input_h = shape[2] if isinstance(shape[2], int) else 224
+        self.input_w = shape[3] if isinstance(shape[3], int) else 224
 
     @property
     def is_loaded(self) -> bool:
@@ -345,8 +351,9 @@ class ONNXPatchCoreDetector:
             anomaly_mask: uint8 이상 영역 이진 마스크 (0 또는 255)
             anomaly_score: float 전체 이상 점수 (0.0~1.0)
         """
-        # 전처리: resize + normalize
-        resized = cv2.resize(frame_bgr, (256, 256))
+        # 전처리: 모델 입력 shape에 맞춰 resize + normalize.
+        # cv2.resize는 (W, H) 순서. self.input_w/h는 ONNX 그래프에서 추출.
+        resized = cv2.resize(frame_bgr, (self.input_w, self.input_h))
         rgb = resized[:, :, ::-1].astype(np.float32) / 255.0
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32)

@@ -149,9 +149,13 @@ class InferencePipeline20:
         self._m2_yolo = self._try_load_yolo(
             wd, settings.M2_YOLO_ONNX, ["surface_defect_wall", "baseboard_defect"], "M2-YOLO",
         )
+        # M2-ResNet은 26K crop 데이터로 2-class 단순화 학습됨 (NUM_CLASSES=2,
+        # train_m2_resnet_surface.py:30-32 참조). 과거 5-class 매핑을 들고 있으면
+        # 모델 인덱스 1(=surface_defect)을 코드가 wallpaper_bubble로 잘못 매핑하여
+        # 균열·표면 결함을 모조리 "도배지 기포·들뜸"으로 표시하는 사고. ImageFolder 알파벳순.
         self._m2_resnet = self._try_load_resnet(
             wd, settings.M2_RESNET_ONNX,
-            ["wallpaper_seam", "wallpaper_bubble", "paint_stain", "scratch", "baseboard_damage"],
+            ["baseboard_damage", "surface_defect"],  # 알파벳 순, 2-class
             "M2-ResNet",
         )
         # M2 보조 ckpt (multi-ckpt WBF — 0.85 mAP 도달 핵심)
@@ -175,11 +179,14 @@ class InferencePipeline20:
             "M3-ResNet",
         )
 
-        # M4 Context: 환경 컨텍스트 (wall/ceiling/floor/window/door)
-        # ImageFolder 알파벳 순 (m4_context_refined data.yaml과 일치)
+        # M4 Context: 환경 컨텍스트 (wall/ceiling/floor/window/door).
+        # YOLO는 ImageFolder가 아니라 data.yaml의 names 순서로 학습됨.
+        # m4_context_refined/data.yaml: 0=wall, 1=ceiling, 2=floor, 3=window, 4=door.
+        # 과거 주석은 "alphabetical"이라 잘못 적혀 있었고 코드도 알파벳으로 어긋나 있어
+        # geometric_gate가 wall↔ceiling↔window↔door를 뒤섞여 판단하던 핵심 사고 원인.
         self._m4_context = self._try_load_yolo(
             wd, settings.M4_CONTEXT_ONNX,
-            ["ceiling", "door", "floor", "wall", "window"],  # alphabetical
+            ["wall", "ceiling", "floor", "window", "door"],  # data.yaml 순서
             "M4-Context",
         )
 
@@ -267,13 +274,20 @@ class InferencePipeline20:
         use_tiling = tier >= 3
 
         # ── Tier 1: 구조·방수 + 마감·표면 ──
+        # 진단용으로 모델별 raw count를 분리 캡처 (0-detection 트레이스 시 손실 지점 추적).
+        m1_dets: List[dict] = []
+        m2_dets: List[dict] = []
+        m3_dets: List[dict] = []
         if tier >= 1:
-            all_dets.extend(self._run_m1(frame_bgr, use_tiling=use_tiling))
-            all_dets.extend(self._run_m2(frame_bgr, use_tiling=use_tiling, tier=tier))
+            m1_dets = self._run_m1(frame_bgr, use_tiling=use_tiling)
+            m2_dets = self._run_m2(frame_bgr, use_tiling=use_tiling, tier=tier)
+            all_dets.extend(m1_dets)
+            all_dets.extend(m2_dets)
 
         # ── Tier 2: 바닥·창호 + 기하학 ──
         if tier >= 2:
-            all_dets.extend(self._run_m3(frame_bgr, use_tiling=use_tiling, tier=tier))
+            m3_dets = self._run_m3(frame_bgr, use_tiling=use_tiling, tier=tier)
+            all_dets.extend(m3_dets)
             if alignment_detector.is_loaded:
                 raw = alignment_detector.detect(frame_bgr, imu_data)
                 for r in raw:
@@ -326,19 +340,25 @@ class InferencePipeline20:
             except Exception as e:
                 print(f"[FurnitureAware] 추론 실패: {e}")
 
+        # 진단용 단계별 카운트 (0-detection 시 손실 지점 추적).
+        raw_count = len(all_dets)
+
         # ── Geometric Gate: wall/ceiling/floor/window/door 위 검출만 통과 ──
         if self._geometric_gate is not None:
             all_dets = self._geometric_gate.filter(all_dets, context_detections)
+        after_geo_count = len(all_dets)
 
         # ── Furniture Gate: 빌트인 가구 위 검출 차단 ──
         if self._furniture_gate is not None:
             all_dets = self._furniture_gate.filter(all_dets, furniture_detections)
+        after_furn_count = len(all_dets)
 
         # ── Cross-Model Spatial Boost (다른 모델이 같은 위치 탐지 → conf 승격) ──
         all_dets = cross_model_spatial_boost(all_dets)
 
         # ── Cross-Model NMS ──
         all_dets = cross_model_nms(all_dets)
+        after_nms_count = len(all_dets)
 
         # ── severity_mapper 매핑 ──
         defect_detections: List[DefectDetection] = []
@@ -358,6 +378,19 @@ class InferencePipeline20:
 
         defect_count = len(defect_detections) + len(insulation_results) + len(alignment_results)
         has_defect = defect_count > 0
+
+        # ── 진단 트레이스: 0건 검출 시 단계별 손실 지점 추적 ──
+        # Why: mock 폴백을 제거한 뒤 검출이 안 되는 케이스가 어디서 빠지는지(M1/M2/M3 raw,
+        # geometric_gate, furniture_gate, NMS) 한 줄로 즉시 식별. 정상 검출 흐름은 침묵.
+        if defect_count == 0:
+            print(
+                f"[Pipeline20.trace] 0-detection tier={tier}: "
+                f"M1={len(m1_dets)} M2={len(m2_dets)} M3={len(m3_dets)} "
+                f"raw={raw_count} → geo={after_geo_count} → furn={after_furn_count} "
+                f"→ nms={after_nms_count} | "
+                f"context={len(context_detections)} furn_dets={len(furniture_detections)} "
+                f"insul={len(insulation_results)} align={len(alignment_results)}"
+            )
 
         return DetectionResult20(
             detections=defect_detections,

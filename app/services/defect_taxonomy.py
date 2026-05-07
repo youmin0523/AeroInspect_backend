@@ -190,6 +190,24 @@ DEFECT_20_MAP: Dict[str, Tuple[str, str, str, str]] = {
     "frame_squareness_defect":    ("A-04", "문·창호 틀 직각도 불량",   "MED",  "A"),
     # D-02: 바닥재 들뜸 (열화상 간접 / 시각적)
     "floor_lifting":          ("D-02", "바닥재 들뜸 (공명 감지)",  "MED",  "D"),
+
+    # ── ResNet/YOLO 원본 출력 raw 클래스 매핑 ────────────────
+    # 학습 모델이 위 정식 코드를 직접 출력하지 않고 sub-class 라벨을 내므로
+    # 등록 누락 시 get_20defect_info 폴백("X-00", raw_name, ...) → 화면에
+    # "X-00 caulking_indicator" 같은 영문 raw 라벨이 노출되는 사고 방지.
+
+    # M1-ResNet 출력 (5-class sub-분류, ImageFolder 알파벳 순)
+    "caulking_indicator":   ("B-03", "코킹 누락·불량",         "HIGH", "B"),
+    "crack_indicator":      ("A-03", "균열 (마감 균열)",        "MED",  "A"),
+    "moisture_indicator":   ("B-04", "방수층 들뜸 / 누수 흔적", "HIGH", "B"),
+    "structural_damage":    ("A-02", "균열 (구조 균열)",       "HIGH", "A"),
+    # M2-ResNet/YOLO 통합 출력 — sub 분류 정보 없음 → 일반 표면 결함
+    "surface_defect":       ("C-04", "벽 표면 결함",            "MED",  "C"),
+    "surface_defect_wall":  ("C-04", "벽 표면 결함",            "MED",  "C"),
+    # M3-YOLO/ResNet 출력 (sub 분류 정보 없음 → 카테고리 default)
+    "floor_defect":         ("D-03", "바닥 오염·스크래치",      "LOW",  "D"),
+    "glass_defect":         ("E-01", "창호 유리 스크래치·파손",  "MED",  "E"),
+    "frame_defect":         ("E-02", "창틀·문틀 도장 불량",     "LOW",  "E"),
 }
 
 

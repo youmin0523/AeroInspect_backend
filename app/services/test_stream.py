@@ -824,13 +824,18 @@ class TestStreamService:
 
     # ── 추론 (결과만 반환, 브로드캐스트 하지 않음) ────────
     async def _detect(self, frame: np.ndarray, filepath: str) -> Optional[dict]:
-        """추론 또는 목업 생성. 결과 dict를 반환 (브로드캐스트는 별도)."""
-        if self._models_loaded:
-            return await self._detect_real(frame, filepath)
-        return self._detect_mock(frame, filepath)
+        """실제 ONNX 추론 결과만 반환 (브로드캐스트는 별도).
+        모델 미로드/검출 0건/예외 → None. mock 폴백으로 거짓 라벨을 만들지 않는다.
+        Why: 디렉토리명 기반 mock 라벨이 실제 추론 자리를 가로채면 입주자 신뢰 직결 사고."""
+        if not self._models_loaded:
+            return None
+        return await self._detect_real(frame, filepath)
 
     def _detect_mock(self, frame: np.ndarray, filepath: str) -> dict:
-        """목업 하자 데이터 생성 (브로드캐스트 없이 반환)."""
+        """[DEPRECATED — 호출되지 않음] 디렉토리명 기반 가짜 라벨.
+        bbox는 random crop, 클래스는 폴더명, confidence는 random.uniform —
+        실제 추론 자리에 끼어들면 거짓 검출이 노출되어 신뢰성 사고. 호출 차단됨.
+        시연용으로 부활하려면 별도 명시 플래그로 분리할 것."""
         defect_info = None
         path_lower = filepath.replace("\\", "/").lower()
         for dir_key, info in _DIR_TO_DEFECT.items():
@@ -858,25 +863,27 @@ class TestStreamService:
         }
 
     async def _detect_real(self, frame: np.ndarray, filepath: str) -> Optional[dict]:
-        """실제 ONNX 추론. 첫 번째 검출 결과를 반환."""
+        """실제 ONNX 추론. 첫 번째 검출 결과를 반환. 0건/미로드/예외 → None.
+        Why: 0건일 때 mock 폴백을 쓰면 모델이 못 본 곳에 가짜 bbox + 디렉토리명 라벨이
+        그려져 사용자에게 거짓 검출이 노출됨. 안전 직결 — None이 정직한 답이다."""
         try:
             from app.services.inference_pipeline_20 import pipeline20
             if not pipeline20.is_loaded:
-                return self._detect_mock(frame, filepath)
+                return None
 
             result = await pipeline20.detect_async(frame, tier=3)
             if result.defect_count == 0:
-                return self._detect_mock(frame, filepath)
+                return None
 
             det = result.detections[0]  # 첫 번째 검출
-            bbox_dict = None
-            image_crop_b64 = None
-            if det.bbox_xyxy:
-                x1, y1, x2, y2 = [int(v) for v in det.bbox_xyxy]
-                bbox_dict = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
-                image_crop_b64 = self._crop_to_base64(frame, x1, y1, x2, y2)
-            else:
-                image_crop_b64, bbox_dict = self._generate_random_crop(frame)
+            # bbox 없는 검출은 노출하지 않음. random crop으로 채우면 무관한 영역에 박스가
+            # 그려져 거짓 위치 표시가 되므로 안전 직결 위반.
+            if not det.bbox_xyxy:
+                print(f"[TestStream] 검출됐으나 bbox 없음 — 노출 차단 (filepath={filepath})")
+                return None
+            x1, y1, x2, y2 = [int(v) for v in det.bbox_xyxy]
+            bbox_dict = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+            image_crop_b64 = self._crop_to_base64(frame, x1, y1, x2, y2)
 
             conf_rounded = round(det.conf, 3)
             label = f"{det.code} {det.class_display_ko} ({conf_rounded*100:.0f}%)"
@@ -901,8 +908,8 @@ class TestStreamService:
                 "source": det.defect_source,
             }
         except Exception as e:
-            print(f"[TestStream] 추론 오류: {e}")
-            return self._detect_mock(frame, filepath)
+            print(f"[TestStream] 추론 오류 — mock 폴백 없이 None 반환: {e}")
+            return None
 
     # ── 브로드캐스트 (결과를 WebSocket으로 전송) ────────
     async def _broadcast_detection(self, detection: dict) -> None:
