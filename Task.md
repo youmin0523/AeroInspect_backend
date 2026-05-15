@@ -200,6 +200,15 @@
 
 ## Revision History
 
+### v6.0_260515 (작성자: @youminsu0523 / branch: MS)
+- **(backend R-v1.1.01) OpenAI 챗봇(건축물·하자 도메인 어시스턴트) 통합** — 통합 repo 와 동일 구현. 분리 repo head 가 `k4e5f6a7b8c9` 이므로 마이그레이션 down_revision 분기.
+  - 신규 ORM 2: `AiChatThread`(user_id+organization_id 격리, summary watermark, soft delete) / `AiChatMessage`(role enum, tokens, JSONB meta).
+  - 신규 Pydantic 6: ThreadCreate/Update/Response/ListResponse, MessageCreate/Response/HistoryResponse. role=system 응답 제외.
+  - 신규 Alembic `m6a7b8c9d0e1` (down=`k4e5f6a7b8c9`): FK 사이클 회피 위해 threads → messages → ALTER threads ADD FK 순.
+  - 신규 서비스 `app/services/openai_chat.py` — SYSTEM_PROMPT(DEFECT_CATALOG 20종 + 안전 가이드), astream(SSE), light-RAG, 자동 요약.
+  - 신규 라우터 `app/api/ai_chat.py` (6 엔드포인트, `get_current_org_member` 의존성, user_id+org_id 이중 검증, 사용자별 분당 20 메시지 카운터).
+  - router.py include + rate_limit.py 한도, settings 4개(OPENAI_API_KEY/MODEL/MAX_OUTPUT_TOKENS/SUMMARY_MODEL), requirements `openai>=1.40.0`.
+
 ### v5.1_260503 (작성자: @youminsu0523 / branch: MS)
 - **R26 후속 정정**: tasks 문서(API 명세서 v1.1→v1.2, ERD v1.0→v1.1) 부록을 본문 인라인 위치(4.17 Employee API / 2.1.5 Swagger securityScheme / 8.5 운영 가드 / 4.19 inspection_schedules / 5장 관계 / 6.1 인덱스 / 13장 결론)로 분산 + 파일명 rename + 팀명 `다마코더 → AeroInspect`. 가이드 3종 문서이력 위치 정정.
 - **DB 시드 실 적용**: `alembic merge` 로 분기 head 2개(`0003`, `i2c3d4e5f6a7`) → `89b53c16de85` 병합 → `upgrade head` 성공. `defect_logs` 의 alembic_version 과 실제 컬럼 inconsistent (image_crop_path/track_id/accumulated_conf/tier_executed/deviation_*/delta_temperature/ensemble_boosted/defect_class_display_*/) 10건 `ADD COLUMN IF NOT EXISTS` 일괄 보정. `seed_demo_data --reset` 결과: 1 org / 3 depts / 2 users(백승희·오희진) / 8 sites / **315 defects (HIGH 77)** / 12 reports / 3 today schedules (잠실 리센츠 14:00 KST 백승희 시드 검증).

@@ -236,6 +236,13 @@ core/stream_inference.py ──→ services/inference_pipeline.py
 
 ## Revision History
 
+### v6.0_260515 (작성자: @youminsu0523 / branch: MS)
+- **Phase 24 신설 — OpenAI 챗봇 백엔드 통합 (R-v1.1.01)** — 통합 repo 와 동일. 분리 repo head 가 `k4e5f6a7b8c9` 이므로 마이그레이션 `m6a7b8c9d0e1` down_revision 만 `k4e5f6a7b8c9` 로 분기.
+  - DB 모델 2: AiChatThread / AiChatMessage. 멀티테넌트 user_id + organization_id 이중 격리. summary watermark 로 컨텍스트 압축.
+  - 서비스 `OpenAIChatService` — SYSTEM_PROMPT(DEFECT_CATALOG 20종 표 + B영역 엄격 + 안전 직결 + 추측 금지 + 인젝션 거절). SSE 스트리밍. light-RAG(정규식 카테고리 코드 + 사이트 키워드, organization_id 필터). 30턴 초과 시 BackgroundTasks 자동 요약.
+  - API `/api/v1/ai-chat` 6엔드포인트. `get_current_org_member` 의존성 + thread.user_id·org_id 이중 검증 + 사용자별 분당 20 메시지 라우터 내부 카운터.
+  - settings 4(OPENAI_API_KEY/MODEL/MAX_OUTPUT_TOKENS/SUMMARY_MODEL), requirements `openai>=1.40.0`, rate_limit `/api/v1/ai-chat`:120/min.
+
 ### v5.1_260503 (작성자: @youminsu0523 / branch: MS)
 - Phase 20 추가 완료(alembic 분기 head 병합 `89b53c16de85` + 누락 컬럼 10건 ALTER 보정 + seed_demo_data 실 적용 sites=8/defects=315/reports=12/schedules=3) + Phase 21 신설(tasks 문서 양식 정정 — 부록 → 인라인, 파일 rename, 팀명 일괄, 가이드 3종 문서이력 위치, CHANGES md 신설)
 
