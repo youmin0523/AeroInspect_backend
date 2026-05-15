@@ -2788,6 +2788,7 @@ uploads/gazebo_worlds_real/
 | .05.b3 | 2026-05-15 저녁 | **regenerate_thread_title 시그니처 단순화** — 인자 (thread_id, user_text, assistant_text) → (thread_id) 하나로 축소. 내부에서 최근 10건(user+assistant) DB 조회 후 LLM 입력 구성. 매 호출이 "지금까지의 대화 흐름 전체" 기반이라 의도와 정확히 일치. | app/services/openai_chat.py |
 | .05.b4 | 2026-05-15 저녁 | **프롬프트 강화** — "한국어 명사형 5~7단어 / 하자 코드·부위·현장명 키워드 포함 / 단순 인사만 있으면 '신규 도메인 문의' 같은 일반 시작 제목 / 따옴표·이모지·마침표·번호·접두어 없음". `제목:`/`주제:`/`Title:` 접두어가 섞이면 절단. | app/services/openai_chat.py |
 | .05.b5 | 2026-05-15 저녁 | **_is_first_user_message → _count_user_messages 일반화** — boolean 헬퍼 대신 카운트 값을 반환. astream 에서 `user_count_before` 변수로 보존하여 finally 단계의 갱신 조건에 사용. | app/services/openai_chat.py |
+| .05.b6 | 2026-05-15 저녁 | **기존 thread 제목 1회성 백필 스크립트** — R-v1.1.05 배포 이전 thread 는 "안녕하세요" / "제목 없음" 같이 부실한 제목으로 굳어있음(user_count_before ≥ 3 조건이라 자동 갱신 영향 없음). 운영 DB 직접 보정용 `scripts/backfill_chat_titles.py` 추가 — 활성 thread 중 user 메시지 ≥ 1 인 것만 대상, openai_chat_service.regenerate_thread_title 직렬 호출, `--dry-run` 안전 옵션. fly ssh console 1회 실행으로 일괄 정리. | scripts/backfill_chat_titles.py (신규) |
 
 ### 📐 설계 결정 / 자가검토
 
