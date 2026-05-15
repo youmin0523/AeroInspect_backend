@@ -110,6 +110,21 @@ class TestStreamService:
         self._frame_counter: int = 0
         self._scanned: bool = False
 
+        # 영상 추론 background task가 적재하는 가장 최신 detection.
+        # (이미지 카테고리 경로용 — 영상은 별도 _video_inference_task로 처리.)
+        self._pending_video_detection: Optional[dict] = None
+
+        # ── 영상 직접재생 모드(test mode 업로드 mp4 전용) ──
+        # 프론트가 <video src=/test/upload/file/{name}> 으로 네이티브 디코드.
+        # 백엔드는 MJPEG yield를 멈추고 background inference만 돌리고 WS로 결과 push.
+        # _active_video_filename 이 set 되면 rgb_mjpeg_generator 는 "WATCHING" 플레이스홀더만 흘림.
+        self._active_video_filename: Optional[str] = None
+        self._active_video_fps: float = 0.0
+        self._active_video_duration: float = 0.0
+        self._active_video_frame_w: int = 0
+        self._active_video_frame_h: int = 0
+        self._video_inference_task: Optional[asyncio.Task] = None
+
         # ── 하자별 프레임 저장소 (클릭 시 해당 시점 프레임 조회용) ──
         self._defect_frames: OrderedDict[str, Tuple[bytes, Optional[bytes]]] = OrderedDict()
         self._MAX_DEFECT_FRAMES = 200
@@ -153,7 +168,40 @@ class TestStreamService:
         self._upload_index = 0
         self._current_rgb_jpeg = None
         self._current_thermal_jpeg = None
+        # 진행 중이던 영상 inference task 취소 + active video 메타 클리어
+        self._cancel_video_inference()
+        self._clear_active_video()
         print("[TestStream] STOP")
+
+    # ── 영상 직접재생 모드 메타 ────────────────────
+    @property
+    def active_media(self) -> dict:
+        """프론트가 현재 재생 대상이 영상인지 이미지인지 결정할 때 폴링하는 메타.
+        영상이면 <video src=/test/upload/file/{filename}> 으로 직접 재생,
+        아니면 기존 MJPEG <img src=/test/rgb>."""
+        if self._active_video_filename:
+            return {
+                "kind": "video",
+                "filename": self._active_video_filename,
+                "fps": self._active_video_fps,
+                "duration_sec": self._active_video_duration,
+                "frame_w": self._active_video_frame_w,
+                "frame_h": self._active_video_frame_h,
+            }
+        return {"kind": "image", "filename": None}
+
+    def _clear_active_video(self) -> None:
+        self._active_video_filename = None
+        self._active_video_fps = 0.0
+        self._active_video_duration = 0.0
+        self._active_video_frame_w = 0
+        self._active_video_frame_h = 0
+
+    def _cancel_video_inference(self) -> None:
+        task = self._video_inference_task
+        if task is not None and not task.done():
+            task.cancel()
+        self._video_inference_task = None
 
     # ── 이미지 스캔 (카테고리별 그룹핑) ────────────
     def scan_images(self) -> dict:
@@ -296,22 +344,34 @@ class TestStreamService:
 
     # ── 파일 업로드 ────────────────────────────
     async def add_uploaded_files(self, files) -> dict:
+        """대용량 파일을 chunk 스트리밍으로 디스크 저장.
+        `await upload_file.read()` 는 전체 바이트를 RAM에 올려 1GB Fly 머신에서
+        모델+multipart 동시 로드 시 OOM/스왑으로 36MB 영상이 수십 초 걸리는 사고 발생.
+        1MiB chunk 단위로 흘려 보내 RAM 점유는 chunk 크기로 cap.
+        """
         upload_dir = settings.TEST_UPLOAD_DIR
         os.makedirs(upload_dir, exist_ok=True)
         saved = 0
         total_size = 0
+        chunk_size = 1024 * 1024  # 1 MiB
+        import shutil
         for upload_file in files:
-            ext = Path(upload_file.filename).suffix.lower()
+            ext = Path(upload_file.filename or "").suffix.lower()
             if ext not in ALL_EXTENSIONS:
                 continue
             safe_name = f"{uuid.uuid4().hex[:8]}_{upload_file.filename}"
             dest = os.path.join(upload_dir, safe_name)
-            content = await upload_file.read()
+            written = 0
             with open(dest, "wb") as f:
-                f.write(content)
+                while True:
+                    chunk = await upload_file.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    written += len(chunk)
             self._uploaded_files.append(dest)
             saved += 1
-            total_size += len(content)
+            total_size += written
         return {
             "saved": saved,
             "total_size_mb": round(total_size / 1024 / 1024, 2),
@@ -641,10 +701,28 @@ class TestStreamService:
             filepath = test_frame.rgb_path
 
             if _is_video(filepath):
-                async for boundary in self._stream_video_frames(filepath):
-                    yield boundary
-                # 영상 블록 종료 후 prev_detection은 영상 내부에서 처리됨 — 여기서 폐기
+                # 영상 직접재생 모드 — backend는 더 이상 frame을 MJPEG로 재인코딩하지 않는다.
+                # 프론트가 /test/active 로 메타 받아 <video src=/test/upload/file/{name}> 직접 재생,
+                # backend는 background inference 만 돌리고 detection을 WS push.
+                # MJPEG 채널엔 사용자가 우연히 <img>로 접근해도 인식 가능한 placeholder만 흘림.
+                activated = self.activate_video_mode(filepath)
+                if not activated:
+                    # 메타 peek 실패 — 손상 파일. 다음 프레임으로 넘김.
+                    prev_detection = None
+                    await asyncio.sleep(0.5)
+                    continue
                 prev_detection = None
+                # active video가 끝날 때까지 placeholder만 흘림.
+                # (영상이 끝나면 _video_inference_task가 done. 그래도 사용자가 STOP하기 전까지는
+                #  같은 영상이 active로 유지 — 프론트가 seek/replay 할 수 있어야 하므로.)
+                while self._playing and self._active_video_filename:
+                    if self._paused:
+                        pl = self._stopped_frame("RGB", "PAUSED")
+                    else:
+                        pl = self._watching_video_frame(self._active_video_filename)
+                    yield self._mjpeg_boundary(self._encode_jpeg(pl))
+                    await asyncio.sleep(1.0)
+                # active video 해제됨 → 다음 frame으로
                 continue
 
             frame = await asyncio.to_thread(cv2.imread, filepath)
@@ -760,76 +838,117 @@ class TestStreamService:
 
         return raw_jpeg
 
-    # ── 영상 프레임 스트리밍 ────────────────────
-    async def _stream_video_frames(self, filepath: str):
-        """영상 케이스도 RGB와 동일 정책: 다음 yield 직후 이전 detection broadcast.
-        multipart commit 타이밍 때문에 매 frame yield가 *직전* frame의 paint 신호."""
+    # ── 영상 직접재생 모드: 메타 peek + background inference ────────────────────
+    def _peek_video_meta(self, filepath: str) -> Optional[Tuple[float, float, int, int]]:
+        """cv2.VideoCapture로 fps/duration/width/height만 읽는다. 디코드는 하지 않음.
+        실패 시 None — 호출자가 안전 폴백."""
         cap = cv2.VideoCapture(filepath)
+        if not cap.isOpened():
+            cap.release()
+            return None
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+            duration = total / fps if fps > 0 else 0.0
+            return (fps, duration, w, h)
+        finally:
+            cap.release()
+
+    def activate_video_mode(self, filepath: str) -> bool:
+        """업로드 영상 1개를 직접재생 모드로 전환. 메타 set + background inference task 발사.
+        프론트가 /test/active 폴링/WS 으로 받아 <video> 로 직접 재생. 백엔드는 더 이상
+        영상 프레임을 MJPEG로 재인코딩하지 않음 — Fly 1 vCPU 의 결정적 병목 제거."""
+        meta = self._peek_video_meta(filepath)
+        if meta is None:
+            print(f"[TestStream] 영상 메타 peek 실패: {filepath}")
+            return False
+        fps, duration, w, h = meta
+        self._active_video_filename = os.path.basename(filepath)
+        self._active_video_fps = fps
+        self._active_video_duration = duration
+        self._active_video_frame_w = w
+        self._active_video_frame_h = h
+        # 이전 task 있으면 취소 후 새 task
+        self._cancel_video_inference()
+        self._video_inference_task = asyncio.create_task(self._video_inference_loop(filepath))
+        print(f"[TestStream] 영상 직접재생 모드 진입: {self._active_video_filename} "
+              f"({fps:.1f}fps, {duration:.1f}s, {w}x{h})")
+        return True
+
+    async def _video_inference_loop(self, filepath: str) -> None:
+        """영상을 1회 end-to-end로 읽으며 sample마다 inference + WS broadcast.
+        각 detection 에는 video_timestamp_sec(=frame_idx/fps) 가 포함되어 프론트가
+        <video>.currentTime 과 동기화하여 SVG 오버레이를 띄울 수 있게 한다.
+        play_state(_playing/_paused) 존중. 영상 끝나면 자연 종료."""
+        if not self._models_loaded:
+            print("[TestStream] 모델 미로드 — 영상 inference 스킵")
+            return
+
+        cap = cv2.VideoCapture(filepath)
+        if not cap.isOpened():
+            cap.release()
+            return
+
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        frame_interval = 1.0 / min(fps, 10.0)
+        # 0.33초마다 1회 추론 (30fps → 매 10프레임, 60fps → 매 20프레임)
+        sample_interval = max(1, int(round(fps / 3.0)))
+        frame_idx = 0
 
-        prev_detection: Optional[dict] = None
+        try:
+            while cap.isOpened():
+                if not self._playing:
+                    break
+                if self._paused:
+                    await asyncio.sleep(0.3)
+                    continue
 
-        while cap.isOpened():
-            if not self._playing:
-                break
-            if self._paused:
-                if self._current_rgb_jpeg:
-                    yield self._mjpeg_boundary(self._current_rgb_jpeg)
-                prev_detection = None
-                await asyncio.sleep(0.5)
-                continue
+                ret, frame = await asyncio.to_thread(cap.read)
+                if not ret:
+                    break
 
-            ret, frame = await asyncio.to_thread(cap.read)
-            if not ret:
-                break
+                if frame_idx % sample_interval == 0:
+                    video_t = frame_idx / fps if fps > 0 else 0.0
+                    # 영상 경로는 tier=2 (M4 thermal U-Net + M6 PatchCore 제외).
+                    # RGB 영상에 thermal 추론은 무의미하고 PatchCore는 무거워 60fps 동반 inference 시
+                    # 1 vCPU 결정적 병목. 핵심 RGB 결함(M1/M2/M3/M5)만 충분히 잡힌다.
+                    det = await self._detect(frame, filepath, tier=2)
+                    if det is not None and det.get("bbox"):
+                        det["_rgb_snapshot"] = self._encode_jpeg(frame)
+                        det["_video_timestamp_sec"] = video_t
+                        det["_frame_w"] = frame.shape[1]
+                        det["_frame_h"] = frame.shape[0]
+                        asyncio.create_task(self._broadcast_detection(det))
 
-            self._frame_counter += 1
-
-            detection = None
-            if self._frame_counter % 3 == 0:
-                detection = await self._detect(frame, filepath)
-                # RAW frame 스냅샷을 detection에 굳혀둠 — broadcast 지연 동안 다음 프레임이
-                # _current_rgb_jpeg를 덮어쓰는 것을 방지 (프레임 드리프트 방지).
-                # 비디오는 카메라가 연속 이동하므로 1~3프레임 차이도 bbox가 명확히 어긋남.
-                if detection is not None:
-                    detection["_rgb_snapshot"] = self._encode_jpeg(frame)
-                    # 비디오는 thermal 페어가 없으므로 thermal_snapshot은 생략.
-
-            annotated = self._apply_live_overlay(frame, detection) if detection else frame
-            rgb_jpeg = self._encode_jpeg(annotated)
-            self._current_rgb_jpeg = rgb_jpeg
-
-            # 새 boundary → 직전 프레임 commit
-            yield self._mjpeg_boundary(rgb_jpeg)
-
-            # 직전 프레임의 detection을 paint 여유 후 broadcast
-            waited = 0.0
-            if prev_detection is not None:
-                # frame_interval이 짧으면 그에 맞춰 더 적게 대기
-                lag = min(0.4, max(0.15, frame_interval * 0.5))
-                await asyncio.sleep(lag)
-                waited = lag
-                await self._broadcast_detection(prev_detection)
-
-            # 이번 frame에 detection이 있을 때만 prev로 승격(없는 frame은 건너뜀)
-            if detection is not None:
-                prev_detection = detection
-
-            await asyncio.sleep(max(0.0, frame_interval - waited))
-
-        # 영상 종료 후 마지막 detection은 같은 generator의 다음 RGB 프레임이 yield될 때 broadcast됨
-
-        cap.release()
+                frame_idx += 1
+                # 이벤트 루프에 양보 — 1 vCPU 환경에서 다른 코루틴(MJPEG placeholder yield 등) 진행 보장
+                await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[TestStream] 영상 inference 오류: {e}")
+        finally:
+            cap.release()
+            print(f"[TestStream] 영상 inference 종료: {os.path.basename(filepath)} "
+                  f"(샘플 {frame_idx // sample_interval}회)")
 
     # ── 추론 (결과만 반환, 브로드캐스트 하지 않음) ────────
-    async def _detect(self, frame: np.ndarray, filepath: str) -> Optional[dict]:
+    async def _detect(
+        self, frame: np.ndarray, filepath: str, tier: int = 3,
+    ) -> Optional[dict]:
         """실제 ONNX 추론 결과만 반환 (브로드캐스트는 별도).
         모델 미로드/검출 0건/예외 → None. mock 폴백으로 거짓 라벨을 만들지 않는다.
+
+        tier (2026-05-12 신설):
+          3 = 풀(M1+M2+M3+M4 thermal+M5 geom+M6 patchcore). 이미지 단발 추론 기본.
+          2 = M4(thermal) + M6(patchcore) 제외. 영상 경로 기본 — RGB 영상에 thermal U-Net은
+              무의미하고 PatchCore는 무거워 60fps 동시 inference 시 결정적 병목.
+          1 = M1+M2 만. 경량 (필요 시).
         Why: 디렉토리명 기반 mock 라벨이 실제 추론 자리를 가로채면 입주자 신뢰 직결 사고."""
         if not self._models_loaded:
             return None
-        return await self._detect_real(frame, filepath)
+        return await self._detect_real(frame, filepath, tier=tier)
 
     def _detect_mock(self, frame: np.ndarray, filepath: str) -> dict:
         """[DEPRECATED — 호출되지 않음] 디렉토리명 기반 가짜 라벨.
@@ -862,8 +981,47 @@ class TestStreamService:
             "source": "test_mock",
         }
 
-    async def _detect_real(self, frame: np.ndarray, filepath: str) -> Optional[dict]:
-        """실제 ONNX 추론. 첫 번째 검출 결과를 반환. 0건/미로드/예외 → None.
+    # ── UI 노출 conf 게이트 ─────────────────
+    # 모델 학습 conf threshold(M1~M3=0.25~0.30) 와 별개로, 사용자에게 카드를 띄울 때
+    # 적용하는 UI 노출 임계값. OOD 입력(사람/외부 객체 등)에서 35~43% 저신뢰 검출이
+    # "방수층 들뜸/코킹 누락" 같은 거짓 라벨로 노출되어 입주자 신뢰 사고 유발 가능.
+    # Precision 우선([모든 하자 엄격·신뢰 우선] 정책) — 학습 자체는 안 건드림.
+    # 단열은 미탐 비용이 더 크므로([단열 결함 더 엄격하게]) 더 낮은 cutoff 유지.
+    #
+    # 2026-05-12 강화: 코킹·표면·도색·스크래치는 색상/패턴 의존도가 높아 OOD(밈/사람/풍경
+    # 영상)에서도 52~64% 신뢰도로 거짓 검출이 통과하는 사례 확인(test_mode 첨부 회귀 사고).
+    # 학습 자체는 후속 사이클로 두고 UI 노출 임계값만 우선 끌어올린다.
+    _UI_CONF_GATE_DEFAULT = 0.50
+    _UI_CONF_GATE_INSULATION = 0.30
+    # OOD-취약 클래스(가시광 색·패턴 dependent — 사람/풍경 영상에서 거짓 양성)
+    _UI_CONF_GATE_OOD_FRAGILE = 0.75
+
+    # 키워드 기반 매칭. class_ 내부명/한글표시명 둘 중 하나라도 걸리면 적용.
+    # (substring 매칭이므로 caulking_indicator / caulking_defect / "코킹 누락" 등 모두 cover)
+    _OOD_FRAGILE_KEYS = (
+        "caulking", "코킹",
+        "scratch", "찍힘", "스크래치",
+        "paint_stain", "도색",
+        "surface_defect", "표면 결함",
+        "baseboard", "걸레받이",
+        "pollution", "오염",
+    )
+
+    @classmethod
+    def _ui_conf_gate(cls, class_: Optional[str], class_ko: Optional[str]) -> float:
+        s = f"{class_ or ''} {class_ko or ''}".lower()
+        if "insulation" in s or "단열" in s:
+            return cls._UI_CONF_GATE_INSULATION
+        for key in cls._OOD_FRAGILE_KEYS:
+            if key in s:
+                return cls._UI_CONF_GATE_OOD_FRAGILE
+        return cls._UI_CONF_GATE_DEFAULT
+
+    async def _detect_real(
+        self, frame: np.ndarray, filepath: str, tier: int = 3,
+    ) -> Optional[dict]:
+        """실제 ONNX 추론. 첫 번째 검출 결과를 반환. 0건/미로드/예외/저신뢰 → None.
+        tier는 _detect에서 위임 — 영상 경로는 tier=2(M4 thermal/M6 patchcore 제외).
         Why: 0건일 때 mock 폴백을 쓰면 모델이 못 본 곳에 가짜 bbox + 디렉토리명 라벨이
         그려져 사용자에게 거짓 검출이 노출됨. 안전 직결 — None이 정직한 답이다."""
         try:
@@ -871,7 +1029,7 @@ class TestStreamService:
             if not pipeline20.is_loaded:
                 return None
 
-            result = await pipeline20.detect_async(frame, tier=3)
+            result = await pipeline20.detect_async(frame, tier=tier)
             if result.defect_count == 0:
                 return None
 
@@ -880,6 +1038,11 @@ class TestStreamService:
             # 그려져 거짓 위치 표시가 되므로 안전 직결 위반.
             if not det.bbox_xyxy:
                 print(f"[TestStream] 검출됐으나 bbox 없음 — 노출 차단 (filepath={filepath})")
+                return None
+
+            # UI 노출 conf 게이트(클래스별) — 학습 임계값과 무관하게 사용자 노출 보호.
+            ui_gate = self._ui_conf_gate(det.class_, det.class_display_ko)
+            if det.conf < ui_gate:
                 return None
             x1, y1, x2, y2 = [int(v) for v in det.bbox_xyxy]
             bbox_dict = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
@@ -948,6 +1111,13 @@ class TestStreamService:
             "source_file": os.path.basename(detection["filepath"]),
             "mode": self._detection_mode,
         }
+        # 영상 직접재생 모드일 때만 채워지는 동기화용 메타.
+        # 프론트 <video>.currentTime ↔ video_timestamp_sec 비교로 SVG 오버레이 동기화.
+        if "_video_timestamp_sec" in detection:
+            data["video_timestamp_sec"] = detection["_video_timestamp_sec"]
+        if "_frame_w" in detection and "_frame_h" in detection:
+            data["frame_w"] = detection["_frame_w"]
+            data["frame_h"] = detection["_frame_h"]
         await ws_manager.broadcast("defects", {"type": "defect.new", "data": data})
 
     # ── 라이브 오버레이 (numpy 프레임에 직접 그리기) ────────
@@ -1117,6 +1287,20 @@ class TestStreamService:
                      font, 0.9, (60, 60, 60), 2)
         cv2.putText(frame, f"{label} - No paired data", (width // 2 - 120, height // 2 + 25),
                      font, 0.45, (50, 50, 50), 1)
+        return frame
+
+    @staticmethod
+    def _watching_video_frame(filename: str, width: int = 640, height: int = 480) -> np.ndarray:
+        """영상 직접재생 모드 placeholder — <img>에서 접근하면 보이는 안내 화면.
+        실제 사용자는 <video> 태그로 직접 재생 중. 이 frame은 fallback/디버그용."""
+        frame = np.full((height, width, 3), 14, dtype=np.uint8)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(frame, "DIRECT VIDEO MODE", (width // 2 - 145, height // 2 - 30),
+                     font, 0.7, (80, 140, 180), 2)
+        cv2.putText(frame, f"file: {filename[:38]}", (24, height // 2 + 10),
+                     font, 0.5, (60, 60, 60), 1)
+        cv2.putText(frame, "Frontend plays this via <video> directly.",
+                    (24, height // 2 + 35), font, 0.45, (50, 50, 50), 1)
         return frame
 
     @staticmethod

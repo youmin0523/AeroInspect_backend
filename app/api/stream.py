@@ -23,7 +23,13 @@ from fastapi.responses import StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
 
 from app.config import settings
-from app.dependencies import get_rgb_camera, get_thermal_camera, get_ws_manager, get_recording_service
+from app.dependencies import (
+    get_current_user,
+    get_rgb_camera,
+    get_thermal_camera,
+    get_ws_manager,
+    get_recording_service,
+)
 from app.services.camera import CameraService
 from app.services.recording import RecordingService
 from app.core.streaming import mjpeg_generator, mjpeg_blend_generator
@@ -93,6 +99,7 @@ async def stream_blend(
 async def set_stream_mode(
     request: StreamModeRequest,
     manager: ConnectionManager = Depends(get_ws_manager),
+    _user=Depends(get_current_user),
 ):
     """
     카메라 모드 전환.
@@ -148,6 +155,7 @@ async def start_recording(
     rgb_camera: CameraService = Depends(get_rgb_camera),
     thermal_camera: CameraService = Depends(get_thermal_camera),
     recorder: RecordingService = Depends(get_recording_service),
+    _user=Depends(get_current_user),
 ):
     """
     영상 녹화 시작.
@@ -166,6 +174,7 @@ async def start_recording(
 @router.post("/record/stop")
 async def stop_recording(
     recorder: RecordingService = Depends(get_recording_service),
+    _user=Depends(get_current_user),
 ):
     """영상 녹화 중지 및 파일 저장."""
     try:
@@ -211,6 +220,7 @@ async def download_recording(filename: str):
 async def delete_recording(
     filename: str,
     recorder: RecordingService = Depends(get_recording_service),
+    _user=Depends(get_current_user),
 ):
     """녹화 파일 삭제 (개별 파일)"""
     if recorder.delete_recording(filename):
@@ -222,6 +232,7 @@ async def delete_recording(
 async def delete_recording_session(
     timestamp: str,
     recorder: RecordingService = Depends(get_recording_service),
+    _user=Depends(get_current_user),
 ):
     """녹화 세션 삭제 (동일 타임스탬프의 rgb+thermal 파일 일괄 삭제)"""
     deleted = recorder.delete_session(timestamp)
@@ -242,7 +253,10 @@ class TestDetectionModeRequest(BaseModel):
 
 
 @router.post("/test/detection-mode")
-async def set_test_detection_mode(request: TestDetectionModeRequest):
+async def set_test_detection_mode(
+    request: TestDetectionModeRequest,
+    _user=Depends(get_current_user),
+):
     """테스트 모드 감지 시각화 전환: 'bbox' (네모박스) ↔ 'detection' (객체감지)."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")
@@ -252,7 +266,7 @@ async def set_test_detection_mode(request: TestDetectionModeRequest):
 
 
 @router.post("/test/init")
-async def init_test_mode():
+async def init_test_mode(_user=Depends(get_current_user)):
     """테스트 모드 초기화: 이미지 디렉토리 스캔 + AI 모델 로드. 재생은 시작하지 않음."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")
@@ -268,7 +282,7 @@ async def init_test_mode():
 
 
 @router.post("/test/start")
-async def start_test_mode():
+async def start_test_mode(_user=Depends(get_current_user)):
     """테스트 모드 초기화 + 재생 시작.
     모델 로드는 백그라운드 태스크로 분리 — Fly.io 콜드 스타트 시 11개 ONNX 로드가
     10~20초 걸려 `await` 동기 대기하면 frontend `<img>` 가 first-boundary 오기 전
@@ -295,7 +309,7 @@ async def start_test_mode():
 
 
 @router.post("/test/pause")
-async def pause_test_mode():
+async def pause_test_mode(_user=Depends(get_current_user)):
     """테스트 모드 일시중지."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")
@@ -306,7 +320,7 @@ async def pause_test_mode():
 
 
 @router.post("/test/resume")
-async def resume_test_mode():
+async def resume_test_mode(_user=Depends(get_current_user)):
     """테스트 모드 재생 재개."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")
@@ -317,7 +331,7 @@ async def resume_test_mode():
 
 
 @router.post("/test/stop")
-async def stop_test_mode():
+async def stop_test_mode(_user=Depends(get_current_user)):
     """테스트 모드 정지."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")
@@ -364,7 +378,10 @@ async def stream_test_thermal():
 
 
 @router.post("/test/source")
-async def set_test_source(request: TestSourceRequest):
+async def set_test_source(
+    request: TestSourceRequest,
+    _user=Depends(get_current_user),
+):
     """테스트 이미지 소스 전환: 'project' (프로젝트 로컬) ↔ 'upload' (직접 업로드)."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")
@@ -375,7 +392,10 @@ async def set_test_source(request: TestSourceRequest):
 
 
 @router.post("/test/upload")
-async def upload_test_files(files: List[UploadFile] = File(...)):
+async def upload_test_files(
+    files: List[UploadFile] = File(...),
+    _user=Depends(get_current_user),
+):
     """테스트용 이미지/영상 파일 대량 업로드.
     저장 1건 이상이면 source='upload'로 자동 전환 — 머신 재시작/새 세션에서
     백엔드 in-memory _source가 'project'로 초기화돼 화면이 AWAITING SIGNAL로
@@ -392,7 +412,7 @@ async def upload_test_files(files: List[UploadFile] = File(...)):
 
 
 @router.delete("/test/upload")
-async def clear_test_uploads():
+async def clear_test_uploads(_user=Depends(get_current_user)):
     """업로드된 테스트 파일 전체 삭제."""
     if not settings.TEST_MODE_ENABLED:
         raise HTTPException(status_code=404, detail="Test mode is disabled")

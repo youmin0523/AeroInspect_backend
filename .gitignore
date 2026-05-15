@@ -29,6 +29,7 @@ models_weights/*.bin
 # 학습 산출물 (수십 GB) — GCS로 별도 관리
 training/runs/
 training/datasets/
+datasets/
 training/eval/results/*.json
 training/eval/results/*.md
 training/colab/upload_to_drive/

@@ -40,6 +40,7 @@ pymavlink
 # ── LLM ────────────────────────────────────
 anthropic
 google-generativeai
+openai>=1.40.0  # AsyncOpenAI + chat.completions stream — 도메인 챗봇용
 
 # ── Utilities ──────────────────────────────
 python-dotenv

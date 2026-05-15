@@ -15,10 +15,11 @@ from uuid import UUID
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_org_member, get_db
 from app.models.floorplan import Floorplan
 from app.schemas.floorplan import (
     FloorplanCalibrateRequest,
@@ -30,31 +31,49 @@ from app.schemas.floorplan import (
     FloorplanValidateResponse,
 )
 from app.services.floorplan_processor import extract_walls_from_bytes, validate_floorplan_quality
+from app.services.gazebo_world_generator import write_world_file
 
 router = APIRouter()
 
 # 업로드 저장 디렉토리
 UPLOAD_DIR = "./uploads/floorplans"
+WORLD_DIR = "./uploads/gazebo_worlds"
 
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
     "image/png",
+    "image/webp",
     "application/pdf",
     "application/dxf",
     "application/octet-stream",  # .dxf fallback
 }
 
 
+async def _get_org_floorplan(db: AsyncSession, org_id, floorplan_id: UUID) -> Floorplan:
+    """현재 조직 소유의 평면도만 조회. 없거나 타 조직 것이면 404."""
+    result = await db.execute(
+        select(Floorplan)
+        .where(Floorplan.id == floorplan_id)
+        .where(Floorplan.organization_id == org_id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=404, detail="평면도를 찾을 수 없습니다.")
+    return fp
+
+
 @router.get("", response_model=FloorplanListResponse)
 async def list_floorplans(
     db: AsyncSession = Depends(get_db),
-    _user=Depends(get_current_user),  # TODO: site/org FK 추가 시 org 스코프로 전환
+    org_tuple=Depends(get_current_org_member),
 ):
-    """업로드된 평면도 목록 조회"""
-    total = await db.scalar(select(func.count()).select_from(Floorplan))
-    result = await db.execute(
-        select(Floorplan).order_by(desc(Floorplan.created_at))
+    """업로드된 평면도 목록 조회 (현재 조직 소유분만)."""
+    _user, _member, org = org_tuple
+    base = select(Floorplan).where(Floorplan.organization_id == org.id)
+    total = await db.scalar(
+        select(func.count()).select_from(base.subquery())
     )
+    result = await db.execute(base.order_by(desc(Floorplan.created_at)))
     items = result.scalars().all()
 
     return FloorplanListResponse(
@@ -67,15 +86,11 @@ async def list_floorplans(
 async def get_floorplan(
     floorplan_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(get_current_user),
+    org_tuple=Depends(get_current_org_member),
 ):
-    """평면도 상세 조회"""
-    result = await db.execute(
-        select(Floorplan).where(Floorplan.id == floorplan_id)
-    )
-    fp = result.scalar_one_or_none()
-    if not fp:
-        raise HTTPException(status_code=404, detail="평면도를 찾을 수 없습니다.")
+    """평면도 상세 조회 (현재 조직 소유분만)."""
+    _user, _member, org = org_tuple
+    fp = await _get_org_floorplan(db, org.id, floorplan_id)
     return FloorplanUploadResponse.model_validate(fp)
 
 
@@ -83,13 +98,15 @@ async def get_floorplan(
 async def upload_floorplan(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    _user=Depends(get_current_user),
+    org_tuple=Depends(get_current_org_member),
 ):
     """
     평면도 이미지(JPG/PNG/PDF/DXF) 업로드.
-    파일을 서버에 저장하고 DB에 메타데이터 기록.
+    파일을 서버에 저장하고 DB에 메타데이터 기록 (소유 조직 자동 기록).
     이후 /process 엔드포인트로 OpenCV 처리 트리거.
     """
+    _user, _member, org = org_tuple
+
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=400,
@@ -109,8 +126,9 @@ async def upload_floorplan(
         content = await file.read()
         await f.write(content)
 
-    # DB 기록
+    # DB 기록 — 소유 조직 자동 기록
     floorplan = Floorplan(
+        organization_id=org.id,
         filename=file.filename or "unknown",
         content_type=file.content_type,
         file_path=file_path,
@@ -126,7 +144,7 @@ async def upload_floorplan(
 async def process_floorplan(
     floorplan_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(get_current_user),
+    org_tuple=Depends(get_current_org_member),
 ):
     """
     업로드된 평면도에서 벽체 라인 추출 트리거.
@@ -134,14 +152,10 @@ async def process_floorplan(
 
     지원 파일 형식:
       - JPG/PNG/WEBP: OpenCV 벽체 추출 (extract_walls_from_bytes)
-      - PDF/DXF: 추후 지원 (pdf2image / ezdxf 의��성 추가 필요)
+      - PDF/DXF: 추후 지원 (pdf2image / ezdxf 의존성 추가 필요)
     """
-    result = await db.execute(
-        select(Floorplan).where(Floorplan.id == floorplan_id)
-    )
-    fp = result.scalar_one_or_none()
-    if not fp:
-        raise HTTPException(status_code=404, detail="평면도를 찾을 수 없습니다.")
+    _user, _member, org = org_tuple
+    fp = await _get_org_floorplan(db, org.id, floorplan_id)
 
     if fp.status == "processing":
         raise HTTPException(status_code=409, detail="이미 처리 중입니다.")
@@ -185,48 +199,12 @@ async def process_floorplan(
                     detail="PDF 처리를 위한 pdf2image 패키지가 설치되어 있지 않습니다.",
                 )
         elif content_type in {"application/dxf"}:
-            # DXF → LINE 엔티티 좌표 추출 (ezdxf 필요)
+            # //* [Modified Code 2026-05-13] DXF 처리를 dxf_parser 모듈로 이관 —
+            # LINE 외에 INSERT(블록)/CIRCLE/ARC/LWPOLYLINE/POLYLINE 까지 처리해
+            # CAD 가구 심볼이 자율비행 충돌 회피 입력으로 들어가도록 함.
             try:
-                import ezdxf
-
-                doc = ezdxf.read(fp.file_path)
-                msp = doc.modelspace()
-                lines = [e for e in msp if e.dxftype() == "LINE"]
-
-                if not lines:
-                    fp.status = "completed"
-                    fp.wall_count = 0
-                    fp.walls_data = []
-                    await db.flush()
-                    return FloorplanProcessResponse(
-                        id=fp.id, filename=fp.filename, status="completed",
-                        wall_count=0, walls=[], gazebo_world=None,
-                    )
-
-                # 좌표 범위 산출 (정규화용)
-                all_x = [l.dxf.start.x for l in lines] + [l.dxf.end.x for l in lines]
-                all_y = [l.dxf.start.y for l in lines] + [l.dxf.end.y for l in lines]
-                min_x, max_x = min(all_x), max(all_x)
-                min_y, max_y = min(all_y), max(all_y)
-                w = max_x - min_x if max_x - min_x > 0 else 1
-                h = max_y - min_y if max_y - min_y > 0 else 1
-
-                walls = []
-                for line in lines:
-                    walls.append({
-                        "x1": round((line.dxf.start.x - min_x) / w, 4),
-                        "y1": round((line.dxf.start.y - min_y) / h, 4),
-                        "x2": round((line.dxf.end.x - min_x) / w, 4),
-                        "y2": round((line.dxf.end.y - min_y) / h, 4),
-                    })
-
-                extraction = {
-                    "walls": walls[:50],
-                    "outline": [],
-                    "image_width": int(w),
-                    "image_height": int(h),
-                    "wall_count": min(len(walls), 50),
-                }
+                from app.services.dxf_parser import parse_dxf
+                extraction = parse_dxf(fp.file_path)
             except ImportError:
                 fp.status = "failed"
                 await db.flush()
@@ -246,6 +224,9 @@ async def process_floorplan(
         fp.status = "completed"
         fp.wall_count = extraction["wall_count"]
         fp.walls_data = extraction["walls"]
+        # //* [Modified Code 2026-05-13] DXF 분기는 가구 키 없음 → 안전 폴백
+        fp.furniture_data = extraction.get("furniture", [])
+        fp.furniture_count = extraction.get("furniture_count", 0)
         await db.flush()
 
         return FloorplanProcessResponse(
@@ -254,6 +235,8 @@ async def process_floorplan(
             status=fp.status,
             wall_count=fp.wall_count,
             walls=fp.walls_data,
+            furniture=fp.furniture_data or [],
+            furniture_count=fp.furniture_count or 0,
             gazebo_world=fp.gazebo_world_path,
         )
 
@@ -268,7 +251,7 @@ async def process_floorplan(
 @router.post("/analyze", response_model=FloorplanAnalyzeResponse)
 async def analyze_floorplan(
     file: UploadFile = File(...),
-    _user=Depends(get_current_user),
+    _org=Depends(get_current_org_member),
 ):
     """
     평면도 이미지에서 벽체 라인 추출 (Stateless — DB 불필요).
@@ -294,7 +277,7 @@ async def analyze_floorplan(
 @router.post("/validate", response_model=FloorplanValidateResponse)
 async def validate_floorplan(
     file: UploadFile = File(...),
-    _user=Depends(get_current_user),
+    _org=Depends(get_current_org_member),
 ):
     """
     평면도 이미지 품질 검증 (Stateless — DB 불필요).
@@ -345,7 +328,7 @@ async def calibrate_floorplan_scale(
     floorplan_id: UUID,
     payload: FloorplanCalibrateRequest,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(get_current_user),
+    org_tuple=Depends(get_current_org_member),
 ):
     """
     평면도 스케일 보정 (FR-015).
@@ -353,10 +336,8 @@ async def calibrate_floorplan_scale(
       scale_px_per_meter = pixel_length / real_length_m
     이후 벽체 길이·면적을 미터 단위로 표기 가능.
     """
-    result = await db.execute(select(Floorplan).where(Floorplan.id == floorplan_id))
-    fp = result.scalar_one_or_none()
-    if not fp:
-        raise HTTPException(status_code=404, detail="평면도를 찾을 수 없습니다.")
+    _user, _member, org = org_tuple
+    fp = await _get_org_floorplan(db, org.id, floorplan_id)
 
     dx = payload.p2[0] - payload.p1[0]
     dy = payload.p2[1] - payload.p1[1]
@@ -384,19 +365,88 @@ async def calibrate_floorplan_scale(
     )
 
 
+@router.post("/{floorplan_id}/generate-world")
+async def generate_gazebo_world(
+    floorplan_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_tuple=Depends(get_current_org_member),
+):
+    """
+    추출된 walls + outline + scale_px_per_meter → Gazebo SDF .world 파일 생성.
+    파일은 ./uploads/gazebo_worlds/{floorplan_id}.world 에 저장되고
+    DB 의 gazebo_world_path 에 경로 기록.
+
+    실제 Gazebo 컨테이너에 입력하면 평면도와 동일한 구조의 시뮬레이션 환경이 띄워진다.
+    Gazebo 가 없는 환경에서는 backend 자율비행 시뮬레이터(autonomous_flight_simulator)
+    가 동일한 walls 데이터로 LiDAR raycast 시뮬레이션을 대신 수행.
+    """
+    _user, _member, org = org_tuple
+    fp = await _get_org_floorplan(db, org.id, floorplan_id)
+
+    if not fp.walls_data:
+        raise HTTPException(
+            status_code=409,
+            detail="아직 벽체 추출이 완료되지 않았습니다. 먼저 /process 를 실행하세요.",
+        )
+
+    output_path = os.path.join(WORLD_DIR, f"{floorplan_id}.world")
+
+    # outline 은 Floorplan 모델에 별도 저장 필드가 없어 빈 배열 (현재 스키마 한계)
+    # 향후 outline_data JSONB 필드 추가 시 fp.outline_data 사용
+    meta = write_world_file(
+        output_path=output_path,
+        world_name=f"floorplan_{floorplan_id}",
+        walls=fp.walls_data,
+        outline=[],
+        image_width=None,
+        image_height=None,
+        scale_px_per_meter=fp.scale_px_per_meter,
+        # //* [Modified Code 2026-05-13] 가구도 .world 에 collision geometry 로 추가
+        # → 실 Gazebo 시뮬에서 드론이 가구를 인식하고 회피 가능
+        furniture=fp.furniture_data or [],
+    )
+
+    fp.gazebo_world_path = output_path
+    await db.flush()
+
+    return {
+        "id": str(fp.id),
+        "gazebo_world_path": output_path,
+        **meta,
+    }
+
+
+@router.get("/{floorplan_id}/world")
+async def download_gazebo_world(
+    floorplan_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    org_tuple=Depends(get_current_org_member),
+):
+    """생성된 Gazebo .world 파일 다운로드."""
+    _user, _member, org = org_tuple
+    fp = await _get_org_floorplan(db, org.id, floorplan_id)
+    if not fp.gazebo_world_path or not os.path.exists(fp.gazebo_world_path):
+        raise HTTPException(
+            status_code=404,
+            detail=".world 파일이 아직 생성되지 않았습니다. /generate-world 를 먼저 호출하세요.",
+        )
+
+    return FileResponse(
+        path=fp.gazebo_world_path,
+        media_type="application/xml",
+        filename=f"floorplan_{floorplan_id}.world",
+    )
+
+
 @router.delete("/{floorplan_id}", status_code=204)
 async def delete_floorplan(
     floorplan_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(get_current_user),
+    org_tuple=Depends(get_current_org_member),
 ):
-    """평면도 및 관련 파일 삭제"""
-    result = await db.execute(
-        select(Floorplan).where(Floorplan.id == floorplan_id)
-    )
-    fp = result.scalar_one_or_none()
-    if not fp:
-        raise HTTPException(status_code=404, detail="평면도를 찾을 수 없습니다.")
+    """평면도 및 관련 파일 삭제 (현재 조직 소유분만)."""
+    _user, _member, org = org_tuple
+    fp = await _get_org_floorplan(db, org.id, floorplan_id)
 
     # 파일 삭제
     if fp.file_path and os.path.exists(fp.file_path):

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_current_user, get_db, get_ws_manager
+from app.dependencies import get_current_user, get_db, get_ws_manager, verify_ai_webhook
 from app.models.telemetry import TelemetryLog
 from app.schemas.telemetry import (
     TelemetryCreate,
@@ -70,15 +70,14 @@ async def create_telemetry(
     payload: TelemetryCreate,
     db: AsyncSession = Depends(get_db),
     manager: ConnectionManager = Depends(get_ws_manager),
+    _wh=Depends(verify_ai_webhook),
 ):
     """
     드론 텔레메트리 저장 + WebSocket 'telemetry' 채널로 실시간 Push.
     ROS2 브릿지 또는 MAVLink 파서에서 주기적으로 호출.
 
-    ⚠️ 보안 메모:
-      - 이 엔드포인트는 의도적으로 JWT 인증을 걸지 않음 (내부 서비스 간 호출).
-      - 운영 환경에서는 네트워크 레벨(VPC/방화벽)로 접근 제어 권장.
-      - 향후 서비스 토큰 기반(`INTERNAL_API_TOKEN`) 인증 추가 예정.
+    인증: X-AI-Webhook-Secret 헤더 필수 (내부 서비스 토큰).
+    ROS2 브릿지/MAVLink 파서가 settings.AI_WEBHOOK_SECRET 와 동일한 시크릿을 보내야 함.
 
     추가 동작:
       - telemetry_cache 갱신 (stream_inference가 프레임 캡처 시점에 snapshot)

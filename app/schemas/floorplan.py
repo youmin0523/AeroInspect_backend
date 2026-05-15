@@ -29,16 +29,20 @@ class FloorplanProcessResponse(BaseModel):
     status: str
     wall_count: Optional[int] = Field(None, description="추출된 벽체 라인 수")
     walls: Optional[list] = Field(None, description="벽체 좌표 리스트 [{x1,y1,x2,y2}, ...]")
+    furniture: Optional[list] = Field(default_factory=list, description="가구 회전 사각형 [{cx,cy,w,h,angle,label}, ...] (0-1 정규화)")
+    furniture_count: Optional[int] = Field(0, description="검출된 가구 수")
     gazebo_world: Optional[str] = Field(None, description="생성된 .world 파일 경로")
 
 
 class FloorplanAnalyzeResponse(BaseModel):
-    """벽체 추출 분석 결과 (Stateless — DB 불필요)"""
+    """벽체 + 가구 추출 분석 결과 (Stateless — DB 불필요)"""
     walls: list[dict] = Field(default_factory=list, description="벽체 좌표 [{x1,y1,x2,y2}, ...] (0-1 정규화)")
     outline: list[dict] = Field(default_factory=list, description="건물 외곽 다각형 [{x,y}, ...] (0-1 정규화, 닫힘)")
+    furniture: list[dict] = Field(default_factory=list, description="가구 회전 사각형 [{cx,cy,w,h,angle,label}, ...] (0-1 정규화) — 자율비행 충돌 회피용")
     image_width: int
     image_height: int
     wall_count: int
+    furniture_count: int = 0
 
 
 class FloorplanListResponse(BaseModel):

@@ -12,7 +12,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Column, String, Float, Integer, Text, Date,
-    DateTime, Enum as SAEnum, Index, func, ForeignKey,
+    DateTime, Enum as SAEnum, Index, Sequence, func, ForeignKey,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -27,8 +27,14 @@ class Site(Base):
     # ── 기본 키 ──────────────────────────────
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
 
-    # ── 등록 순번 ─────────────────────────────
-    seq = Column(Integer, nullable=False, comment="등록 순번 (자동 증가)")
+    # ── 등록 순번 (PostgreSQL Sequence 로 자동 발급) ─
+    seq = Column(
+        Integer,
+        Sequence("sites_seq_seq"),
+        nullable=False,
+        server_default=func.nextval("sites_seq_seq"),
+        comment="등록 순번 (sites_seq_seq nextval)",
+    )
 
     # ── 현장 정보 ─────────────────────────────
     name = Column(String(200), nullable=False, comment="현장명 (건물명+동호수)")

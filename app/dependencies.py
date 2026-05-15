@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.session import async_session_factory
 from app.core.jwt import decode_access_token
-from app.core.ws_manager import ws_manager
 from app.services.camera import rgb_camera_service, thermal_camera_service
 from app.services.recording import recording_service
 from app.services.yolo_inference import yolo_service
@@ -220,9 +219,47 @@ async def verify_ai_webhook(
         )
 
 
+async def verify_ai_webhook_or_user(
+    x_ai_webhook_secret: Optional[str] = Header(None, alias="X-AI-Webhook-Secret"),
+    cred: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    내부 워커(X-AI-Webhook-Secret) 또는 인증된 사용자(Bearer JWT) 둘 중 하나면 통과.
+    /detect 처럼 외부 AI 서버 콜백과 웹 UI 사용자 호출이 모두 들어오는 엔드포인트용.
+
+    반환:
+      - webhook 인증 시: None
+      - user 인증 시: User 모델
+    """
+    expected = settings.AI_WEBHOOK_SECRET
+    if x_ai_webhook_secret and expected and compare_digest(x_ai_webhook_secret, expected):
+        return None  # webhook 측 통과 (사용자 컨텍스트 없음)
+
+    if cred is not None:
+        user_id = decode_access_token(cred.credentials)
+        if user_id is not None:
+            from app.models.user import User  # 순환 임포트 방지
+            result = await db.execute(select(User).where(User.id == UUID(user_id)))
+            user = result.scalar_one_or_none()
+            if user is not None:
+                return user
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Bearer 토큰 또는 X-AI-Webhook-Secret 헤더가 필요합니다.",
+    )
+
+
 def get_ws_manager():
-    """WebSocket 연결 매니저 싱글톤 반환"""
-    return ws_manager
+    """WebSocket 연결 매니저 싱글톤 반환.
+
+    lifespan 에서 RedisConnectionManager 로 교체될 수 있어 매번 모듈 어트리뷰트를
+    lazy 참조한다. top-level `from app.core.ws_manager import ws_manager` 로
+    캡처하면 교체 후에도 옛 인스턴스를 가리킨다.
+    """
+    from app.core import ws_manager as wsmod
+    return wsmod.ws_manager
 
 
 def get_rgb_camera():

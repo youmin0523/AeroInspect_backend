@@ -23,6 +23,7 @@ from app.models.inspection_schedule import InspectionSchedule
 from app.models.notification import Notification
 from app.models.report import Report
 from app.models.site import Site
+from app.models.telemetry import TelemetryLog
 from app.models.user import User
 
 router = APIRouter()
@@ -164,10 +165,30 @@ async def get_monthly_kpi(
         .where(DefectLog.severity == "HIGH")
     ) or 0
 
+    # ── 평균 비행 분 (이번 달, site 단위 first-last timestamp diff 의 평균) ──
+    # 노이즈/유령 site 제외를 위해 텔레메트리 샘플 5건 이상인 site 만 집계.
+    # 비행 사이 휴식 시간이 포함되어 다소 과대평가될 수 있으나, 데모/대시보드 용도로 충분.
+    per_site_subq = (
+        select(
+            TelemetryLog.site_id,
+            (func.max(TelemetryLog.timestamp) - func.min(TelemetryLog.timestamp))
+                .label("duration"),
+        )
+        .where(TelemetryLog.site_id.in_(select(site_ids_subq)))
+        .where(TelemetryLog.timestamp >= month_start)
+        .group_by(TelemetryLog.site_id)
+        .having(func.count(TelemetryLog.id) >= 5)
+        .subquery()
+    )
+    avg_seconds = await db.scalar(
+        select(func.avg(func.extract("epoch", per_site_subq.c.duration)))
+    )
+    average_flight_minutes = int(round((avg_seconds or 0) / 60))
+
     return MonthlyKpi(
         inspections_completed=inspections_completed,
         reports_published=reports_published,
-        average_flight_minutes=0,  # telemetry 기반 측정 미구현 — 추후 보강
+        average_flight_minutes=average_flight_minutes,
         defects_found=defects_found,
         high_severity_count=high_severity_count,
     )

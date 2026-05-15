@@ -34,9 +34,21 @@ class ConnectionManager:
         self._connections: Dict[str, List[WebSocket]] = defaultdict(list)
 
     async def connect(self, websocket: WebSocket, channel: str) -> None:
-        """새 클라이언트를 채널에 등록"""
+        """새 클라이언트를 채널에 등록 (accept + register).
+
+        다중 채널 구독 시에는 첫 채널만 connect() 로 받고 이후 채널은
+        register() 로 추가하면 accept 중복 호출을 피할 수 있다.
+        """
         await websocket.accept()
-        self._connections[channel].append(websocket)
+        self._add(websocket, channel)
+
+    def register(self, websocket: WebSocket, channel: str) -> None:
+        """이미 accept 된 연결을 추가 채널에 등록만 한다 (accept 호출 안 함)."""
+        self._add(websocket, channel)
+
+    def _add(self, websocket: WebSocket, channel: str) -> None:
+        if websocket not in self._connections[channel]:
+            self._connections[channel].append(websocket)
         print(f"[WS] 연결됨: channel={channel}, 총={len(self._connections[channel])}개")
 
     def disconnect(self, websocket: WebSocket, channel: str) -> None:

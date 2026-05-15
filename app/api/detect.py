@@ -14,8 +14,9 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.dependencies import verify_ai_webhook_or_user
 from app.schemas.detection import DetectionResult
 from app.services.inference_pipeline import detect_defects_async, pipeline
 
@@ -56,7 +57,10 @@ def _validate_content_type(upload: UploadFile) -> None:
     summary="단일 이미지 하자 탐지",
     description="multipart로 이미지 1장을 업로드하면 3-모델(YOLO thermal + delam + ResNet 벽지) 추론 결과를 반환합니다.",
 )
-async def detect_single(image: UploadFile = File(..., description="업로드 이미지 파일 (JPEG/PNG/WEBP/BMP/TIFF)")) -> DetectionResult:
+async def detect_single(
+    image: UploadFile = File(..., description="업로드 이미지 파일 (JPEG/PNG/WEBP/BMP/TIFF)"),
+    _auth=Depends(verify_ai_webhook_or_user),
+) -> DetectionResult:
     _ensure_loaded()
     _validate_content_type(image)
 
@@ -79,7 +83,10 @@ async def detect_single(image: UploadFile = File(..., description="업로드 이
     summary="다중 이미지 하자 탐지 (배치)",
     description=f"최대 {MAX_BATCH_SIZE}장을 한 번에 업로드. 각 이미지마다 독립 추론 후 리스트로 반환.",
 )
-async def detect_batch(images: List[UploadFile] = File(..., description=f"이미지 파일 리스트 (최대 {MAX_BATCH_SIZE}장)")) -> List[DetectionResult]:
+async def detect_batch(
+    images: List[UploadFile] = File(..., description=f"이미지 파일 리스트 (최대 {MAX_BATCH_SIZE}장)"),
+    _auth=Depends(verify_ai_webhook_or_user),
+) -> List[DetectionResult]:
     _ensure_loaded()
 
     if len(images) == 0:

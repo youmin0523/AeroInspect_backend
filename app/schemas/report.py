@@ -8,6 +8,7 @@
 
 from datetime import datetime
 from typing import Optional, List
+from uuid import UUID
 from pydantic import BaseModel, Field
 
 
@@ -63,6 +64,7 @@ class ReportResponse(BaseModel):
 # ── 보고서 저장/조회 스키마 ──────────────────
 class ReportSaveRequest(BaseModel):
     """생성된 보고서 DB 저장 요청"""
+    site_id: Optional[UUID] = Field(None, description="연결된 현장 ID (조직 검증·알림 라우팅에 사용)")
     title: Optional[str] = Field(None, max_length=200)
     building_name: Optional[str] = Field(None, max_length=200)
     inspector_name: Optional[str] = Field(None, max_length=100)
@@ -76,7 +78,7 @@ class ReportSaveRequest(BaseModel):
 
 class ReportSavedResponse(BaseModel):
     """저장된 보고서 응답"""
-    id: str
+    id: UUID
     title: Optional[str]
     building_name: Optional[str]
     inspector_name: Optional[str]

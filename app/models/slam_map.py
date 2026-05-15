@@ -11,7 +11,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Column, String, Float, Integer, Text,
-    DateTime, Index, func
+    DateTime, ForeignKey, Index, func
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
@@ -26,6 +26,15 @@ class SlamMap(Base):
     __tablename__ = "slam_maps"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+
+    # ── 멀티테넌트 격리 ─────────────────────
+    organization_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id"),
+        nullable=True,
+        index=True,
+        comment="소속 조직 ID (멀티테넌트 격리 기준)",
+    )
 
     # ── 맵 메타데이터 ────────────────────────
     name = Column(String(200), comment="맵 이름 (예: 101동 25층)")
@@ -66,6 +75,7 @@ class SlamMap(Base):
 
     __table_args__ = (
         Index("idx_slam_map_status", "status"),
+        Index("idx_slam_maps_org_id", "organization_id"),
     )
 
     def __repr__(self):

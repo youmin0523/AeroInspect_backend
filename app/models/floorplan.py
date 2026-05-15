@@ -7,7 +7,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Float, Text, DateTime, func
+from sqlalchemy import Column, String, Integer, Float, Text, DateTime, ForeignKey, Index, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.db.base import Base
@@ -21,6 +21,16 @@ class Floorplan(Base):
     __tablename__ = "floorplans"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+
+    # ── 멀티테넌트 격리 ─────────────────────
+    # nullable=True 는 점진 마이그레이션을 위한 한시 허용. 신규 업로드는 항상 채워야 함.
+    organization_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id"),
+        nullable=True,
+        index=True,
+        comment="소속 조직 ID (멀티테넌트 격리 기준)",
+    )
 
     # ── 파일 정보 ────────────────────────────
     filename = Column(String(255), nullable=False, comment="원본 파일명")
@@ -37,6 +47,9 @@ class Floorplan(Base):
     # ── 처리 결과 ────────────────────────────
     wall_count = Column(Integer, comment="추출된 벽체 라인 수")
     walls_data = Column(JSONB, comment="벽체 좌표 JSON [{x1,y1,x2,y2}, ...]")
+    # //* [Modified Code 2026-05-13] 가구/빌트인 — 자율비행 충돌 회피용
+    furniture_count = Column(Integer, default=0, comment="검출된 가구/빌트인 수")
+    furniture_data = Column(JSONB, comment="가구 회전 사각형 [{cx,cy,w,h,angle,label}, ...]")
     gazebo_world_path = Column(String(500), comment="생성된 .world 파일 경로")
     error_message = Column(Text, comment="처리 실패 시 오류 메시지")
 
@@ -59,6 +72,10 @@ class Floorplan(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        Index("idx_floorplans_org_id", "organization_id"),
     )
 
     def __repr__(self):

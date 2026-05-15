@@ -39,10 +39,14 @@ class RedisConnectionManager(ConnectionManager):
         self,
         redis_url: str,
         channels: Iterable[str] = ("defects", "telemetry", "thermal", "camera", "stream"),
+        patterns: Iterable[str] = ("notifications:*", "user:*", "chat:*"),
     ):
         super().__init__()
         self._redis_url = redis_url
         self._channels = list(channels)
+        # 동적 채널 prefix 패턴 (notifications:{uid}, user:{uid}, chat:{uuid}) —
+        # 각 워커가 사용자 채널 메시지를 모두 수신할 수 있도록 psubscribe 로 구독.
+        self._patterns = list(patterns)
         self._redis = None            # redis.asyncio.Redis
         self._pubsub = None           # PubSub 객체
         self._subscriber_task: Optional[asyncio.Task] = None
@@ -60,13 +64,21 @@ class RedisConnectionManager(ConnectionManager):
 
         self._redis = redis.from_url(self._redis_url, decode_responses=True)
         self._pubsub = self._redis.pubsub()
-        await self._pubsub.subscribe(*self._channels)
+        if self._channels:
+            await self._pubsub.subscribe(*self._channels)
+        if self._patterns:
+            await self._pubsub.psubscribe(*self._patterns)
 
         self._running = True
         self._subscriber_task = asyncio.create_task(
             self._subscriber_loop(), name="ws_redis_subscriber"
         )
-        logger.info("ws.redis.started", channels=self._channels, url=self._redis_url)
+        logger.info(
+            "ws.redis.started",
+            channels=self._channels,
+            patterns=self._patterns,
+            url=self._redis_url,
+        )
 
     async def stop(self) -> None:
         self._running = False
@@ -78,7 +90,15 @@ class RedisConnectionManager(ConnectionManager):
                 pass
             self._subscriber_task = None
         if self._pubsub is not None:
-            await self._pubsub.unsubscribe()
+            try:
+                await self._pubsub.unsubscribe()
+            except Exception:
+                pass
+            try:
+                if self._patterns:
+                    await self._pubsub.punsubscribe()
+            except Exception:
+                pass
             await self._pubsub.aclose()
             self._pubsub = None
         if self._redis is not None:
@@ -106,10 +126,12 @@ class RedisConnectionManager(ConnectionManager):
 
     # ── 내부: 구독 루프 ──────────────────────────
     async def _subscriber_loop(self) -> None:
-        """Redis 에서 받은 메시지를 로컬 연결 풀에 분배."""
+        """Redis 에서 받은 메시지(subscribe + psubscribe 양쪽)를 로컬 연결 풀에 분배."""
         assert self._pubsub is not None
         while self._running:
             try:
+                # ignore_subscribe_messages=True 는 subscribe 확인 메시지만 무시.
+                # pmessage 는 정상적으로 반환되므로 type 필드로 구분 처리.
                 msg = await self._pubsub.get_message(
                     ignore_subscribe_messages=True, timeout=1.0
                 )
@@ -121,6 +143,9 @@ class RedisConnectionManager(ConnectionManager):
                 continue
 
             if msg is None:
+                continue
+            mtype = msg.get("type") if isinstance(msg, dict) else None
+            if mtype not in ("message", "pmessage"):
                 continue
             try:
                 channel = msg["channel"]
