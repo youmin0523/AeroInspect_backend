@@ -236,6 +236,9 @@ core/stream_inference.py ──→ services/inference_pipeline.py
 
 ## Revision History
 
+### v6.1_260515 (작성자: @youminsu0523 / branch: MS)
+- **Phase 24 보강 — 챗봇 자동 제목 흐름 요약 (R-v1.1.05)** — `openai_chat.py` 의 임시 prefix 제목 부여 코드 제거(astream 의 첫 user 메시지 분기), BackgroundTask 호출 조건을 `user_count_before < 3` 으로 확장하여 1·2·3번째 응답마다 LLM 흐름 요약 제목 재생성. `regenerate_thread_title(thread_id)` 단일 인자로 단순화 — 내부에서 최근 10건 DB 조회 후 LLM 입력 구성. 프롬프트는 한국어 명사형 5~7단어, 하자 코드/현장명 키워드 포함, 단순 인사 시 일반 시작 제목 부여. `_is_first_user_message` → `_count_user_messages` 일반화. 마이그레이션 없음.
+
 ### v6.0_260515 (작성자: @youminsu0523 / branch: MS)
 - **Phase 24 신설 — OpenAI 챗봇 백엔드 통합 (R-v1.1.01)** — 통합 repo 와 동일. 분리 repo head 가 `k4e5f6a7b8c9` 이므로 마이그레이션 `m6a7b8c9d0e1` down_revision 만 `k4e5f6a7b8c9` 로 분기.
   - DB 모델 2: AiChatThread / AiChatMessage. 멀티테넌트 user_id + organization_id 이중 격리. summary watermark 로 컨텍스트 압축.

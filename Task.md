@@ -200,6 +200,9 @@
 
 ## Revision History
 
+### v6.1_260515 (작성자: @youminsu0523 / branch: MS)
+- **(backend R-v1.1.05) 챗봇 자동 제목 흐름 요약 강화** — 임시 prefix("안녕하세요" 같은 첫 메시지가 제목으로 굳음) 제거 + 첫 3턴 동안 매 응답 후 LLM 흐름 요약 제목 재생성. `regenerate_thread_title(thread_id)` 시그니처 단순화(내부에서 최근 10건 DB 조회). 프롬프트 강화(명사형 5~7단어, 하자 코드/현장명 키워드 포함, 단순 인사면 '신규 도메인 문의' 일반화). `_is_first_user_message` → `_count_user_messages` 일반화. 마이그레이션 없음(`title_locked` 컬럼은 v1.2 검토).
+
 ### v6.0_260515 (작성자: @youminsu0523 / branch: MS)
 - **(backend R-v1.1.01) OpenAI 챗봇(건축물·하자 도메인 어시스턴트) 통합** — 통합 repo 와 동일 구현. 분리 repo head 가 `k4e5f6a7b8c9` 이므로 마이그레이션 down_revision 분기.
   - 신규 ORM 2: `AiChatThread`(user_id+organization_id 격리, summary watermark, soft delete) / `AiChatMessage`(role enum, tokens, JSONB meta).

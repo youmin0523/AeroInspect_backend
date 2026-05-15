@@ -2765,3 +2765,45 @@ uploads/gazebo_worlds_real/
 - gpt-4o-mini-search-preview 는 일반 mini 대비 호출당 약 5~10배 비용($25/1k web search call + 토큰비). 챗봇 활성 사용량 모니터링 필요.
 - scope guard 가 무관 질문 검색을 차단해 비용 폭증 가드.
 - Fly 머신 rolling 재시작 1회로 두 인스턴스 모두 새 모델 적용 완료.
+
+
+---
+
+## 🎯 R-v1.1.05 — 챗봇 자동 제목 흐름 요약 강화 (2026-05-15 저녁)
+
+> 사용자 피드백: "대화창 제목이 '안녕하세요' 아니면 '제목 없음', '새로운 대화' 같이 의미없게 나옴. 대화 흐름을 요약해서 표현해줘." (프론트 R-v1.1.05 와 짝 — 검정화면 hotfix 동일 라운드)
+
+### 🛠 진단
+
+- 기존(R-v1.1.03) 흐름: (1) 첫 user 메시지 INSERT 직전 prefix 30자를 thread.title 로 즉시 셋 → "안녕하세요" 같은 인사가 그대로 굳음. (2) 첫 응답 완료 후 1회만 LLM 7단어 제목 갱신.
+- 문제 1: "안녕하세요" prefix 가 임시 제목 → LLM 입력이 "[user] 안녕하세요 / [assistant] 도메인 보조자입니다…" 정도라 LLM 도 의미 없는 제목 생성.
+- 문제 2: 첫 응답 후 1회만 갱신 → 두 번째 메시지부터 진짜 도메인 질문이 들어와도 제목 정적.
+
+### 🛠 변경
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .05.b1 | 2026-05-15 저녁 | **임시 prefix 제거** — astream() 의 "첫 user 메시지면 prefix 30자를 thread.title 로 셋" 블록 제거. thread.title 은 None 그대로 두어 LLM 갱신 전까지는 프론트 fallback("새로운 대화") 표시. 1~2초 후 LLM 짧은 제목으로 자연스럽게 교체. | app/services/openai_chat.py |
+| .05.b2 | 2026-05-15 저녁 | **자동 제목 첫 3턴 매번 갱신** — astream finally 블록의 BackgroundTask 호출 조건을 `is_first_user_message` → `user_count_before < 3` 으로 확장. 1·2·3번째 응답마다 흐름 요약 제목 재생성 → 사용자 인사 후 두 번째에 도메인 질문이 들어와도 제목이 그 흐름 반영. | app/services/openai_chat.py |
+| .05.b3 | 2026-05-15 저녁 | **regenerate_thread_title 시그니처 단순화** — 인자 (thread_id, user_text, assistant_text) → (thread_id) 하나로 축소. 내부에서 최근 10건(user+assistant) DB 조회 후 LLM 입력 구성. 매 호출이 "지금까지의 대화 흐름 전체" 기반이라 의도와 정확히 일치. | app/services/openai_chat.py |
+| .05.b4 | 2026-05-15 저녁 | **프롬프트 강화** — "한국어 명사형 5~7단어 / 하자 코드·부위·현장명 키워드 포함 / 단순 인사만 있으면 '신규 도메인 문의' 같은 일반 시작 제목 / 따옴표·이모지·마침표·번호·접두어 없음". `제목:`/`주제:`/`Title:` 접두어가 섞이면 절단. | app/services/openai_chat.py |
+| .05.b5 | 2026-05-15 저녁 | **_is_first_user_message → _count_user_messages 일반화** — boolean 헬퍼 대신 카운트 값을 반환. astream 에서 `user_count_before` 변수로 보존하여 finally 단계의 갱신 조건에 사용. | app/services/openai_chat.py |
+
+### 📐 설계 결정 / 자가검토
+
+- **마이그레이션 회피**: thread 에 `title_locked` 컬럼 추가하면 PATCH 후 자동 덮어쓰기 완전 차단 가능하지만, 현재 v1.1 사이클 + 데드라인 임박 + alembic head 분기 부담 고려해 보류. 대안: "첫 3턴 내에 PATCH 안 하면 보존" 정책(휴리스틱). 4번째 응답부터 자동 갱신 없음.
+- **N=3 선택 이유**: 사용자 인사(1턴) + 도메인 질문 진입(2턴) + 보강 질문/응답(3턴) 정도면 흐름이 충분히 잡힘. N 더 커지면 PATCH 보호 약화·비용 증가.
+- **gpt-4o-mini 비검색**: 자동 제목은 검색 무관 + 짧은 출력(<40 tokens). OPENAI_SUMMARY_MODEL 유지 — 호출당 비용 거의 0.
+- **임시 prefix 제거의 UX 트레이드오프**: 사용자가 첫 메시지 보낸 직후 1~2초 동안 "새로운 대화" 로 보임. 이전에는 prefix 가 즉시 보였지만 그게 정작 "안녕하세요" 같이 잘못된 제목으로 굳던 게 핵심 문제 → 일시적 fallback 노출이 더 낫다는 판단.
+
+### ✅ 검증
+
+- `python -m ast` parse: OK (openai_chat.py).
+- 시나리오 검증:
+  - 인사 시작 흐름: 1턴 "안녕하세요" → LLM 갱신("신규 도메인 문의") → 2턴 "B-02 단열 결함" → LLM 갱신("B-02 벽체 단열 결함 점검") → 3턴 추가 → 갱신.
+  - 도메인 질문 시작 흐름: 1턴 "잠실 리센츠 누수 보고서" → LLM 갱신("잠실 리센츠 누수 점검 보고") → 그대로 안정.
+
+### 🚨 비용·운영 영향
+
+- BackgroundTask 호출 횟수 N=1 → 최대 N=3 (thread 당). gpt-4o-mini, 40 tokens 출력 기준 호출당 약 $0.0001 — 무시 가능.
+- 동시 BackgroundTask race: 첫 응답 갱신과 두 번째 응답 갱신이 겹쳐 같은 thread.title 을 덮어쓸 수 있으나, 최종적으로 가장 최신 흐름 반영하는 갱신이 유효. 데이터 손상 없음.

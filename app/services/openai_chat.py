@@ -215,6 +215,9 @@ class OpenAIChatService:
             user_text = user_text[: self.MAX_USER_INPUT_CHARS]
 
         # 2) user 메시지 영속화 (commit 으로 thread 활성 시간 갱신 전 단계)
+        # 이번 INSERT 직전 시점의 user 메시지 수를 측정 — 자동 제목 갱신 횟수 제어용.
+        user_count_before = await self._count_user_messages(thread.id, db)
+
         user_msg = AiChatMessage(
             thread_id=thread.id,
             role="user",
@@ -222,11 +225,10 @@ class OpenAIChatService:
         )
         db.add(user_msg)
 
-        # 첫 user 메시지면 임시 제목을 즉시 부여(prefix 30자). 응답 완료 후 LLM 짧은 요약 제목으로 갱신.
-        is_first_user_message = await self._is_first_user_message(thread.id, db)
-        if is_first_user_message and not thread.title:
-            preview = user_text.strip().splitlines()[0]
-            thread.title = preview[:30] + ("…" if len(preview) > 30 else "")
+        # 임시 prefix 제목은 더 이상 부여하지 않습니다.
+        # - "안녕하세요" 같은 첫 인사 prefix 가 제목으로 굳어버리는 문제 해결.
+        # - 응답 완료 후 LLM 이 "대화 흐름" 을 보고 명사형 7단어 이내 제목 생성/갱신.
+        # - 그 사이 1~2초 동안 사용자는 ThreadList fallback("새로운 대화")으로 보게 됨.
 
         await db.flush()
 
@@ -326,18 +328,17 @@ class OpenAIChatService:
             # 7) thread 활성 시간 갱신
             thread.last_message_at = datetime.now(timezone.utc)
 
-            # 8) 첫 응답이 끝났고 제목이 prefix 임시 상태(또는 비어있음)면 LLM 으로 5단어 요약 제목 갱신.
+            # 8) 자동 제목 갱신 — "대화 흐름 요약" 의도에 맞춰 첫 3턴 동안 매 응답 후 재생성.
+            #    user_count_before 는 이번 턴 INSERT 직전 카운트이므로, 0/1/2 일 때 호출 = 1·2·3번째 응답 갱신.
             #    BackgroundTask 비동기 — done 이벤트는 즉시 사용자에게 도달. 프론트가 잠시 후 fetchThreads 로 갱신.
             if (
-                is_first_user_message
-                and content  # 빈 응답 X
+                content  # 빈 응답 X
                 and background_tasks is not None
+                and user_count_before < 3
             ):
                 background_tasks.add_task(
                     self.regenerate_thread_title,
                     thread.id,
-                    user_text,
-                    content,
                 )
 
         # 9) 종료 이벤트 — 클라이언트가 done 받고 메시지 ID 로컬 갱신
@@ -510,63 +511,75 @@ class OpenAIChatService:
 
     # ── 자동 제목 헬퍼 ────────────────────────
 
-    async def _is_first_user_message(self, thread_id: UUID, db: AsyncSession) -> bool:
-        """현재 처리 중인 user 메시지가 이 thread 의 첫 user 메시지인지(아직 INSERT 전 기준)."""
+    async def _count_user_messages(self, thread_id: UUID, db: AsyncSession) -> int:
+        """현재 시점의 user 메시지 수. (이번 턴 INSERT 가 flush 되기 전 호출 기준)"""
         existing = await db.scalar(
             select(func.count(AiChatMessage.id))
             .where(AiChatMessage.thread_id == thread_id)
             .where(AiChatMessage.role == "user")
         )
-        return (existing or 0) == 0
+        return existing or 0
 
-    async def regenerate_thread_title(
-        self,
-        thread_id: UUID,
-        user_text: str,
-        assistant_text: str,
-    ) -> None:
-        """첫 user+assistant 쌍을 보고 5~7단어 짧은 제목으로 갱신. BackgroundTasks 호출용.
+    async def regenerate_thread_title(self, thread_id: UUID) -> None:
+        """현재 thread 의 최근 대화를 보고 한국어 7단어 이내 명사형 제목으로 갱신.
 
-        - 사용자가 명시 PATCH 한 제목은 덮어쓰지 않기 위해, 호출 시점에 thread.title 이
-          임시 prefix 상태(첫 user 메시지 prefix 와 일치 또는 None) 일 때만 갱신.
+        - astream finally 에서 첫 3턴 동안 매 응답 후 호출됨 → "흐름 요약" UX.
+        - 최근 user/assistant 10건을 입력으로 사용 — 단순 인사만 있어도 LLM 이 일반 제목 부여.
+        - 사용자 PATCH 보호: 마이그레이션 없는 현 단계에서는 첫 3턴 안에 PATCH 하지 않으면 보존됨
+          (호출자 조건 user_count_before < 3 으로 제어). 그 이후로는 자동 갱신 안 함.
         - LLM: OPENAI_SUMMARY_MODEL(gpt-4o-mini) 비검색 — 비용 최소화.
         """
         try:
-            client = self._get_client()
-            prompt = (
-                "다음은 사용자와 건축 도메인 챗봇의 첫 대화입니다. "
-                "이 대화방의 제목을 한국어로 7단어 이내 짧고 명확하게 만들어 주세요. "
-                "따옴표·이모지·마침표 없이 순수 텍스트만 출력합니다.\n\n"
-                f"[사용자]\n{user_text[:500]}\n\n"
-                f"[어시스턴트]\n{assistant_text[:800]}"
-            )
-            resp = await client.chat.completions.create(
-                model=settings.OPENAI_SUMMARY_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=40,
-                temperature=0.4,
-            )
-            new_title = (resp.choices[0].message.content or "").strip()
-            # 양 끝 따옴표·마침표 정리
-            new_title = new_title.strip('"\'`. \n')
-            if not new_title:
-                return
-            if len(new_title) > 60:
-                new_title = new_title[:60] + "…"
-
             async with async_session_factory() as session:
                 thread = await session.scalar(
                     select(AiChatThread).where(AiChatThread.id == thread_id)
                 )
                 if not thread:
                     return
-                # 사용자가 PATCH 로 명시 변경했는지 검사:
-                # 1단계 임시 제목은 user_text prefix 30자 + "…" 형태. 그 패턴과 같으면 자동 갱신 OK.
-                expected_prefix_title = user_text.strip().splitlines()[0][:30]
-                expected_prefix_title = expected_prefix_title + ("…" if len(user_text.strip().splitlines()[0]) > 30 else "")
-                if thread.title in (None, "", expected_prefix_title):
-                    thread.title = new_title
-                    await session.commit()
+
+                # 최근 user/assistant 10건 (시간 오름차순) — 흐름이 LLM 에 자연스럽게 보이도록
+                result = await session.execute(
+                    select(AiChatMessage)
+                    .where(AiChatMessage.thread_id == thread_id)
+                    .where(AiChatMessage.role.in_(("user", "assistant")))
+                    .order_by(desc(AiChatMessage.created_at))
+                    .limit(10)
+                )
+                msgs = list(result.scalars().all())
+                msgs.reverse()
+                if not msgs:
+                    return
+
+                # 길이 가드 — 각 메시지 600자 cap
+                joined = "\n\n".join(f"[{m.role}]\n{(m.content or '')[:600]}" for m in msgs)
+
+                client = self._get_client()
+                prompt = (
+                    "다음은 사용자와 건축물 하자 점검 도메인 챗봇의 대화입니다. "
+                    "이 대화방의 핵심 주제를 한국어 명사형 표현으로 5~7단어 이내 짧고 명확하게 만들어 주세요.\n"
+                    "- 구체적 하자 코드(A-01 등)·부위·현장명이 언급되면 키워드를 포함합니다.\n"
+                    "- 단순 인사만 있다면 '신규 도메인 문의' 같은 일반적 시작 제목을 만듭니다.\n"
+                    "- 따옴표·이모지·마침표·번호·접두어('제목:', '주제:' 등) 없이 순수 텍스트만 출력합니다.\n\n"
+                    f"[대화]\n{joined}"
+                )
+                resp = await client.chat.completions.create(
+                    model=settings.OPENAI_SUMMARY_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=40,
+                    temperature=0.3,
+                )
+                new_title = (resp.choices[0].message.content or "").strip().strip('"\'`. \n')
+                # "제목:", "주제:" 같은 접두어가 섞이면 잘라냄
+                for prefix in ("제목:", "주제:", "Title:", "title:"):
+                    if new_title.startswith(prefix):
+                        new_title = new_title[len(prefix):].strip()
+                if not new_title:
+                    return
+                if len(new_title) > 60:
+                    new_title = new_title[:60] + "…"
+
+                thread.title = new_title
+                await session.commit()
         except Exception as exc:
             logger.warning("ai_chat 제목 자동 생성 실패 (무시): %s", exc)
 
