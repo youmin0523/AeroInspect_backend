@@ -2732,3 +2732,36 @@ uploads/gazebo_worlds_real/
 - **API 키 미노출**: OPENAI_API_KEY 는 backend settings 전용. 응답 스키마/로그에 포함 X.
 - **남용 가드**: 입력 4000자 / 출력 1200 토큰 / 분당 20 메시지/사용자 / Rate Limit Path 한도 이중.
 - **상업 수준 도메인 톤**: "추측 금지", "B 영역 단열·방수 엄격 평가", "안전 직결", "DIY 수준 X" — 사용자 메모리 규칙(`feedback_strict_all_defects`, `feedback_insulation_strict`, `project_commercial_grade_target`) 가이드를 시스템 프롬프트에 영구 주입.
+
+
+---
+
+## 🎯 R-v1.1.03 — 챗봇 회피 응답 제거 + Web Search 활성화 + 자동 제목 (2026-05-15 오후)
+
+> 사용자 피드백:
+> 1. "'확정된 정보가 없습니다' / 'KS 표준 참조하세요' 같이 책임 전가 답변이 너무 잦다. ChatGPT/Claude/Gemini 처럼 검색을 통해서라도 답을 좀 줘. 모르니까 챗봇에 묻는 것."
+> 2. "근데 너무 우리 플랫폼과 맞지 않는 대화에는 WebSearch 등을 할 필요는 없겠지." (scope guard 요청)
+> 3. "대화창 여러 개 열었을 때 '제목 없음' 으로만 뜨면 무슨 대화였는지 못 찾는다. 대화 요약 등으로 표현되면 좋겠다."
+
+### 🛠 변경
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .03.1 | 2026-05-15 오후 | **SYSTEM_PROMPT 톤 완화** — "확정된 정보 없음", "KS 표준 참조하세요", "전문가에게 문의하세요" 같은 회피·책임 전가 응답 명시적 금지. 도메인 지식 + 일반 건축 상식 + 업계 관행값을 적극 동원해 구체적·실행 가능 답변. 출처 인용 시 표준명·번호(KCS 41 40 04 등)를 본문에 자연스럽게 녹임. 카탈로그 20종 외 하자(누전·곰팡이 등)도 정상 답변. SYSTEM_PROMPT 길이 1951→3044자. | app/services/openai_chat.py |
+| .03.2 | 2026-05-15 오후 | **Scope guard** — 답변 범위 섹션 추가. 건축물·하자·드론 점검·플랫폼 맥락만 적극 답변. 도메인 무관 질문(요리·연예·잡담)에는 web search 호출 X, 짧게 안내 후 도메인 예시 질문 제안. | app/services/openai_chat.py |
+| .03.3 | 2026-05-15 오후 | **Web Search 활성화** — astream() 에서 model 명에 "search" 포함 시 자동 분기: `temperature` 제거(미지원), `web_search_options={"search_context_size":"medium"}` 추가. 모델은 .env / Fly secrets 의 `OPENAI_MODEL=gpt-4o-mini-search-preview` 갈아끼움으로 활성화. | app/services/openai_chat.py, .env, Fly secrets |
+| .03.4 | 2026-05-15 오후 | **자동 제목 2단계** — (1) 첫 user 메시지 INSERT 직전에 30자 prefix 임시 제목 즉시 부여 + flush. (2) 어시스턴트 응답 완료 후 BackgroundTask 로 `regenerate_thread_title()` 호출 — `OPENAI_SUMMARY_MODEL`(gpt-4o-mini, 비검색) 짧은 호출로 7단어 이내 의미있는 제목 생성. 사용자가 PATCH 로 명시 변경한 제목은 보호(임시 prefix 패턴과 일치할 때만 갱신). `_is_first_user_message()` 헬퍼 추가. astream 시그니처에 `background_tasks` 매개변수 추가. | app/services/openai_chat.py, app/api/ai_chat.py |
+
+### 📐 설계 결정 / 자가검토
+
+- **search 모델 vs 일반 모델 토글**: model 명 substring 검사("search" in OPENAI_MODEL.lower()) 한 줄로 분기 — 운영자가 .env 만 갈아끼우면 즉시 전환. temperature/web_search_options 조건부 적용으로 API 호환성 보장.
+- **scope guard 는 프롬프트 레벨로**: 도메인 무관 질문이라도 LLM 이 web search 호출하면 비용 + 응답 시간 증가. 시스템 프롬프트에 "도메인 무관 질문에는 web search 호출 X" 가이드 명시 → 모델이 자체 판단으로 검색 스킵.
+- **자동 제목 1+2단계**: 사용자가 메시지 보내자마자 prefix 임시 제목으로 즉시 식별 가능 → BackgroundTask 가 1~2초 후 LLM 짧은 제목으로 갱신. 프론트 onDone 에서 2.5초 후 fetchThreads 재호출로 자연스러운 sidebar 갱신.
+- **제목 보호**: 사용자 명시 PATCH 한 제목은 LLM 이 덮어쓰지 않음. 임시 prefix 패턴과 동일하거나 비어있을 때만 자동 갱신.
+- **요약 모델은 mini 유지**: OPENAI_SUMMARY_MODEL 은 비검색 mini 로 두어 비용 최소화(자동 제목·대화 요약은 검색 불필요).
+
+### 🚨 비용·운영 영향
+
+- gpt-4o-mini-search-preview 는 일반 mini 대비 호출당 약 5~10배 비용($25/1k web search call + 토큰비). 챗봇 활성 사용량 모니터링 필요.
+- scope guard 가 무관 질문 검색을 차단해 비용 폭증 가드.
+- Fly 머신 rolling 재시작 1회로 두 인스턴스 모두 새 모델 적용 완료.

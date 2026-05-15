@@ -259,6 +259,7 @@ async def post_message_stream(
             user_text=payload.content,
             db=db,
             is_disconnected=request.is_disconnected,
+            background_tasks=background,
         ):
             yield chunk
 
