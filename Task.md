@@ -200,6 +200,41 @@
 
 ## Revision History
 
+### v6.5_260527 (작성자: @youminsu0523 / branch: MS)
+- **(backend R-v1.1.09) 운영 신뢰성 가이드 + PostgreSQL 백업 스크립트 + 콜드스타트 옵션** — Track D-3 (`DEPLOYMENT_GUIDE.md` 신규 — 시크릿 등록/마이그레이션/백업·복구 RTO·RPO/콜드스타트 트레이드오프/Sentry 통합/감사 로그 운영/롤백/CI·CD/보안 체크리스트/장애 시나리오 10 섹션, `scripts/backup_pg.ps1` 신규 — pg_dump custom format + R2 업로드 + RETENTION_DAYS 정책, `fly.toml` 의 `min_machines_running` 에 상업 운영 권장값 가이드 주석).
+
+### v6.4_260527 (작성자: @youminsu0523 / branch: MS)
+- **(backend R-v1.1.08) 하자 검수 메타 + 감사 로그 인프라** — Track B+C backend (상업 도메인 책임 추적 기반).
+  - `app/models/defect.py` 컬럼 추가: `review_status` (Enum pending/approved/rejected/flagged_false_positive, server_default=pending), `reviewed_by_user_id` (FK users.id SET NULL), `reviewed_at`, `review_note`, `detection_model_id`, `gps_lat/lon/alt`. 인덱스 2개 추가 (`idx_defect_review_status`, `idx_defect_reviewer`).
+  - `app/models/audit_log.py` 신규: AuditLog (user_id/organization_id/action 점구분 doted-name/resource_type/resource_id/before·after JSONB/ip/user_agent/request_id/note/created_at). 인덱스 4종 (org/user/resource/action × created_at DESC).
+  - `app/services/audit_logger.py` 신규: `write_audit()` 헬퍼 — 민감 키(password/token/secret/api_key/authorization/cookie/session/private_key/client_secret 등) 재귀 redact. structlog `request_id_ctx` 자동 첨부. 실패 silent (감사 로그가 메인 트랜잭션 막지 않음).
+  - `app/schemas/defect.py`: DefectLogResponse 에 6개 신규 필드 + `DefectReviewRequest` 신규 (rejected/flagged_false_positive 는 review_note 필수).
+  - `app/schemas/audit_log.py` 신규: AuditLogResponse/AuditLogListResponse/AuditLogFilter.
+  - `app/api/defects.py`: `PATCH /defects/{id}/review` 신규 — 조직 격리 + audit_logger 자동 호출 + WS "defect.reviewed" broadcast. `GET /defects/{id}/audit-trail` 신규 — 단일 하자 감사 이력. DELETE 에 `write_audit("defect.delete", before=snapshot)` 추가.
+  - `app/api/audit_logs.py` 신규: `GET /audit-logs` (admin/owner/superadmin, 조직 격리 + action prefix/resource/user/시각 필터 + 페이지네이션), `GET /audit-logs/{id}` (단건).
+  - `app/api/router.py`: audit_logs 라우터 등록 (`/audit-logs`, tags=Audit).
+  - `alembic/versions/n7b8c9d0e1f2_add_defect_review_and_audit_logs.py` 신규: down=`m6a7b8c9d0e1`. defect_logs 8 컬럼 추가 + audit_logs 테이블 + FK + 인덱스 6종.
+  - 검증: `python -m py_compile` OK, route 등록 검증 PASS (defects 8 + audit 2).
+
+### v6.3_260527 (작성자: @youminsu0523 / branch: MS)
+- **(backend R-v1.1.07) ONNX 4-way 매핑 회귀 가드** — Track D-2 — 5/7 거짓 라벨 사고 재발 방지.
+  - `tests/test_onnx_class_mapping.py` 신규: 9개 모델 parametrize (M1/M2/M3 YOLO + M4_CONTEXT + M5_SEG + furniture_aware + M1/M2/M3 ResNet). ONNX 출력 dim ↔ data.yaml `names` ↔ `EXPECTED_CLASS_NAMES` ↔ `inference_pipeline_20.py` AST 정적 비교까지 4-way 검증.
+  - `tests/conftest.py` 신규: `onnx_weights_dir` / `datasets_dir` fixture. ONNX_WEIGHTS_DIR / DATASETS_DIR 환경변수 override 지원.
+  - `app/services/defect_taxonomy.py`: `EXPECTED_CLASS_NAMES` 상수 + `validate_class_mapping(model_name, onnx_path, yaml_path)` 헬퍼 + `_infer_onnx_class_count` / `_read_yaml_class_names` 내부 함수.
+  - `tests/README.md` 신규: "신규 ONNX 추가 시 본 테스트 실행 필수" 명시.
+  - 검증: `pytest tests/test_onnx_class_mapping.py -v` → **11 passed, 0 failed, 0 skipped**. 매핑 불일치 0건 — 운영 ONNX 정합성 확인.
+
+### v6.2_260527 (작성자: @youminsu0523 / branch: MS)
+- **(backend R-v1.1.06) Sentry 에러 모니터링 통합** — 운영 중 미처리 예외/에러 알림·집계 경로 신설 (운영 갭 해소).
+  - `requirements.txt`: `sentry-sdk[fastapi]>=2.0.0` 추가.
+  - `app/config.py`: `SENTRY_DSN` (Optional), `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE` (0.1), `SENTRY_PROFILES_SAMPLE_RATE` (0.0). DSN 미설정 + APP_ENV=production 시 경고 로그만 (기동 차단 X — 로컬 개발 영향 0).
+  - `app/core/sentry.py` (신규): `init_sentry(settings)` — FastAPI/Starlette/SQLAlchemy/Asyncio integration. `before_send` 훅에서 password/token/secret/authorization/api_key/cookie 등 민감 키 재귀 redact. structlog `request_id` contextvar 를 Sentry tag 로 승격. `send_default_pii=False`. release 자동 탐지 (SENTRY_RELEASE / FLY_RELEASE_VERSION / GIT_SHA).
+  - `app/core/middleware.py`: `RequestIDMiddleware` 가 `sentry_sdk.set_tag("request_id", ...)` + `set_context("request_meta", ...)` 추가 호출. sentry-sdk 미설치 시 silent skip.
+  - `app/main.py`: lifespan 시작 첫 단계에서 `init_sentry(settings)` 호출 (이후 startup 오류도 캡처).
+  - `.env.example`: SENTRY_DSN / ENVIRONMENT / TRACES_SAMPLE_RATE / PROFILES_SAMPLE_RATE 4개 항목 + 운영 전용 주석.
+  - `README.md`: "운영 에러 모니터링 (Sentry)" 섹션 — DSN 발급 → `flyctl secrets set SENTRY_DSN=...` → 검증 절차.
+  - 사용자 직접 작업: Sentry 프로젝트(FastAPI) 생성 → DSN 발급 → Fly secrets 등록.
+
 ### v6.1_260515 (작성자: @youminsu0523 / branch: MS)
 - **(backend R-v1.1.05) 챗봇 자동 제목 흐름 요약 강화** — 임시 prefix("안녕하세요" 같은 첫 메시지가 제목으로 굳음) 제거 + 첫 3턴 동안 매 응답 후 LLM 흐름 요약 제목 재생성. `regenerate_thread_title(thread_id)` 시그니처 단순화(내부에서 최근 10건 DB 조회). 프롬프트 강화(명사형 5~7단어, 하자 코드/현장명 키워드 포함, 단순 인사면 '신규 도메인 문의' 일반화). `_is_first_user_message` → `_count_user_messages` 일반화. 마이그레이션 없음(`title_locked` 컬럼은 v1.2 검토).
 
