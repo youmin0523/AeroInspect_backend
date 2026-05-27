@@ -2916,3 +2916,30 @@ uploads/gazebo_worlds_real/
 
 ---
 
+## 🎯 R-v1.1.09 — 운영 신뢰성 가이드 + PostgreSQL 백업 (2026-05-27 오후)
+
+> 운영 갭 점검 결과 9건 중 백업 정책 부재 + 콜드스타트 + 단일 region 위험이 분쟁/장애 시 가장 큰 손실. Track D-3.
+
+### 🛠 변경
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .09.1 | 2026-05-27 오후 | DEPLOYMENT_GUIDE.md 신규 (분리 repo 최초) — 10 섹션: Fly secrets 등록 / alembic 절차 (current head n7b8c9d0e1f2) / PostgreSQL 백업 (Fly snapshot 7일 + R2 장기, RTO/RPO 24h/4h) / 콜드스타트 트레이드오프 / Sentry DSN 가이드 / 감사 로그 운영 (분쟁 추출 SQL) / 롤백 / CI·CD 현황 / 보안 체크리스트 9 항목 / 장애 시나리오 4 행. | DEPLOYMENT_GUIDE.md (신규) |
+| .09.2 | 2026-05-27 오후 | scripts/backup_pg.ps1 신규 — pg_dump custom format (-Fc + -Z9) → 로컬 BACKUP_DIR + (선택) Cloudflare R2 업로드 (aws s3 cp + R2_ENDPOINT_URL). RETENTION_DAYS 기본 30 일 자동 정리. Task Scheduler 일일 03:00 등록 가이드. | scripts/backup_pg.ps1 (신규) |
+| .09.3 | 2026-05-27 오후 | fly.toml min_machines_running 가이드 주석 — 0(현재) vs 1(상업 권장) 트레이드오프 + DEPLOYMENT_GUIDE 참조. 값 자체는 변경하지 않음 (비용 영향 운영자 결정). | fly.toml |
+
+### 📐 설계 결정
+
+- min_machines_running 변경하지 않음: 0 → 1 변경 시 Fly 머신 24/7 가동으로 무료 tier 초과 비용 발생. 가이드 주석으로 안내, 결정은 운영자.
+- PowerShell 스크립트 선정: Windows 사용자 환경 + Task Scheduler 통합 용이. Linux sh 동등 스크립트 v1.2.
+- 백업 R2 보관 권장: Fly 자체 스냅샷 7일만 보관 — 입주자 분쟁이 수개월 후 발생 가능, 외부 장기 보관 필수.
+
+### ✅ 검증
+
+- DEPLOYMENT_GUIDE.md markdown 렌더 정상 (코드 블록/표/체크리스트).
+- backup_pg.ps1 syntax: $ErrorActionPreference = Stop + 환경변수 검증 + Test-Path 가드. 실 실행은 사용자 운영 환경.
+- fly.toml 주석 추가만 — flyctl deploy 영향 없음.
+
+### 🚨 운영 영향
+
+- 사용자 후속 작업: ① Sentry DSN 발급 → flyctl secrets set ② flyctl ssh console -C "alembic upgrade head" (R-v1.1.08 마이그레이션 적용) ③ 백업 cron 등록 ④ min_machines_running 결정.
