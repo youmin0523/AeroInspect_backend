@@ -2849,3 +2849,26 @@ uploads/gazebo_worlds_real/
 
 ---
 
+## 🎯 R-v1.1.07 — ONNX 4-way 매핑 회귀 가드 (2026-05-27 오후)
+
+> 메모리 [feedback_onnx_class_mapping_audit] 의 5/7 거짓 라벨 5건 동시 사고 재발 방지. 신규 ONNX 가 들어올 때 ONNX dim ↔ data.yaml ↔ 코드 상수 ↔ 추론 진입점 인자가 어긋나면 CI 단계에서 즉시 차단.
+
+### 🛠 변경
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .07.1 | 2026-05-27 오후 | 헬퍼 함수 — `EXPECTED_CLASS_NAMES` 상수 9 모델 정의 + `validate_class_mapping(model_name, onnx_path, yaml_path)` + `_infer_onnx_class_count` / `_read_yaml_class_names` 내부 함수. CPU EP 만 사용해 CUDA 없는 환경에서도 작동. | app/services/defect_taxonomy.py |
+| .07.2 | 2026-05-27 오후 | 신규 fixture — `onnx_weights_dir` / `datasets_dir`. 기본값 통합 repo `TEAM_PROJECT_2_Drone_project/backend/models_weights` / `/backend/training/datasets`. env override 지원. 파일 없을 시 `pytest.skip` (CI graceful). | tests/conftest.py (신규) |
+| .07.3 | 2026-05-27 오후 | 9 모델 parametrize 테스트 — M1/M2/M3 YOLO + M4_CONTEXT + M5_SEG + FURNITURE_AWARE + M1/M2/M3 ResNet. ONNX 출력 dim ↔ data.yaml `names` 길이 ↔ `EXPECTED_CLASS_NAMES` ↔ `inference_pipeline_20.py` 의 `_try_load_yolo`/`_try_load_resnet` 인자 (AST 정적 비교) — 4-way. 클래스 수 불일치 시 명확 메시지. | tests/test_onnx_class_mapping.py (신규) |
+| .07.4 | 2026-05-27 오후 | 운영 가이드 한 줄 — "신규 ONNX 추가/갱신 시 본 테스트 실행 필수". | tests/README.md (신규) |
+
+### ✅ 검증
+
+- `pytest tests/test_onnx_class_mapping.py -v` → 11 passed / 0 failed / 0 skipped
+- 모델 dim 확인 (YOLO=nc+5, ResNet=nc): M1_YOLO 7(nc=3), M2_YOLO 6(nc=2), M3_YOLO 7(nc=3), M4_CONTEXT 9(nc=5), M5_SEG 8(nc=4), FURNITURE_AWARE 14(nc=10), M1_RES 5, M2_RES 2, M3_RES 3
+- 매핑 불일치 0건 — 현재 운영 ONNX 4-way 정합 완전 확인
+- 기존 22개 테스트 collection 정상 (conftest 추가가 회귀 없음)
+
+
+---
+

@@ -221,6 +221,146 @@ def get_20defect_info(class_name: str) -> Tuple[str, str, str, str]:
     return ("X-00", class_name, "MED", "A")
 
 
+# =============================================
+# ONNX ↔ data.yaml ↔ code 4-way 매핑 검증 (회귀 가드)
+# =============================================
+# 배경: 2026-05-07 5건 동시 거짓 라벨 사고는 ONNX dim/data.yaml names/추론
+# 측 class_names 가 어긋난 채 배포되어 발생함. 신규 ONNX 통합 시
+# tests/test_onnx_class_mapping.py 가 본 헬퍼를 호출해 사전 차단한다.
+
+# 각 모델의 정식 class_names (inference_pipeline_20.py 의 로드 인자와 동일해야 함)
+EXPECTED_CLASS_NAMES: Dict[str, List[str]] = {
+    "M1_YOLO":         ["crack", "waterproof_defect", "caulking_defect"],
+    "M2_YOLO":         ["surface_defect_wall", "baseboard_defect"],
+    "M3_YOLO":         ["floor_defect", "glass_defect", "frame_defect"],
+    "M4_CONTEXT":      ["wall", "ceiling", "floor", "window", "door"],
+    "M5_SEG":          ["wall_edge", "ceiling_edge", "door_frame", "window_frame"],
+    "FURNITURE_AWARE": [
+        "wall", "ceiling", "floor", "window", "door",
+        "cabinet_builtin", "kitchen_appliance",
+        "countertop_sink", "kitchen_island", "shelf",
+    ],
+    # ResNet 분류기 (학습 시 ImageFolder 알파벳 순)
+    "M1_RESNET": [
+        "caulking_indicator", "crack_indicator", "moisture_indicator",
+        "structural_damage", "waterproof_defect",
+    ],
+    "M2_RESNET": ["baseboard_damage", "surface_defect"],
+    "M3_RESNET": ["floor_defect", "frame_defect", "glass_defect"],
+}
+
+
+def _infer_onnx_class_count(onnx_path: str) -> Optional[int]:
+    """ONNX 출력 shape 에서 클래스 수를 추정.
+
+    - YOLOv8 detection: output0 = (B, 4 + nc, anchors) → nc = dim - 4
+    - ResNet 분류기:    logits = (B, nc) → nc = 마지막 차원
+
+    EP 는 CPU 만 사용 (CUDA 없는 환경에서도 동작).
+    """
+    try:
+        import onnxruntime as ort
+    except ImportError:  # pragma: no cover
+        return None
+
+    sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+    outs = sess.get_outputs()
+    if not outs:
+        return None
+    shape = list(outs[0].shape)
+    if len(shape) == 3:
+        # (batch, 4+nc, anchors) — YOLO detection/seg head
+        dim = shape[1]
+        if isinstance(dim, int) and dim > 4:
+            return dim - 4
+    elif len(shape) == 2:
+        # (batch, nc) — classifier logits
+        dim = shape[1]
+        if isinstance(dim, int):
+            return dim
+    return None
+
+
+def _read_yaml_class_names(yaml_path: str) -> Optional[List[str]]:
+    """data.yaml 의 names: 항목을 리스트로 반환. list 또는 {idx: name} 둘 다 지원."""
+    try:
+        import yaml
+    except ImportError:  # pragma: no cover
+        return None
+    with open(yaml_path, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    names = data.get("names")
+    if names is None:
+        return None
+    if isinstance(names, list):
+        return [str(x) for x in names]
+    if isinstance(names, dict):
+        # YOLO v8 신포맷: {0: 'wall', 1: 'ceiling', ...} — 인덱스 순서 보존
+        try:
+            return [str(names[k]) for k in sorted(names.keys(), key=lambda x: int(x))]
+        except Exception:
+            return [str(v) for _, v in sorted(names.items())]
+    return None
+
+
+def validate_class_mapping(
+    model_name: str,
+    onnx_path: str,
+    yaml_path: Optional[str] = None,
+) -> List[str]:
+    """ONNX dim ↔ data.yaml names ↔ EXPECTED_CLASS_NAMES 4-way (셋) 검증.
+
+    Returns:
+        에러 메시지 리스트. 빈 리스트면 모두 일치 (정상).
+
+    검사:
+      1. EXPECTED_CLASS_NAMES 에 모델이 등록되어 있는지
+      2. ONNX 출력 dim 으로 추정한 nc 와 expected 길이 일치
+      3. yaml 의 names 길이/순서가 expected 와 일치 (yaml_path 제공 시)
+    """
+    errors: List[str] = []
+
+    expected = EXPECTED_CLASS_NAMES.get(model_name)
+    if expected is None:
+        errors.append(
+            f"{model_name}: EXPECTED_CLASS_NAMES 미등록 — defect_taxonomy.py 갱신 필요"
+        )
+        return errors
+
+    onnx_nc = _infer_onnx_class_count(onnx_path)
+    if onnx_nc is None:
+        errors.append(f"{model_name}: ONNX 출력 shape 에서 nc 추정 실패 ({onnx_path})")
+    elif onnx_nc != len(expected):
+        errors.append(
+            f"{model_name}: ONNX nc={onnx_nc}, code expected={len(expected)} — "
+            f"라벨 누락/추가 의심 (expected={expected})"
+        )
+
+    if yaml_path is not None:
+        yaml_names = _read_yaml_class_names(yaml_path)
+        if yaml_names is None:
+            errors.append(f"{model_name}: data.yaml names 파싱 실패 ({yaml_path})")
+        else:
+            if len(yaml_names) != len(expected):
+                errors.append(
+                    f"{model_name}: data.yaml names={len(yaml_names)}, "
+                    f"code expected={len(expected)} — "
+                    f"yaml={yaml_names} expected={expected}"
+                )
+            elif yaml_names != expected:
+                # 동일 길이 + 다른 순서/이름 → 알파벳 vs custom 사고 패턴
+                diffs = [
+                    f"idx{i}: yaml={y!r} vs code={c!r}"
+                    for i, (y, c) in enumerate(zip(yaml_names, expected))
+                    if y != c
+                ]
+                errors.append(
+                    f"{model_name}: data.yaml names 순서 불일치 — " + "; ".join(diffs)
+                )
+
+    return errors
+
+
 def xyxy_to_xywhn(
     xyxy: List[float],
     img_w: int,
