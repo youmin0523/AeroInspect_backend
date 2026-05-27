@@ -45,6 +45,9 @@ from app.models.conversation_member import ConversationMember  # noqa: F401
 # ── AI 챗봇 (OpenAI 도메인 어시스턴트) ──────
 from app.models.ai_chat import AiChatThread, AiChatMessage  # noqa: F401
 
+# ── 감사 추적 ────────────────────────────────
+from app.models.audit_log import AuditLog  # noqa: F401
+
 __all__ = [
     # 사용자 / 인증
     "User",
@@ -77,4 +80,6 @@ __all__ = [
     # AI 챗봇
     "AiChatThread",
     "AiChatMessage",
+    # 감사 추적
+    "AuditLog",
 ]

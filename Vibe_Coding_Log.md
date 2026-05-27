@@ -2872,3 +2872,47 @@ uploads/gazebo_worlds_real/
 
 ---
 
+## 🎯 R-v1.1.08 — 하자 검수 메타 + 감사 로그 인프라 (2026-05-27 오후)
+
+> 사용자 요청: "정확도/검출에 문제 없고 업무툴로 손색없도록". 메모리 [project_safety_critical_mindset] / [feedback_strict_all_defects] — 입주자 분쟁 직결 영역, 책임 추적 부재가 가장 시급한 갭. Track B (스키마) + Track C backend (검수 API) 묶음.
+
+### 🛠 변경
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .08.1 | 2026-05-27 오후 | defect_logs 컬럼 8개 추가 — review_status (Enum pending/approved/rejected/flagged_false_positive, server_default=pending), reviewed_by_user_id (FK users.id SET NULL), reviewed_at, review_note, detection_model_id, gps_lat/lon/alt. 인덱스 2개 (`idx_defect_review_status`, `idx_defect_reviewer`). | app/models/defect.py |
+| .08.2 | 2026-05-27 오후 | AuditLog 모델 신규 — user_id/organization_id (FK SET NULL), action (80자 doted-name), resource_type/resource_id, before/after JSONB, ip/user_agent/request_id, note, created_at. 인덱스 4종 (org/user/resource/action × created_at DESC). | app/models/audit_log.py (신규) |
+| .08.3 | 2026-05-27 오후 | audit_logger 헬퍼 — write_audit() 단일 진입점. 민감 키(password/passwd/pwd/token/secret/api_key/authorization/cookie/session/private_key/access_key/client_secret/webhook_secret) 재귀 redact. structlog request_id_ctx 자동 첨부. 실패 silent (감사 로그가 메인 트랜잭션 막지 않음). X-Forwarded-For 우선 IP 추출. | app/services/audit_logger.py (신규) |
+| .08.4 | 2026-05-27 오후 | Pydantic 스키마 — DefectLogResponse 에 6 신규 필드. DefectReviewRequest 신규 (rejected/flagged_false_positive 는 review_note 필수, max 2000자). AuditLogResponse/AuditLogListResponse/AuditLogFilter 신규. | app/schemas/defect.py, app/schemas/audit_log.py (신규) |
+| .08.5 | 2026-05-27 오후 | PATCH /defects/{id}/review — 조직 격리 + before/after 스냅샷 + audit_logger 자동 호출 + WS defect.reviewed broadcast. action 을 review_status 별 세분화. GET /defects/{id}/audit-trail — 단일 하자 감사 이력. DELETE 에 audit 추가 (defect.delete + before snapshot). | app/api/defects.py |
+| .08.6 | 2026-05-27 오후 | /audit-logs 라우터 — GET 목록 (admin/owner/superadmin, 조직 격리, action prefix + resource/user/시각 필터 + 페이지네이션). superadmin 은 org_id 필터로 좁힘 가능. GET /audit-logs/{id} 단건. router.py 등록. | app/api/audit_logs.py (신규), app/api/router.py |
+| .08.7 | 2026-05-27 오후 | alembic 마이그레이션 n7b8c9d0e1f2 (down=`m6a7b8c9d0e1`) — defect_logs 8 컬럼 + FK + 인덱스 2 / audit_logs CREATE + FK 2 + 인덱스 4. downgrade 역순. Enum CREATE/DROP 명시. | alembic/versions/n7b8c9d0e1f2_*.py (신규) |
+
+### 📐 설계 결정 / 자가검토
+
+- review_status 4-state: pending / approved / rejected (오탐 취소) / flagged_false_positive (Active Learning 큐 적재). rejected 와 flagged 분리 이유 — rejected 는 "내 판단으로 무시", flagged 는 "모델 학습에 피드백". 후속 batch 처리 다름.
+- review_note 강제: rejected/flagged 사유 미작성 시 400. 감사 추적 품질 보장.
+- WS broadcast: 같은 현장 여러 작업자 동시 검수 시 즉시 동기화.
+- audit_logger silent failure: 감사 로그가 메인 비즈니스 트랜잭션을 못 막는다. 관측 도구가 더 큰 사고를 만들면 안 됨.
+- 민감 키 redact 다단: write_audit() 의 _redact() + Sentry before_send 의 redact 이중. 비밀번호 한 토막이라도 audit_logs 에 흘러갈 가능성 차단.
+- GPS 컬럼 (lidar_x/y/z 와 별도): LiDAR 는 드론 기준 상대 좌표, GPS 는 WGS84 절대. 외부 지도 연동·다른 현장과 위치 식별·평면도 핀 표시용. nullable — 실내 GPS 약한 환경 허용.
+- detection_model_id: M4_CONTEXT 0.587 같은 약한 모델 결과 추적 가능. 추후 모델 출처별 정탐률 통계로 약점 분석.
+- 인덱스 선정: (org_id, created_at DESC) 가 가장 빈번한 쿼리. resource_type+resource_id 합성 인덱스로 단일 자원 audit-trail 빠른 조회.
+
+### ✅ 검증
+
+- python -m py_compile 7 파일 PASS
+- 라우터 등록 검증: from app.api.router import api_router import 성공 + /defects 8 routes (기존 6 + review + audit-trail) + /audit-logs 2 routes 확인
+- request_id_ctx 연동: app/core/logging.py:26 의 ContextVar 와 동일 인스턴스 import (모듈 간 공유 보장)
+
+### 🚨 운영 영향
+
+- 마이그레이션 필수: 배포 후 flyctl ssh console -C "alembic upgrade head" 1회 실행. 신규 컬럼 8개는 nullable + server_default 라 기존 데이터 영향 0.
+- API 호환성: DefectLogResponse 가 nullable 필드만 추가 — 기존 frontend 호환 100%. PATCH /review 와 GET /audit-trail 은 신규 엔드포인트.
+- 권한: review 는 조직 멤버 누구나. audit-logs 조회는 admin/owner/superadmin 전용.
+- Active Learning hook: flagged_false_positive 는 일단 audit_logs 기록만. 후속 batch job 으로 hard example queue 적재 v1.2 검토.
+- 저장공간: audit_logs 가 다년 누적 시 큰 테이블. v1.2 에 1년 경과분 archive 전략 검토.
+
+
+---
+

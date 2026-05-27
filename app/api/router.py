@@ -7,7 +7,7 @@
 
 from fastapi import APIRouter
 
-from app.api import auth, oauth, defects, stream, websocket, report, telemetry, slam, floorplan, ai_webhook, sites, notifications, chat, organization, detect, ws_stream, coverage, employee, admin_gpu, missions, contact, ai_chat
+from app.api import auth, oauth, defects, stream, websocket, report, telemetry, slam, floorplan, ai_webhook, sites, notifications, chat, organization, detect, ws_stream, coverage, employee, admin_gpu, missions, contact, ai_chat, audit_logs
 from app.schemas.common import PROTECTED_RESPONSES, PUBLIC_RESPONSES, WEBHOOK_RESPONSES
 
 api_router = APIRouter()
@@ -181,5 +181,13 @@ api_router.include_router(
     ai_chat.router,
     prefix="/ai-chat",
     tags=["AI Chat"],
+    responses=PROTECTED_RESPONSES,
+)
+
+# 감사 로그 (책임 추적, 분쟁 대응) — admin/owner/superadmin 전용
+api_router.include_router(
+    audit_logs.router,
+    prefix="/audit-logs",
+    tags=["Audit"],
     responses=PROTECTED_RESPONSES,
 )

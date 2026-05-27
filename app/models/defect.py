@@ -8,7 +8,6 @@
 # =============================================
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import (
     Column, String, Float, Text, BigInteger,
@@ -117,12 +116,37 @@ class DefectLog(Base):
     # 실행 계층 (1=M1+M2, 2=+M3+M5, 3=+M4+M6)
     tier_executed = Column(BigInteger, nullable=True, comment="실행 Tier (1/2/3)")
 
+    # ── 검수 메타데이터 (Audit) ─────────────────
+    # 입주자 분쟁 시 책임 추적용. AI 탐지 결과를 사람이 승인/반려/오탐 플래그한 이력.
+    # review_status: pending=미검수 / approved=정탐 확인 / rejected=오탐(취소) / flagged_false_positive=Active Learning 큐 적재
+    review_status = Column(
+        SAEnum("pending", "approved", "rejected", "flagged_false_positive", name="defect_review_status_enum"),
+        nullable=False,
+        server_default="pending",
+        comment="검수 상태",
+    )
+    reviewed_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, comment="검수자 ID")
+    reviewed_at = Column(DateTime(timezone=True), nullable=True, comment="검수 시각 (UTC)")
+    review_note = Column(Text, nullable=True, comment="검수 사유/메모 (반려 시 필수)")
+
+    # ── 탐지 모델 출처 (감사·디버깅용) ────────
+    # 어떤 모델이 이 하자를 탐지했는지. M4 컨텍스트 mAP 0.59 등 약한 모델 결과 추적 가능.
+    detection_model_id = Column(String(40), nullable=True, comment="탐지 모델 식별자 (M1_YOLO / M2_YOLO / M3_YOLO / M4_CONTEXT / M5_SEG / furniture_aware / wallpaper / patchcore)")
+
+    # ── GPS WGS84 (현장 정확 위치) ────────────
+    # LiDAR 월드 좌표(lidar_x/y/z)와 별개. 평면도 위 핀 표시, 외부 지도 연동, 다른 점검 현장과의 위치 식별용.
+    gps_lat = Column(Float, nullable=True, comment="GPS 위도 (WGS84)")
+    gps_lon = Column(Float, nullable=True, comment="GPS 경도 (WGS84)")
+    gps_alt = Column(Float, nullable=True, comment="GPS 고도 (m, MSL)")
+
     # ── 인덱스 ───────────────────────────────
-    # 필터링 쿼리 최적화: 심각도+시간 / 영역+시간 / 프레임
+    # 필터링 쿼리 최적화: 심각도+시간 / 영역+시간 / 프레임 / 검수 워크플로우
     __table_args__ = (
         Index("idx_defect_severity_ts", "severity", timestamp.desc()),
         Index("idx_defect_area_ts", "area", timestamp.desc()),
         Index("idx_defect_frame", "frame_id"),
+        Index("idx_defect_review_status", "review_status", timestamp.desc()),
+        Index("idx_defect_reviewer", "reviewed_by_user_id", "reviewed_at"),
     )
 
     def __repr__(self):

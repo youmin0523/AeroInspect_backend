@@ -125,8 +125,50 @@ class DefectLogResponse(BaseModel):
     timestamp: datetime
     frame_id: Optional[int]
 
+    # ── 검수 메타 (감사·신뢰성) ────────────────
+    review_status: str = Field("pending", description="검수 상태 (pending/approved/rejected/flagged_false_positive)")
+    reviewed_by_user_id: Optional[UUID] = Field(None, description="검수자 ID")
+    reviewed_at: Optional[datetime] = Field(None, description="검수 시각")
+    review_note: Optional[str] = Field(None, description="검수 사유/메모")
+
+    # ── 탐지 모델 출처 ───────────────────────
+    detection_model_id: Optional[str] = Field(None, description="탐지 모델 (M1_YOLO/M2_YOLO/M3_YOLO/M4_CONTEXT/M5_SEG/furniture_aware 등)")
+
+    # ── GPS WGS84 (현장 정확 위치) ────────────
+    gps_lat: Optional[float] = Field(None, description="GPS 위도 (WGS84)")
+    gps_lon: Optional[float] = Field(None, description="GPS 경도 (WGS84)")
+    gps_alt: Optional[float] = Field(None, description="GPS 고도 (m, MSL)")
+
     class Config:
         from_attributes = True  # SQLAlchemy ORM 객체 직접 변환
+
+
+# ── 검수 요청 스키마 (Track C 의존성) ─────────
+class DefectReviewRequest(BaseModel):
+    """
+    하자 검수 요청.
+    현장 작업자/사무실 검수자가 AI 탐지 결과를 승인/반려/오탐 플래그할 때 사용.
+    rejected/flagged_false_positive 는 review_note 필수 (감사 추적용).
+    """
+    review_status: str = Field(
+        ...,
+        pattern="^(approved|rejected|flagged_false_positive|pending)$",
+        description="검수 상태",
+    )
+    review_note: Optional[str] = Field(
+        None,
+        max_length=2000,
+        description="검수 사유. rejected/flagged_false_positive 는 필수.",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "review_status": "rejected",
+                "review_note": "벽지 무늬를 균열로 오탐. 실제 균열 아님 확인.",
+            },
+        },
+    }
 
 
 # ── 목록 조회 필터 ────────────────────────────

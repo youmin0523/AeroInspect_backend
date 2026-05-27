@@ -8,23 +8,28 @@
 #       - DELETE /defects/{id} → 하자 삭제
 # =============================================
 
+from datetime import datetime, timezone
 from uuid import UUID
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, get_ws_manager, get_current_org_member
+from app.models.audit_log import AuditLog
 from app.models.defect import DefectLog
 from app.models.site import Site
+from app.schemas.audit_log import AuditLogResponse, AuditLogListResponse
 from app.schemas.defect import (
     DefectLogCreate,
     DefectLogResponse,
     DefectLogListResponse,
+    DefectReviewRequest,
     DefectSummary,
 )
 from app.core.ws_manager import ConnectionManager
+from app.services.audit_logger import write_audit
 from app.services.image_storage import image_storage
 
 
@@ -258,7 +263,165 @@ async def delete_defect(
 
     # DB 레코드 먼저 제거 → 파일 정리. 파일 삭제 실패해도 트랜잭션 영향 없음.
     crop_path = defect.image_crop_path
+    snapshot = {
+        "id": str(defect.id),
+        "site_id": str(defect.site_id) if defect.site_id else None,
+        "category_code": defect.category_code,
+        "severity": defect.severity,
+        "confidence": defect.confidence,
+        "review_status": defect.review_status,
+        "image_crop_path": crop_path,
+    }
     await db.delete(defect)
 
     if crop_path:
         image_storage.delete(crop_path)
+
+    # 감사 로그 — 삭제는 책임 추적 핵심 사건
+    await write_audit(
+        db,
+        action="defect.delete",
+        resource_type="defect",
+        resource_id=defect_id,
+        user_id=user.id,
+        organization_id=org.id,
+        before=snapshot,
+        after=None,
+    )
+
+
+# ──────────────────────────────────────────────
+# Track C — 현장/사무실 인라인 검수
+# ──────────────────────────────────────────────
+def _validate_review_note(payload: DefectReviewRequest) -> None:
+    """반려/오탐 플래그는 review_note 필수 (감사 추적용)."""
+    if payload.review_status in ("rejected", "flagged_false_positive"):
+        if not payload.review_note or not payload.review_note.strip():
+            raise HTTPException(
+                status_code=400,
+                detail=f"{payload.review_status} 검수는 review_note(사유)가 필수입니다.",
+            )
+
+
+@router.patch("/{defect_id}/review", response_model=DefectLogResponse)
+async def review_defect(
+    defect_id: UUID,
+    payload: DefectReviewRequest,
+    request: Request,
+    org_tuple=Depends(get_current_org_member),
+    db: AsyncSession = Depends(get_db),
+    manager: ConnectionManager = Depends(get_ws_manager),
+):
+    """
+    하자 검수 (승인/반려/오탐 플래그).
+    현장 작업자/사무실 검수자 누구나 가능 — 조직 격리만 검증.
+    flagged_false_positive 는 Active Learning hard example 큐로 별도 적재 가능.
+    """
+    _validate_review_note(payload)
+    user, member, org = org_tuple
+
+    result = await db.execute(
+        select(DefectLog).where(
+            DefectLog.id == defect_id,
+            DefectLog.site_id.in_(
+                select(Site.id).where(Site.organization_id == org.id)
+            ),
+        )
+    )
+    defect = result.scalar_one_or_none()
+    if not defect:
+        raise HTTPException(status_code=404, detail="하자 탐지 기록을 찾을 수 없습니다.")
+
+    before = {
+        "review_status": defect.review_status,
+        "reviewed_by_user_id": str(defect.reviewed_by_user_id) if defect.reviewed_by_user_id else None,
+        "reviewed_at": defect.reviewed_at.isoformat() if defect.reviewed_at else None,
+        "review_note": defect.review_note,
+    }
+
+    defect.review_status = payload.review_status
+    defect.review_note = payload.review_note
+    defect.reviewed_by_user_id = user.id
+    defect.reviewed_at = datetime.now(timezone.utc)
+
+    await db.flush()
+    response = _build_response(defect)
+
+    # 감사 로그 (action 을 review_status 별로 세분화 → 통계/검색 용이)
+    action_map = {
+        "approved": "defect.review.approve",
+        "rejected": "defect.review.reject",
+        "flagged_false_positive": "defect.review.flag_false_positive",
+        "pending": "defect.review.reset",
+    }
+    await write_audit(
+        db,
+        action=action_map.get(payload.review_status, "defect.review"),
+        resource_type="defect",
+        resource_id=defect.id,
+        user_id=user.id,
+        organization_id=org.id,
+        before=before,
+        after={
+            "review_status": defect.review_status,
+            "reviewed_by_user_id": str(user.id),
+            "reviewed_at": defect.reviewed_at.isoformat(),
+            "review_note": defect.review_note,
+        },
+        note=payload.review_note,
+        request=request,
+    )
+
+    # WS broadcast — 다른 사용자도 검수 결과 실시간 반영
+    await manager.broadcast("defects", {
+        "type": "defect.reviewed",
+        "data": response.model_dump(mode="json"),
+    })
+
+    return response
+
+
+@router.get("/{defect_id}/audit-trail", response_model=AuditLogListResponse)
+async def get_defect_audit_trail(
+    defect_id: UUID,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    org_tuple=Depends(get_current_org_member),
+    db: AsyncSession = Depends(get_db),
+):
+    """단일 하자의 감사 이력 — 검수 기록·삭제·수정 시간순(최신 우선)."""
+    user, member, org = org_tuple
+
+    # 자기 조직 site 의 defect 인지 먼저 검증 (없는 ID 에 대한 정보 누설 차단)
+    exists_result = await db.execute(
+        select(DefectLog.id).where(
+            DefectLog.id == defect_id,
+            DefectLog.site_id.in_(
+                select(Site.id).where(Site.organization_id == org.id)
+            ),
+        )
+    )
+    if exists_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="하자 탐지 기록을 찾을 수 없습니다.")
+
+    base = select(AuditLog).where(
+        AuditLog.resource_type == "defect",
+        AuditLog.resource_id == defect_id,
+    )
+    total = await db.scalar(
+        select(func.count(AuditLog.id)).where(
+            AuditLog.resource_type == "defect",
+            AuditLog.resource_id == defect_id,
+        )
+    ) or 0
+
+    result = await db.execute(
+        base.order_by(desc(AuditLog.created_at)).offset(offset).limit(limit)
+    )
+    items = result.scalars().all()
+    return AuditLogListResponse(
+        items=[AuditLogResponse.model_validate(i) for i in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
