@@ -11,7 +11,7 @@ from pydantic import field_validator, model_validator
 import json
 import os
 import warnings
-from typing import List
+from typing import List, Optional
 
 
 # 운영(prod) 환경 판정에 사용되는 환경변수.
@@ -236,6 +236,16 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "noreply@droneinspect.com"
     SMTP_FROM_NAME: str = "DRONE INSPECT"
+
+    # ── Sentry (운영 에러 모니터링) ────────────
+    # SENTRY_DSN 이 비어 있으면 init_sentry 가 no-op → 로컬 개발 영향 0.
+    # APP_ENV=production 이고 DSN 이 비어 있으면 startup 시 경고 로그만 (기동 차단 X).
+    # TRACES_SAMPLE_RATE: 트랜잭션 성능 추적 샘플링 비율 (0.0~1.0). 운영 비용 가드용 0.1 기본.
+    # PROFILES_SAMPLE_RATE: 프로파일링은 비용 큼 → 기본 비활성(0.0). 필요 시 0.05~0.1.
+    SENTRY_DSN: Optional[str] = None
+    SENTRY_ENVIRONMENT: str = "development"
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.0
 
     # ── CORS ─────────────────────────────────
     CORS_ORIGINS: List[str] = [

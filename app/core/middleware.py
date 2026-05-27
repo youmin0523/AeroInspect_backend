@@ -40,6 +40,23 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             path=request.url.path,
         )
 
+        # Sentry 태그/컨텍스트로도 request_id 전파 — 운영 에러 추적용
+        # sentry-sdk 미설치/미초기화 환경에서는 silent skip (개발/CI 영향 0)
+        try:
+            import sentry_sdk
+
+            sentry_sdk.set_tag("request_id", request_id)
+            sentry_sdk.set_context(
+                "request_meta",
+                {
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                },
+            )
+        except Exception:
+            pass
+
         start = time.perf_counter()
         response: Response
         try:

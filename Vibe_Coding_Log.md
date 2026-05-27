@@ -2808,3 +2808,44 @@ uploads/gazebo_worlds_real/
 
 - BackgroundTask 호출 횟수 N=1 → 최대 N=3 (thread 당). gpt-4o-mini, 40 tokens 출력 기준 호출당 약 $0.0001 — 무시 가능.
 - 동시 BackgroundTask race: 첫 응답 갱신과 두 번째 응답 갱신이 겹쳐 같은 thread.title 을 덮어쓸 수 있으나, 최종적으로 가장 최신 흐름 반영하는 갱신이 유효. 데이터 손상 없음.
+
+---
+
+## 🎯 R-v1.1.06 — Sentry 에러 모니터링 통합 (2026-05-27 오후)
+
+> 운영 갭 해소: 현재 운영 중 미처리 예외/스택트레이스가 stdout 로그에만 남아 알림·집계 경로 부재. Fly.io 콘솔만으로는 실시간 인지 불가 → 입주자 사고로 직결되기 전 1차 안전망 구축.
+
+### 🛠 변경
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .06.b1 | 2026-05-27 오후 | **requirements + config 4종 + .env.example** — `sentry-sdk[fastapi]>=2.0.0` 추가. `Settings` 에 `SENTRY_DSN: Optional[str] = None`, `SENTRY_ENVIRONMENT: str = "development"`, `SENTRY_TRACES_SAMPLE_RATE: float = 0.1`, `SENTRY_PROFILES_SAMPLE_RATE: float = 0.0` 추가. `.env.example` 에 운영 전용 주석과 함께 4개 항목 등록. | requirements.txt, app/config.py, .env.example |
+| .06.b2 | 2026-05-27 오후 | **app/core/sentry.py 신규** — `init_sentry(settings)` 함수. FastApiIntegration + StarletteIntegration + SqlalchemyIntegration + AsyncioIntegration 묶음 등록. `before_send` 훅에서 `password / passwd / token / secret / authorization / api_key / cookie / session / refresh_token / access_token / client_secret` 키를 재귀 redact (대소문자 무시 substring 매칭). `request.data / headers / cookies / query_string / env`, `extra`, `contexts` 모두 sanitize. structlog `get_contextvars()` 의 `request_id` 를 안전망으로 tag 승격. `send_default_pii=False` 로 이메일/IP 자동 첨부 차단. release 자동 탐지 (SENTRY_RELEASE / FLY_RELEASE_VERSION / FLY_MACHINE_VERSION / GIT_SHA). | app/core/sentry.py (신규) |
+| .06.b3 | 2026-05-27 오후 | **app/core/middleware.py — RequestIDMiddleware 보강** — `bind_contextvars` 직후 `sentry_sdk.set_tag("request_id", ...)` + `set_context("request_meta", {request_id, method, path})` 호출. import 실패/Sentry 미초기화 환경에서는 silent skip (try/except). 기존 동작 회귀 0. | app/core/middleware.py |
+| .06.b4 | 2026-05-27 오후 | **app/main.py lifespan 시작 첫 단계 init_sentry** — Redis/DB 초기화 전에 호출하여 이후 startup 실패도 캡처. 성공 시 콘솔에 `[AeroInspect] Sentry 활성화 (env=...)` 로깅. 실패해도 서버 기동은 계속(관측 도구가 본체를 막으면 안 됨). | app/main.py |
+| .06.b5 | 2026-05-27 오후 | **README 운영 섹션 추가** — `flyctl secrets set SENTRY_DSN=... SENTRY_ENVIRONMENT=production -a aeroinspect-backend` 명시. DSN 값 자체는 등록하지 않음(사용자 직접). | README.md |
+
+### 📐 설계 결정 / 자가검토
+
+- **운영 차단 X, 경고 O**: APP_ENV=production 인데 DSN 누락 시 RuntimeError 가 아닌 warning 로그만. 이유: 새 시크릿 미주입으로 인한 부팅 실패는 "사고 인지 도구가 자체로 사고를 만드는" 안티패턴. 운영 사고 방지 우선.
+- **before_send 안전망 다중화**: request_id 는 (1) RequestIDMiddleware 의 `set_tag` (2) `before_send` 의 contextvars fallback 두 경로. 미들웨어를 거치지 않는 startup 이벤트도 누락 X.
+- **PII 보호 3단**: `send_default_pii=False` + 민감 키 redact + Replay 미사용(SDK 단계 — 백엔드라 해당 없음). 운영 분쟁 대비 "Sentry 로 비밀번호 한 토막이라도 흘러간 적 없음" 입증 가능.
+- **샘플링 보수 디폴트**: traces 0.1 / profiles 0.0. 운영 비용 가드. 디버그 세션만 한시 상향.
+- **integration 선정**: Asyncio integration 포함 — FastAPI lifespan / background task 의 미처리 예외 캡처 핵심. SQLAlchemy integration 으로 slow query 시각화 가능.
+
+### ✅ 검증
+
+- `cd c:/Users/Codelab/Desktop/PROJECT/AeroInspect_backend && python -c "from app.main import app; print('OK')"` → `OK` (import 에러 없음, 기존 라우터 회귀 0).
+- DSN 미설정 환경에서 init_sentry → no-op + INFO 로그 (`sentry.disabled reason=SENTRY_DSN not set`) 만 출력 — 로컬 개발 흐름 영향 0 확인.
+- pytest 신규 테스트 미작성(외부 의존성, 통합 가치 낮음). 기존 테스트는 import 경로 변경 없음.
+
+### 🚨 안전성 / 운영 영향
+
+- 사용자 데이터 누락/노출 위험 X — `send_default_pii=False` + redact 훅 이중 방어.
+- 비용: traces 0.1 / profiles 0.0 디폴트로 무료 plan 5K events/month 한도 내. 운영 트래픽 증가 시 SAMPLE_RATE 만 조절.
+- Fly Free Plan 메모리 영향: sentry-sdk ~10MB. 256MB VM 에서 무시 가능.
+- **사용자 후속 작업**: Sentry 프로젝트(Platform: FastAPI / Python) 생성 → DSN 발급 → `flyctl secrets set SENTRY_DSN=... SENTRY_ENVIRONMENT=production -a aeroinspect-backend` → 임시 `raise RuntimeError("sentry test")` 라우트로 Issues 탭 도착 확인.
+
+
+---
+

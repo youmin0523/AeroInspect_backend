@@ -28,6 +28,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.metrics import PrometheusMiddleware, render_metrics
 from app.core.middleware import RequestIDMiddleware
 from app.core.rate_limit import RateLimitMiddleware
+from app.core.sentry import init_sentry
 from app.db.init_db import init_db
 from app.api.router import api_router
 from app.services.camera import rgb_camera_service, thermal_camera_service
@@ -86,6 +87,15 @@ async def lifespan(app: FastAPI):
     """
     # ── 시작 ─────────────────────────────────
     print("[AeroInspect] 서버 시작 중...")
+
+    # Sentry 초기화 (DSN 미설정 시 no-op — 로컬 개발 차단 X)
+    # 가장 먼저 호출하여 이후 모든 startup 오류도 Sentry 로 캡처되도록.
+    try:
+        sentry_enabled = init_sentry(settings)
+        if sentry_enabled:
+            print(f"[AeroInspect] Sentry 활성화 (env={settings.SENTRY_ENVIRONMENT})")
+    except Exception as e:
+        print(f"[AeroInspect] Sentry 초기화 실패 (계속 진행): {e}")
 
     # WebSocket 백엔드: Redis 모드면 매니저 교체 + pub/sub 구독 시작
     if settings.WS_BACKEND.lower() == "redis":

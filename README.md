@@ -348,6 +348,21 @@ alembic upgrade head  # deviation_degrees, deviation_mm_per_m, delta_temperature
 - **단일 워커 프로세스 전제**: `stream_inference_worker`는 프로세스 내 싱글톤. gunicorn multi-worker로 띄우면 워커마다 큐가 생겨 FRAME_SKIP 효과가 배수. uvicorn 단일 워커 또는 Redis pub/sub 기반 리팩터링 필요.
 - **MAVLink/LiDAR 좌표 연동은 아직**: `drone_coordinates`는 당분간 NULL. 추후 TF 연동 시 기존 `lidar_x/y/z` 컬럼에 채움.
 
+## 운영 에러 모니터링 (Sentry)
+
+운영 환경에서만 활성화. 로컬 개발은 `SENTRY_DSN` 비워두면 자동 no-op.
+
+1. **DSN 발급**: [sentry.io](https://sentry.io) → 새 프로젝트 (Platform: `FastAPI / Python`) → Settings → Client Keys (DSN) 복사
+2. **Fly.io secrets 등록** (운영 배포 직전):
+   ```bash
+   flyctl secrets set \
+     SENTRY_DSN="https://xxxxxxxx@oXXXXX.ingest.sentry.io/YYYYY" \
+     SENTRY_ENVIRONMENT="production" \
+     -a aeroinspect-backend
+   ```
+3. **자동 적용 항목**: FastAPI/Starlette/SQLAlchemy/Asyncio 미처리 예외, `RequestIDMiddleware`의 `request_id` 자동 태깅, 민감 키(`password/token/secret/...`) `[REDACTED]` 처리, `send_default_pii=False` (이메일/IP 미수집).
+4. **검증**: 배포 후 `curl https://aeroinspect-backend.fly.dev/health` 정상 → 임시 테스트 라우트에서 `raise RuntimeError("sentry test")` → Sentry Issues 탭에 이벤트 도착 확인.
+
 ## 동작 확인 체크리스트
 
 서버 기동 후 다음을 순서대로 확인:

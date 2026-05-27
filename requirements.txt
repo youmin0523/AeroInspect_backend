@@ -52,6 +52,7 @@ aiofiles
 # ── Monitoring / Logging ───────────────────
 prometheus_client
 structlog
+sentry-sdk[fastapi]>=2.0.0  # 운영 에러 모니터링 — DSN 미설정 시 no-op
 
 # ── Test ───────────────────────────────────
 pytest
