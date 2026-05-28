@@ -2943,3 +2943,44 @@ uploads/gazebo_worlds_real/
 ### 🚨 운영 영향
 
 - 사용자 후속 작업: ① Sentry DSN 발급 → flyctl secrets set ② flyctl ssh console -C "alembic upgrade head" (R-v1.1.08 마이그레이션 적용) ③ 백업 cron 등록 ④ min_machines_running 결정.
+
+
+---
+
+## 🎯 R-v1.1.10 — 신뢰도 3단계 등급 시스템 + Thermal/M4 재설계 학습 스크립트 (2026-05-28 오전)
+
+> "false negative(놓침)도 문제지만 false positive(오탐)로 시시비비 따져야 되는 부분도 사용자 입장에서 문제" — Precision↔Recall 균형 재설계. 단일 threshold 대신 신뢰도 등급으로 분리.
+
+### 🛠 변경
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .10.1 | 2026-05-28 오전 | 체이닝 학습 중단 (M4 epoch 20/50 best 0.384, +0.029 개선중) — 점진 개선보다 근본 재설계 우선. | (배경) |
+| .10.2 | 2026-05-28 오전 | confidence_grader.py 신규 — CONFIRMED(≥0.85 or ≥0.70+voting) / REVIEW(0.40~0.70) / REFERENCE(0.20~0.40) / DROP(<0.20) 4단계 분류. PatchCore·anomaly 단독은 CONFIRMED 불가 규칙(분쟁 책임 회피). 12 케이스 단위 테스트 PASS. | app/services/confidence_grader.py |
+| .10.3 | 2026-05-28 오전 | schema 확장 — DefectDetection/InsulationDetection/AlignmentDetection 모두 `grade` + `grade_display_ko` 필드. DetectionResult20에 `confirmed_count`/`review_count` 분류 카운트. | app/schemas/detection.py |
+| .10.4 | 2026-05-28 오전 | inference_pipeline_20에 grade 산정 통합 — cross_model_nms 후 grade_detection() 호출, DROP 검출은 출력에서 제거. insulation/alignment도 동일 등급 부여. | app/services/inference_pipeline_20.py |
+| .10.5 | 2026-05-28 오전 | onnx_inference ONNXPatchCoreDetector — anomalib 1.x(2-output)/2.x(4-output) 출력 호환 분기. | app/services/onnx_inference.py |
+| .10.6 | 2026-05-28 오전 | train_m4_context_seg.py 신규 — bbox→seg 전환. M4 라벨이 이미 polygon 형식이라 변환 작업 불필요(큰 발견). M5 seg 전환 성공 패턴(0.355→0.466) 재현 목표. | training/train_m4_context_seg.py |
+| .10.7 | 2026-05-28 오전 | prepare_thermal_anomaly.py + train_thermal_anomaly.py 신규 — Moisture/delam YOLO 포기, PatchCore unsupervised로 대체. 1788장 라벨 과밀(평균 8.8/최대 170 인스턴스) → 박스 라벨 자체가 노이즈. 정상 패치 추출 후 anomaly heatmap. | training/prepare_thermal_anomaly.py, training/train_thermal_anomaly.py |
+| .10.8 | 2026-05-28 오전 | cleanup_furniture_coco.py 신규 — furniture 학습 후 coco_* 보강 파일 삭제. dry-run 기본, --apply 명시 시 실제 삭제 (안전장치). | training/cleanup_furniture_coco.py |
+| .10.9 | 2026-05-28 오전 | 이전 라운드 누락 sync — analyze_datasets/monitor_report/remap_thermal_v2/train_chain_v1_1/train_furniture_aware/train_thermal_yolo/wait_musdb_then_train + train_m5_frame_seg/train_m6_patchcore 수정. | training/ 9건 |
+
+### 📐 설계 결정
+
+- 단일 threshold 폐지 — 모든 검출을 동일 conf 임계로 판정하면 Precision/Recall 둘 다 못 잡음. 등급 분리로 보고서(CONFIRMED만)·점검자 모드(REVIEW까지)·디버그 모드(REFERENCE까지) 3 단계 노출 제어.
+- 20종 클래스 통일 — 사용자 명시 "왜 단열만 특례 대우?". `feedback_insulation_strict` memory 정책 갱신, 단열 권장점검 threshold 0.35 → 0.40 통일.
+- PatchCore/anomaly 단독 CONFIRMED 불가 — 라벨 없는 비지도 신호로 분쟁 책임 불가. voting 통과(cross_model_boosted/ensemble_boosted) 시에만 CONFIRMED 승격.
+- Thermal Moisture/delam YOLO 포기 — 10번 재학습해도 mAP50-95 0.18 한계. 데이터 구조 문제(과밀 라벨)지 모델 문제 아님. PatchCore anomaly heatmap으로 영역 단위 표시 + Recall 100% 가능.
+- M4 seg 전환 — 데이터 라벨이 이미 polygon 형식이라 추가 작업 없음. M5 seg 전환 성공 사례(+0.111) 재현 가능성 높음.
+
+### ✅ 검증
+
+- confidence_grader 12 케이스 단위 테스트 PASS (CONFIRMED 강검출/voting, REVIEW 중간, REFERENCE 약, DROP 임계 미달, PatchCore 단독 강등 등 전 경로).
+- DefectDetection(class="crack", conf=0.8) 인스턴스 생성 OK, grade 기본값 "REVIEW".
+- inference_pipeline_20 import OK (pipeline20 인스턴스화).
+
+### 🚨 운영 영향
+
+- API 응답 형식 변경: detections[].grade / grade_display_ko 신규 필드, DetectionResult20.confirmed_count·review_count 신규. 기존 frontend는 무시(낙수 호환).
+- frontend 미반영: 등급별 시각화(빨강 확정 / 노랑 권장점검 / 점선 참고용) + 보고서 필터(CONFIRMED만)는 frontend repo에서 별도 작업. v1.2 예정.
+- 학습 미실행: 스크립트만 작성, GPU 학습은 사용자 신호 시점에 시작. 예상 ~15h (M4 seg 6h + thermal_anomaly 30min + furniture 8h).

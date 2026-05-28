@@ -41,19 +41,20 @@ def train():
         root="datasets/normal",
         normal_dir="good",
         abnormal_dir="defective",
-        image_size=(256, 256),
-        train_batch_size=32,
-        eval_batch_size=32,
+        train_batch_size=8,
+        eval_batch_size=8,
+        num_workers=4,
     )
 
     model = Patchcore(
         backbone="wide_resnet50_2",
         layers=["layer2", "layer3"],
-        coreset_sampling_ratio=0.1,
+        coreset_sampling_ratio=0.01,
         num_neighbors=9,
     )
 
-    engine = Engine()
+    # 8GB GPU 한계 대응: limit_train_batches로 데이터 subsample (PatchCore는 400장이면 충분, MVTec AD 표준)
+    engine = Engine(max_epochs=1, limit_train_batches=50, limit_val_batches=25)
     engine.fit(model=model, datamodule=datamodule)
 
     # ONNX export

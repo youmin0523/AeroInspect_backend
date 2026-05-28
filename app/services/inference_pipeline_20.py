@@ -30,6 +30,10 @@ from app.schemas.detection import (
     ModelsLoadedStatus20,
 )
 from app.services.alignment_detector import alignment_detector
+from app.services.confidence_grader import (
+    grade_detection,
+    grade_display_ko,
+)
 from app.services.defect_taxonomy import get_20defect_info
 from app.services.ensemble import (
     compute_combined_confidence,
@@ -360,10 +364,13 @@ class InferencePipeline20:
         all_dets = cross_model_nms(all_dets)
         after_nms_count = len(all_dets)
 
-        # ── severity_mapper 매핑 ──
+        # ── severity_mapper 매핑 + 신뢰도 등급(grade) 산정 ──
         defect_detections: List[DefectDetection] = []
         for det in all_dets:
             code, display_ko, severity, area = get_20defect_info(det["class"])
+            g = grade_detection(det)
+            if g == "DROP":
+                continue  # 표시 임계 미달
             defect_detections.append(DefectDetection(**{
                 "class": det["class"],
                 "class_display_en": det["class"].replace("_", " ").title(),
@@ -372,12 +379,36 @@ class InferencePipeline20:
                 "conf": det["conf"],
                 "bbox_xyxy": det.get("bbox_xyxy", []),
                 "severity": det.get("severity") or severity,
+                "grade": g,
+                "grade_display_ko": grade_display_ko(g),
                 "defect_source": det.get("defect_source", ""),
                 "ensemble_boosted": det.get("ensemble_boosted", False),
+                "cross_model_boosted": det.get("cross_model_boosted", False),
             }))
+
+        # insulation/alignment에도 grade 부여 (보고서 노출 일관성)
+        for ins in insulation_results:
+            g = grade_detection({"conf": ins.conf, "defect_source": ins.defect_source})
+            ins.grade = g if g != "DROP" else "REFERENCE"
+            ins.grade_display_ko = grade_display_ko(ins.grade)
+        for al in alignment_results:
+            g = grade_detection({"conf": al.conf, "defect_source": al.defect_source})
+            al.grade = g if g != "DROP" else "REFERENCE"
+            al.grade_display_ko = grade_display_ko(al.grade)
 
         defect_count = len(defect_detections) + len(insulation_results) + len(alignment_results)
         has_defect = defect_count > 0
+
+        confirmed_count = (
+            sum(1 for d in defect_detections if d.grade == "CONFIRMED")
+            + sum(1 for i in insulation_results if i.grade == "CONFIRMED")
+            + sum(1 for a in alignment_results if a.grade == "CONFIRMED")
+        )
+        review_count = (
+            sum(1 for d in defect_detections if d.grade == "REVIEW")
+            + sum(1 for i in insulation_results if i.grade == "REVIEW")
+            + sum(1 for a in alignment_results if a.grade == "REVIEW")
+        )
 
         # ── 진단 트레이스: 0건 검출 시 단계별 손실 지점 추적 ──
         # Why: mock 폴백을 제거한 뒤 검출이 안 되는 케이스가 어디서 빠지는지(M1/M2/M3 raw,
@@ -399,6 +430,8 @@ class InferencePipeline20:
             anomaly_score=anomaly_score,
             has_defect=has_defect,
             defect_count=defect_count,
+            confirmed_count=confirmed_count,
+            review_count=review_count,
             image_shape=ImageShape(width=w, height=h),
             tier_executed=tier,
         )

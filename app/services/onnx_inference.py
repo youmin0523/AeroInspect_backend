@@ -362,8 +362,14 @@ class ONNXPatchCoreDetector:
 
         outputs = self.session.run(None, {self.input_name: blob})
 
-        # anomalib ONNX 출력: [anomaly_map, pred_score] 또는 단일 텐서
-        if len(outputs) >= 2:
+        # anomalib export 버전별 출력 형식 분기
+        if len(outputs) >= 4:
+            # anomalib 2.x (surface.onnx): [pred_score, pred_label, anomaly_map, pred_mask]
+            s = outputs[0]
+            score = float(s.item() if s.size == 1 else s.flatten()[0])
+            anomaly_map = outputs[2][0]
+        elif len(outputs) >= 2:
+            # anomalib 1.x: [anomaly_map, pred_score]
             anomaly_map = outputs[0][0]
             score = float(outputs[1][0]) if outputs[1].size == 1 else float(outputs[1][0][0])
         else:

@@ -18,6 +18,11 @@ from pydantic import BaseModel, Field
 
 
 Severity = Literal["HIGH", "MED", "LOW"]
+# 신뢰도 등급 (confidence_grader.py 와 1:1 매칭)
+#   CONFIRMED : 하자목록 등재 — 분쟁 시 책임질 수준
+#   REVIEW    : 점검자 추가 확인 권장 — 목록 X, 별도 섹션
+#   REFERENCE : 참고용 — 점검자 모드 토글 시만
+Grade = Literal["CONFIRMED", "REVIEW", "REFERENCE"]
 DefectSource = Literal["yolo_thermal", "yolo_delam", "wallpaper"]
 # 20종 파이프라인 defect source
 DefectSource20 = Literal[
@@ -138,8 +143,14 @@ class DefectDetection(BaseModel):
     conf: float = Field(..., ge=0.0, le=1.0)
     bbox_xyxy: List[float] = Field(default_factory=list, description="[x1,y1,x2,y2] 픽셀")
     severity: Optional[Severity] = None
+    grade: Grade = Field(
+        "REVIEW",
+        description="신뢰도 등급. CONFIRMED만 보고서 하자목록 등재.",
+    )
+    grade_display_ko: str = ""
     defect_source: str = ""
     ensemble_boosted: bool = False
+    cross_model_boosted: bool = False
 
     model_config = {"populate_by_name": True}
 
@@ -155,6 +166,8 @@ class InsulationDetection(BaseModel):
     max_temperature: float = 0.0
     min_temperature: float = 0.0
     severity: Optional[Severity] = None
+    grade: Grade = "REVIEW"
+    grade_display_ko: str = ""
     defect_source: str = "thermal_unet"
 
     model_config = {"populate_by_name": True}
@@ -171,6 +184,8 @@ class AlignmentDetection(BaseModel):
     deviation_mm_per_m: float = Field(0.0, description="편차 mm/m")
     direction: str = Field("", description="vertical | horizontal | both")
     severity: Optional[Severity] = None
+    grade: Grade = "REVIEW"
+    grade_display_ko: str = ""
     defect_source: str = "geometric"
 
     model_config = {"populate_by_name": True}
@@ -180,6 +195,9 @@ class DetectionResult20(BaseModel):
     """
     20종 하자 통합 추론 응답.
     기존 DetectionResult와 병존 — USE_20DEFECT_PIPELINE 플래그로 전환.
+
+    detections/insulation/alignment 모두 grade 필드 포함.
+    보고서 등재용은 confirmed_count, 점검자 표시용은 review_count.
     """
     detections: List[DefectDetection] = Field(default_factory=list)
     insulation: List[InsulationDetection] = Field(default_factory=list)
@@ -187,6 +205,12 @@ class DetectionResult20(BaseModel):
     anomaly_score: Optional[float] = None
     has_defect: bool = False
     defect_count: int = 0
+    confirmed_count: int = Field(
+        0, description="CONFIRMED 등급 합계 — 보고서 하자목록 등재 대상"
+    )
+    review_count: int = Field(
+        0, description="REVIEW 등급 합계 — 점검자 추가 확인 권장"
+    )
     image_shape: ImageShape = Field(
         ..., description="프레임 W/H"
     )
