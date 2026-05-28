@@ -131,6 +131,8 @@ class Settings(BaseSettings):
     # Thermal Anomaly (Moisture/delam YOLO 대체 — PatchCore unsupervised)
     # 학습: thermal_yolo 정상 패치 2000개 (라벨 영역 제외 crop)
     # 출력: anomaly heatmap → bbox 변환 후 grade 분류
+    # 활성화: 사용자 명시 (2026-05-28) — Thermal Anomaly 일시 보류, M4 U-Net 단열은 유지
+    THERMAL_ANOMALY_ENABLED: bool = False    # False면 ONNX 있어도 로드/추론 X (보류 상태)
     THERMAL_ANOMALY_ONNX: str = "thermal_anomaly.onnx"
     THERMAL_ANOMALY_THRESHOLD: float = 0.5   # anomaly score 임계 (0~1 정규화). 첫 적용 후 튜닝
     THERMAL_ANOMALY_BBOX_MIN_AREA: int = 400 # anomaly mask → bbox 변환 시 최소 픽셀 영역

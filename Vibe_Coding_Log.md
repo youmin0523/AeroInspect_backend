@@ -3043,3 +3043,27 @@ uploads/gazebo_worlds_real/
 - **chain 진행 상태**: ThermalAnomaly ✅ 완료 (150MB ONNX) / Furniture 🟢 진행중 (epoch 2/80) / M4_Seg 🔁 라벨 수정 완료, Furniture 후 자동 재시도.
 - **이번이 3차 프로젝트 마지막 제출**: 자유 진행 X, Recall ≥99% 통과 + 약한 모델 보완 사이클 필요 시 반복.
 - 호출자 (defect_processor.py, test_stream.py, api routes) thermal_frame_bgr 전달은 학습 완료 시 함께 통합.
+
+### 🛑 R-v1.1.13 — Thermal Anomaly 일시 보류 + stream_inference thermal_frame_bgr 사전 전달 (2026-05-28 오후)
+
+> 사용자 명시 (18:18): "thermal은 일단 보류해줘" → 후속 확인: "Thermal Anomaly만 (M4 U-Net 단열은 유지)".
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .13.1 | 2026-05-28 18:20 | config.py `THERMAL_ANOMALY_ENABLED: bool = False` 토글 추가. ONNX 파일과 통합 코드는 보존, 로드만 차단. | app/config.py |
+| .13.2 | 2026-05-28 18:20 | inference_pipeline_20.load_models() — `if settings.THERMAL_ANOMALY_ENABLED` 분기. False면 로드 자체 X, "보류 상태" 명시 print. | app/services/inference_pipeline_20.py |
+| .13.3 | 2026-05-28 18:00 | stream_inference.py — QueuedFrame에 thermal_frame_bgr 필드 + submit() 인자 + _process_20()에서 detect_async 전달. backward compatible (default None). | app/core/stream_inference.py |
+| .13.4 | 2026-05-28 18:25 | memory `project_thermal_anomaly_on_hold` 신규 — 보류 사유·범위·활성화 조건 기록. | (memory) |
+
+### 📐 설계 결정
+
+- **ONNX 보존 + 토글 비활성화**: 재학습 없이 즉시 활성화 가능. .env로 THERMAL_ANOMALY_ENABLED=True 설정만으로 다음 시작 시 로드. 학습 산출물 폐기 X.
+- **M4 U-Net 단열은 유지**: thermal_map float °C 입력 검출. B-01/B-02 단열 검출은 그대로 가동.
+- **stream_inference 사전 통합**: thermal_anomaly가 보류 상태여도 thermal_frame_bgr 인자 흐름은 유지 — 추후 활성화 시 호출 경로 변경 불필요. 현재는 None 흘러도 graceful.
+
+### 🚨 운영 영향
+
+- thermal_anomaly_area 클래스는 검출 X. taxonomy 코드는 보존.
+- verify_test_mode 결과·보고서·UI에 thermal_anomaly 미등장.
+- M4 U-Net 단열 검출은 정상 가동.
+- 이번 3차 프로젝트 제출 범위: RGB 모델 (M1-M3) + M4 U-Net + M5 + M6 + Furniture(coco) + grade 시스템.

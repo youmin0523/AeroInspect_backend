@@ -43,8 +43,9 @@ class QueuedFrame:
     frame_bgr: np.ndarray
     frame_id: int
     submitted_at: float  # epoch seconds
-    thermal_map: Optional[np.ndarray] = None   # 20종 파이프라인: 열화상 온도맵
+    thermal_map: Optional[np.ndarray] = None   # 20종 파이프라인: 열화상 온도맵 float32 °C
     imu_data: Optional[dict] = None            # 20종 파이프라인: 드론 IMU {roll, pitch, yaw}
+    thermal_frame_bgr: Optional[np.ndarray] = None  # Thermal Anomaly: 열화상 의사컬러 BGR
 
 
 class StreamInferenceWorker:
@@ -153,14 +154,16 @@ class StreamInferenceWorker:
         frame_bgr: np.ndarray,
         thermal_map: Optional[np.ndarray] = None,
         imu_data: Optional[dict] = None,
+        thermal_frame_bgr: Optional[np.ndarray] = None,
     ) -> bool:
         """
         수신자(ws_stream.py)가 호출. 프레임 스킵 적용 + 드롭 큐에 put.
 
         Args:
             frame_bgr: RGB 프레임
-            thermal_map: 열화상 온도맵 (20종 파이프라인에서 사용)
-            imu_data: 드론 IMU 데이터 (20종 파이프라인에서 사용)
+            thermal_map: 열화상 온도맵 float32 °C (M4 U-Net 단열 검출)
+            imu_data: 드론 IMU 데이터 (기하학 검출)
+            thermal_frame_bgr: 열화상 의사컬러 BGR (Thermal Anomaly PatchCore — Moisture/delam)
 
         Returns:
             True: 큐에 enqueue됨 (추론 예정)
@@ -178,6 +181,7 @@ class StreamInferenceWorker:
             submitted_at=time.time(),
             thermal_map=thermal_map,
             imu_data=imu_data,
+            thermal_frame_bgr=thermal_frame_bgr,
         )
         try:
             self._queue.put_nowait(item)
@@ -302,6 +306,7 @@ class StreamInferenceWorker:
             thermal_map=item.thermal_map,
             imu_data=item.imu_data,
             tier=tier,
+            thermal_frame_bgr=item.thermal_frame_bgr,
         )
 
         # ── ByteTrack 객체 추적 ──

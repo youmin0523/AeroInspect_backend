@@ -245,12 +245,16 @@ class InferencePipeline20:
             print(f"[M6-PatchCore] 로드 완료: {pc_path}")
 
         # Thermal Anomaly (Moisture/delam YOLO 대체) — 의사컬러 입력 PatchCore
-        ta_path = os.path.join(wd, settings.THERMAL_ANOMALY_ONNX)
-        if os.path.exists(ta_path):
-            self._thermal_anomaly = ONNXPatchCoreDetector(ta_path, settings.THERMAL_ANOMALY_THRESHOLD)
-            print(f"[ThermalAnomaly] 로드 완료: {ta_path}")
+        # 사용자 명시 보류 (2026-05-28): THERMAL_ANOMALY_ENABLED=False면 로드 X
+        if settings.THERMAL_ANOMALY_ENABLED:
+            ta_path = os.path.join(wd, settings.THERMAL_ANOMALY_ONNX)
+            if os.path.exists(ta_path):
+                self._thermal_anomaly = ONNXPatchCoreDetector(ta_path, settings.THERMAL_ANOMALY_THRESHOLD)
+                print(f"[ThermalAnomaly] 로드 완료: {ta_path}")
+            else:
+                print(f"[ThermalAnomaly] ONNX 없음 — 비활성 (학습 완료 후 자동 활성)")
         else:
-            print(f"[ThermalAnomaly] ONNX 없음 — 비활성 (학습 완료 후 자동 활성)")
+            print(f"[ThermalAnomaly] 보류 상태 (THERMAL_ANOMALY_ENABLED=False) — ONNX 보존, 로드 X")
 
         # furniture_aware: 빌트인 가구 인식 (FP 차단)
         self._furniture_aware = self._try_load_yolo(
