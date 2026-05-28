@@ -31,7 +31,10 @@ META = {
     "Thermal": (0.299, 120, "thermal_v11/results.csv"),
     "M5": (0.466, 150, "m5_frame_seg/seg_v2/results.csv"),
     "M4": (0.355, 50, "m4_context/train/results.csv"),
+    "M4_Seg": (0.355, 60, "m4_context_seg/train/results.csv"),
     "furniture": (None, 80, "furniture_aware_v2/results.csv"),
+    "Furniture": (None, 80, "furniture_aware_v2/results.csv"),
+    "ThermalAnomaly": (None, 1, "thermal_anomaly/results.csv"),
 }
 
 
@@ -53,8 +56,8 @@ def results_csv_for(key: str) -> str | None:
     if key not in META:
         return None
     rel = META[key][2]
-    # seg 모델(M5)은 runs/segment/, detection은 runs/detect/ 에 저장
-    if key == "M5":
+    # seg 모델(M5/M4_Seg)은 runs/segment/, detection은 runs/detect/ 에 저장
+    if key in ("M5", "M4_Seg"):
         path = TRAIN.parent.parent / "runs" / "segment" / "runs" / rel
     else:
         path = RUNS_DETECT / rel

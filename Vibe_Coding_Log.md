@@ -2989,3 +2989,28 @@ uploads/gazebo_worlds_real/
 
 - `.gitignore`: `training/results/` (120MB Patchcore 산출물) + `datasets/` (분기 repo root 25MB) 추가. memory `feedback_gitignore_periodic_audit` 정기 점검 룰 적용.
 - `training/coco_furniture_supplement.py` 신규 sync (R-v1.0 furniture COCO 보강 스크립트 누락분).
+
+### 🚀 R-v1.1.11 — v1.2 학습 chain 가동 + 자동저장 안전장치 (2026-05-28 오전)
+
+> 사용자 결정: "학습 시작해 확실하게 하자". 후속: "컴퓨터가 뻗을 수도 있으니까 중간중간 자동저장되도록".
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .11.1 | 2026-05-28 오전 | prepare_thermal_anomaly.py 실행 — thermal_yolo 6994장에서 라벨 영역 제외 정상 패치 2000개 추출 (datasets/thermal_anomaly/good/). | datasets/thermal_anomaly/good/×2000 |
+| .11.2 | 2026-05-28 오전 | train_chain_v1_2.py 신규 — STAGES = [M4_Seg, ThermalAnomaly, Furniture]. precondition_ok() 자동 검증 (thermal_anomaly 정상 패치 ≥100). 한 단계 실패해도 다음 계속. | training/train_chain_v1_2.py |
+| .11.3 | 2026-05-28 오전 | monitor_report.py META 확장 — M4_Seg(runs/segment/...), ThermalAnomaly, Furniture 키 추가. results_csv_for()가 seg 모델 경로 분기. | training/monitor_report.py |
+| .11.4 | 2026-05-28 오전 | backup_checkpoints.py 신규 — 10분 주기로 runs/ 트리 스캔, best.pt/last.pt/best.onnx를 training/backups/<run_id>/로 복사. mtime 비교로 IO 절약. 컴퓨터 뻗을 경우 학습 산출물 보호. | training/backup_checkpoints.py |
+| .11.5 | 2026-05-28 오전 | 가동: chain v1.2 + monitor 5min loop + backup_checkpoints 10min loop (3개 백그라운드 데몬). | (runtime) |
+
+### 🛠 안전장치 설계
+
+- **체크포인트 자동 백업**: ultralytics는 epoch 끝마다 last.pt, mAP 최고 시 best.pt 저장. backup_checkpoints.py가 10분마다 별도 backups/ 폴더로 복제 — 학습 폴더 손상 시 복구 가능.
+- **chain 진행 추적**: runs/chain_status.txt + runs/chain_history.log로 단계 전환 영구 기록.
+- **모니터 누적 로그**: runs/monitor_log.txt에 5분 단위 진행률·자원 누적 — power 손실 시 마지막 알려진 상태 재구성 가능.
+- **결과 자동 백업**: 학습 스크립트들이 best.pt → ONNX → models_weights/_prev.onnx 백업 후 교체. 직전 버전 자동 보존.
+
+### 🚨 운영 영향
+
+- 예상 학습 시간: M4 seg ~10h + Thermal Anomaly ~30min + Furniture ~8h = 총 ~18~19h.
+- GPU 8GB 단독 사용 — 다른 GPU 작업 영향 받음. 사용자 다른 musdb 등 무관.
+- 학습 완료 후 자동 처리: M4_Seg ONNX → m4_yolo_context_elements.onnx 교체, thermal_anomaly 분기 코드 통합, cleanup_furniture_coco --apply 디스크 회수.
