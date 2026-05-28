@@ -2984,3 +2984,8 @@ uploads/gazebo_worlds_real/
 - API 응답 형식 변경: detections[].grade / grade_display_ko 신규 필드, DetectionResult20.confirmed_count·review_count 신규. 기존 frontend는 무시(낙수 호환).
 - frontend 미반영: 등급별 시각화(빨강 확정 / 노랑 권장점검 / 점선 참고용) + 보고서 필터(CONFIRMED만)는 frontend repo에서 별도 작업. v1.2 예정.
 - 학습 미실행: 스크립트만 작성, GPU 학습은 사용자 신호 시점에 시작. 예상 ~15h (M4 seg 6h + thermal_anomaly 30min + furniture 8h).
+
+### 🔧 R-v1.1.10 patch — gitignore audit + coco_furniture_supplement sync (2026-05-28 오전)
+
+- `.gitignore`: `training/results/` (120MB Patchcore 산출물) + `datasets/` (분기 repo root 25MB) 추가. memory `feedback_gitignore_periodic_audit` 정기 점검 룰 적용.
+- `training/coco_furniture_supplement.py` 신규 sync (R-v1.0 furniture COCO 보강 스크립트 누락분).
