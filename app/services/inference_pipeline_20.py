@@ -53,6 +53,41 @@ from app.services.geometric_gate import GeometricGate, load_geometric_gate_from_
 from app.services.furniture_gate import FurnitureGate, load_furniture_gate_from_config
 
 
+def _anomaly_mask_to_bboxes(
+    mask: Optional[np.ndarray],
+    dst_shape: tuple,
+    min_area: int,
+    score: float,
+) -> List[dict]:
+    """PatchCore anomaly mask → 연결성분 bbox 리스트.
+
+    Args:
+        mask: uint8 binary mask (0 or 255), 학습 입력 해상도 (보통 224)
+        dst_shape: 원본 frame (H, W) — bbox 좌표계
+        min_area: 최소 픽셀 영역 (이하 제거)
+        score: PatchCore 단일 anomaly score — 모든 component에 부여
+    """
+    if mask is None or mask.size == 0:
+        return []
+    try:
+        import cv2  # 지연 import (모듈 import 비용 방어)
+    except ImportError:
+        return []
+    h, w = dst_shape
+    mask_resized = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
+    n_labels, _, stats, _ = cv2.connectedComponentsWithStats(mask_resized, connectivity=8)
+    bboxes: List[dict] = []
+    for i in range(1, n_labels):  # 0 = background
+        x, y, bw, bh, area = stats[i]
+        if area < min_area:
+            continue
+        bboxes.append({
+            "bbox_xyxy": [float(x), float(y), float(x + bw), float(y + bh)],
+            "conf": float(score),
+        })
+    return bboxes
+
+
 # postprocess_config.yaml 로딩 (모듈 레벨 — 한 번만)
 def _load_postprocess_config() -> dict:
     """postprocess_config.yaml 로드. 실패 시 빈 dict (graceful)."""
@@ -99,8 +134,11 @@ class InferencePipeline20:
         # furniture_aware: 빌트인 가구 인식 (FP 차단 보조)
         self._furniture_aware: Optional[ONNXYoloDetector] = None
 
-        # M6: PatchCore
+        # M6: PatchCore (RGB 표면 anomaly)
         self._m6_patchcore: Optional[ONNXPatchCoreDetector] = None
+
+        # Thermal Anomaly PatchCore (Moisture/delam YOLO 대체 — 의사컬러 입력)
+        self._thermal_anomaly: Optional[ONNXPatchCoreDetector] = None
 
         # 후처리 게이트 (postprocess_config.yaml 기반)
         self._postprocess_config: dict = _load_postprocess_config()
@@ -206,6 +244,14 @@ class InferencePipeline20:
             self._m6_patchcore = ONNXPatchCoreDetector(pc_path, settings.PATCHCORE_THRESHOLD)
             print(f"[M6-PatchCore] 로드 완료: {pc_path}")
 
+        # Thermal Anomaly (Moisture/delam YOLO 대체) — 의사컬러 입력 PatchCore
+        ta_path = os.path.join(wd, settings.THERMAL_ANOMALY_ONNX)
+        if os.path.exists(ta_path):
+            self._thermal_anomaly = ONNXPatchCoreDetector(ta_path, settings.THERMAL_ANOMALY_THRESHOLD)
+            print(f"[ThermalAnomaly] 로드 완료: {ta_path}")
+        else:
+            print(f"[ThermalAnomaly] ONNX 없음 — 비활성 (학습 완료 후 자동 활성)")
+
         # furniture_aware: 빌트인 가구 인식 (FP 차단)
         self._furniture_aware = self._try_load_yolo(
             wd, settings.FURNITURE_AWARE_ONNX,
@@ -232,6 +278,7 @@ class InferencePipeline20:
             self._m6_patchcore is not None,
             self._m4_context is not None,
             self._furniture_aware is not None,
+            self._thermal_anomaly is not None,
         ])
 
         # 최소 필수 모델: M1-YOLO + M2-YOLO (구조+마감 하자 탐지 필수)
@@ -258,6 +305,7 @@ class InferencePipeline20:
         thermal_map: Optional[np.ndarray] = None,
         imu_data: Optional[dict] = None,
         tier: int = 1,
+        thermal_frame_bgr: Optional[np.ndarray] = None,
     ) -> DetectionResult20:
         """
         통합 추론. tier로 계층적 실행 제어.
@@ -266,7 +314,8 @@ class InferencePipeline20:
             frame_bgr: RGB 카메라 프레임 (BGR)
             thermal_map: 열화상 온도맵 float32 [H,W] °C (선택)
             imu_data: 드론 IMU {roll, pitch, yaw} (선택)
-            tier: 실행 계층 (1=M1+M2, 2=+M3+M5, 3=+M4+M6)
+            tier: 실행 계층 (1=M1+M2, 2=+M3+M5, 3=+M4+M6+ThermalAnomaly)
+            thermal_frame_bgr: 열화상 의사컬러 프레임 BGR (Thermal Anomaly 입력, 선택)
         """
         h, w = frame_bgr.shape[:2]
         all_dets: List[dict] = []
@@ -323,6 +372,28 @@ class InferencePipeline20:
                 mask, score = self._m6_patchcore.detect(frame_bgr)
                 anomaly_score = score
                 all_dets = ensemble_with_patchcore(all_dets, mask, score)
+
+            # ── Thermal Anomaly (Moisture/delam YOLO 대체) ──
+            # thermal_frame_bgr 제공 시 PatchCore anomaly heatmap → bbox 변환
+            # Recall 우선 — 점검자 모드 노출용 REVIEW/REFERENCE 등급으로 분류 가능
+            if self._thermal_anomaly is not None and thermal_frame_bgr is not None:
+                try:
+                    ta_mask, ta_score = self._thermal_anomaly.detect(thermal_frame_bgr)
+                    ta_bboxes = _anomaly_mask_to_bboxes(
+                        ta_mask,
+                        dst_shape=(h, w),
+                        min_area=settings.THERMAL_ANOMALY_BBOX_MIN_AREA,
+                        score=ta_score,
+                    )
+                    for bb in ta_bboxes:
+                        all_dets.append({
+                            "class": "thermal_anomaly_area",
+                            "conf": bb["conf"],
+                            "bbox_xyxy": bb["bbox_xyxy"],
+                            "defect_source": "thermal_anomaly",
+                        })
+                except Exception as e:
+                    print(f"[ThermalAnomaly] 추론 실패: {e}")
 
         # ── 환경 컨텍스트 추론 (M4 Context: wall/ceiling/floor/window/door) ──
         context_detections: List[dict] = []
@@ -442,9 +513,12 @@ class InferencePipeline20:
         thermal_map: Optional[np.ndarray] = None,
         imu_data: Optional[dict] = None,
         tier: int = 1,
+        thermal_frame_bgr: Optional[np.ndarray] = None,
     ) -> DetectionResult20:
         """비동기 래퍼."""
-        return await asyncio.to_thread(self.detect, frame_bgr, thermal_map, imu_data, tier)
+        return await asyncio.to_thread(
+            self.detect, frame_bgr, thermal_map, imu_data, tier, thermal_frame_bgr,
+        )
 
     # ── 2-Stage 실행 (YOLO → ResNet) ─────────
     def _run_m1(self, frame_bgr: np.ndarray, use_tiling: bool = False) -> List[dict]:
@@ -661,8 +735,9 @@ def detect_20(
     thermal_map: Optional[np.ndarray] = None,
     imu_data: Optional[dict] = None,
     tier: int = 1,
+    thermal_frame_bgr: Optional[np.ndarray] = None,
 ) -> DetectionResult20:
-    return pipeline20.detect(frame_bgr, thermal_map, imu_data, tier)
+    return pipeline20.detect(frame_bgr, thermal_map, imu_data, tier, thermal_frame_bgr)
 
 
 async def detect_20_async(
@@ -670,5 +745,6 @@ async def detect_20_async(
     thermal_map: Optional[np.ndarray] = None,
     imu_data: Optional[dict] = None,
     tier: int = 1,
+    thermal_frame_bgr: Optional[np.ndarray] = None,
 ) -> DetectionResult20:
-    return await pipeline20.detect_async(frame_bgr, thermal_map, imu_data, tier)
+    return await pipeline20.detect_async(frame_bgr, thermal_map, imu_data, tier, thermal_frame_bgr)

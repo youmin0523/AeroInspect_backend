@@ -128,6 +128,13 @@ class Settings(BaseSettings):
     M6_PATCHCORE_ONNX: str = "m6_patchcore_feature_extractor.onnx"
     PATCHCORE_THRESHOLD: float = 27.0        # 이상 점수 임계값 (feature extractor + coreset 거리 기반)
 
+    # Thermal Anomaly (Moisture/delam YOLO 대체 — PatchCore unsupervised)
+    # 학습: thermal_yolo 정상 패치 2000개 (라벨 영역 제외 crop)
+    # 출력: anomaly heatmap → bbox 변환 후 grade 분류
+    THERMAL_ANOMALY_ONNX: str = "thermal_anomaly.onnx"
+    THERMAL_ANOMALY_THRESHOLD: float = 0.5   # anomaly score 임계 (0~1 정규화). 첫 적용 후 튜닝
+    THERMAL_ANOMALY_BBOX_MIN_AREA: int = 400 # anomaly mask → bbox 변환 시 최소 픽셀 영역
+
     # furniture_aware: 빌트인 가구 인식 (M1+M2+M3 검출이 가구 위면 false positive 차단용)
     FURNITURE_AWARE_ONNX: str = "furniture_aware.onnx"
     FURNITURE_AWARE_CONF_THRESHOLD: float = 0.60  # 매우 보수적 (확실한 가구만)

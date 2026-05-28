@@ -3014,3 +3014,32 @@ uploads/gazebo_worlds_real/
 - 예상 학습 시간: M4 seg ~10h + Thermal Anomaly ~30min + Furniture ~8h = 총 ~18~19h.
 - GPU 8GB 단독 사용 — 다른 GPU 작업 영향 받음. 사용자 다른 musdb 등 무관.
 - 학습 완료 후 자동 처리: M4_Seg ONNX → m4_yolo_context_elements.onnx 교체, thermal_anomaly 분기 코드 통합, cleanup_furniture_coco --apply 디스크 회수.
+
+### 🔧 R-v1.1.12 — chain 사고 복구 + thermal_anomaly 사전 통합 + verify_test_mode (2026-05-28 오후)
+
+> v1.2 chain 첫 시도에서 M4_Seg가 38초만에 실패. 원인 분석 → bbox 라벨 80% → polygon 변환 → 자동 재시도 대기. 동시에 학습 진행 중 사전 통합 작업 진행.
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .12.1 | 2026-05-28 14:25 | M4_Seg 38초 실패 진단 — `validate_m4_seg_labels.py` 신규로 라벨 무결성 검사. 104,460 polygon 중 83,159 (80%)가 2점만 (bbox 형식) 발견. ADE=polygon ✅ / fw_agdd (Roboflow floor_window)=bbox ❌. | training/validate_m4_seg_labels.py |
+| .12.2 | 2026-05-28 14:35 | `convert_m4_bbox_to_polygon.py` 신규 — bbox(cx cy w h) → 4꼭짓점 polygon 변환. 원본 백업 datasets/m4_context/labels_bbox_backup/. 95,875개 변환 + 검증 PASS. | training/convert_m4_bbox_to_polygon.py |
+| .12.3 | 2026-05-28 14:45 | `wait_furniture_then_m4_seg.py` 신규 — chain v1.2 완료 감지 시 M4_Seg 자동 재시도. 5분 polling. | training/wait_furniture_then_m4_seg.py |
+| .12.4 | 2026-05-28 14:50 | monitor_report.py stage_key 긴 키 우선 정렬 — "M4_Seg"가 "M4"보다 먼저 매칭. 14:24 monitor 보고 시 이전 v1.1 M4 results.csv 잘못 읽은 사고 차단. | training/monitor_report.py |
+| .12.5 | 2026-05-28 15:00 | config.py — THERMAL_ANOMALY_ONNX/THRESHOLD/BBOX_MIN_AREA 키 신규 추가. | app/config.py |
+| .12.6 | 2026-05-28 15:00 | defect_taxonomy — "thermal_anomaly_area" 클래스 추가 (B-04 매핑, 점검자가 단열/누수 현장 판단). | app/services/defect_taxonomy.py |
+| .12.7 | 2026-05-28 15:10 | inference_pipeline_20 — `_anomaly_mask_to_bboxes()` 모듈 헬퍼 신규 + `_thermal_anomaly` ONNXPatchCoreDetector 로드 (graceful, ONNX 없으면 skip) + detect()/detect_async()/detect_20()/detect_20_async() 시그니처에 `thermal_frame_bgr` 인자 추가 (backward compatible None). Tier 3에서 thermal_frame_bgr 제공 시 anomaly mask → bbox → "thermal_anomaly_area" 검출. | app/services/inference_pipeline_20.py |
+| .12.8 | 2026-05-28 15:20 | verify_test_mode.py 신규 — test_external/ 카테고리별 자동 추론 + 등급별 시각화 (CONFIRMED 빨강 / REVIEW 노랑 / REFERENCE 회색) + 통계 JSON + review_required.txt. Recall ≥99% proxy 임계. 0건 검출 카테고리 자동 표시. | training/verify_test_mode.py |
+
+### 📐 설계 결정
+
+- **graceful skip 패턴**: thermal_anomaly ONNX가 학습 완료 전 없어도 inference_pipeline_20 로드 성공. 학습 끝나면 ONNX 파일만 models_weights/에 있으면 자동 활성. 호환성 보호.
+- **thermal_frame_bgr 인자 분리**: M4 U-Net (float32 °C thermal_map)과 thermal_anomaly (BGR 의사컬러)는 입력 분리. 호출자가 명시적 전달.
+- **anomaly mask → bbox 변환**: PatchCore는 영역 출력이라 cv2.connectedComponentsWithStats로 component bbox 추출. min_area=400 픽셀 이하 노이즈 제거.
+- **thermal_anomaly_area 클래스명**: 비지도라 sub 분류 X. 점검자가 현장에서 B-02(단열)/B-04(누수) 판단. taxonomy 기본 B-04로 매핑.
+- **verify_test_mode Recall proxy**: ground truth 없어 IoU 정확도 자동 측정 X. 대신 "검출 0건 이미지"를 표시해 사람이 직접 확인. 통과 조건: 카테고리별 검출률 95%+ + 전체 Recall proxy 99%+.
+
+### 🚨 운영 영향
+
+- **chain 진행 상태**: ThermalAnomaly ✅ 완료 (150MB ONNX) / Furniture 🟢 진행중 (epoch 2/80) / M4_Seg 🔁 라벨 수정 완료, Furniture 후 자동 재시도.
+- **이번이 3차 프로젝트 마지막 제출**: 자유 진행 X, Recall ≥99% 통과 + 약한 모델 보완 사이클 필요 시 반복.
+- 호출자 (defect_processor.py, test_stream.py, api routes) thermal_frame_bgr 전달은 학습 완료 시 함께 통합.

@@ -46,7 +46,8 @@ def current_stage() -> str:
 
 
 def stage_key(stage: str) -> str:
-    for k in META:
+    # 긴 키 우선 매칭 (M4_Seg가 M4보다 먼저, Furniture가 furniture 동등)
+    for k in sorted(META.keys(), key=len, reverse=True):
         if k.lower() in stage.lower():
             return k
     return ""
