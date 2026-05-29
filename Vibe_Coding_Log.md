@@ -3091,3 +3091,27 @@ uploads/gazebo_worlds_real/
 - 학습 중 노트북 OFF 발생 시 자동 복구 절차 확립.
 - backup_checkpoints 데몬이 10분마다 별도 백업하므로 학습 폴더 손상 시에도 복원 가능.
 - 다음 사고 발생 시 사용자 한 마디 "이어서 진행" → memory + git log + Vibe log 참조 → resume_m4_seg.py 자동 실행 가능.
+
+### 📊 R-v1.1.15 — M4 seg epoch 30 중간 ONNX + verify 경로 버그 수정 (2026-05-29 17:30)
+
+> 사용자 18:30 노트북 정리 데드라인 → 17:30 학습 안전 stop + 중간 결과 ONNX 배포 + verify. 집에서 epoch 30→60 완주 예정.
+
+| 라운드 | 시각 | 작업 | 결과 |
+|-------|------|------|------|
+| .15.1 | 2026-05-29 17:30 | M4 seg 학습 stop (epoch 30/60) — last.pt 보존, 집에서 resume 가능 | best **mAP50-95 0.483** (mAP50 0.682) baseline 0.355 → **+0.128** (M5 seg 사례 +0.111 초과) |
+| .15.2 | 2026-05-29 17:31 | best.pt → ONNX export, m4_yolo_context_elements.onnx 교체 (이전 _prev 백업) | seg ONNX 104.5MB, 출력 (1,41,12096)+(1,32,192,192) |
+| .15.3 | 2026-05-29 17:33 | verify_test_mode 경로 버그 2건 수정 — ① cwd를 backend/로 변경 (settings 상대경로 ./models_weights 정상화) ② roboflow 형식 cat/test/images/*.jpg 재귀 탐색 + 카테고리당 60장 상한 | 첫 실행은 모델 전부 미로드(0건)였음 |
+| .15.4 | 2026-05-29 17:35 | verify 재실행 — 257장 7카테고리 추론 | 검출률 100% (놓침 0), CONFIRMED 1018 / REVIEW 369 / REFERENCE 673 |
+
+### 📐 학습 성과 (epoch 30 중간)
+
+- M4 bbox 0.355 → **M4 seg 0.483** (+0.128, +36% 향상). 60 epoch 완주 시 0.50~0.55 예상.
+- cuDNN 안전화 (amp=False) 효과 검증 — Furniture(amp=True) epoch 18 사망 vs M4(amp=False) epoch 30+ 안정.
+- 노트북 OFF(01:44~11:30) 사고에도 last.pt 무손실 — resume 절차 검증 완료.
+
+### ⚠️ 미해결 — 다음 세션 처리
+
+- **과검출 의심**: ext_glass 745건/60장(장당 12건), ext_building_crack 491건/60장. CONFIRMED 등급이 과다 → Precision 검증 필요.
+- **verify는 Recall만 측정**: GT 라벨 비교 없음. test_external 각 카테고리에 roboflow 라벨(labels/) 존재하므로 IoU 기반 Precision 측정 스크립트 추가 필요.
+- **M4 seg ONNX 로더 호환성**: ONNXYoloDetector가 seg 2-output(det+mask proto)을 detection으로만 파싱. 게이팅엔 bbox만 쓰므로 동작하나, mask proto 활용 시 별도 처리 필요.
+- **집에서**: resume_m4_seg.py로 epoch 30→60 완주 + Precision GT 검증 + 과검출 원인 분석.

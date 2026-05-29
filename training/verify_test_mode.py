@@ -100,6 +100,11 @@ def main():
         print(f"[verify] test_external 폴더 없음: {TEST_DIR}")
         return
 
+    # settings.AEROINSPECT_WEIGHTS_DIR = "./models_weights" 는 backend/ 기준 상대경로.
+    # training/에서 실행 시 어긋나므로 cwd를 backend/로 변경 (모델 로드 정상화).
+    import os
+    os.chdir(str(TRAIN.parent))
+
     sys.path.insert(0, str(TRAIN.parent))
     try:
         from app.services.inference_pipeline_20 import pipeline20
@@ -128,8 +133,18 @@ def main():
         cat_stats = {"images": 0, "with_detection": 0, "no_detection": 0,
                      "CONFIRMED": 0, "REVIEW": 0, "REFERENCE": 0}
 
-        images = sorted([p for p in cat_dir.iterdir()
-                         if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".bmp")])
+        # roboflow 형식 (cat/test/images/*.jpg, cat/train/images/...) 재귀 탐색.
+        # 카테고리 직속 이미지도 포함. test split 우선, 없으면 전체.
+        exts = (".jpg", ".jpeg", ".png", ".bmp")
+        test_imgs = [p for p in (cat_dir / "test" / "images").glob("*")
+                     if p.suffix.lower() in exts] if (cat_dir / "test" / "images").exists() else []
+        if test_imgs:
+            images = sorted(test_imgs)
+        else:
+            images = sorted([p for p in cat_dir.rglob("*")
+                             if p.suffix.lower() in exts and "labels" not in p.parts])
+        # 검증 비용 보호: 카테고리당 최대 60장
+        images = images[:60]
         print(f"  [{cat_name}] {len(images)}장 처리 중...")
 
         for img_path in images:
