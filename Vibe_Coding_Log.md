@@ -3067,3 +3067,27 @@ uploads/gazebo_worlds_real/
 - verify_test_mode 결과·보고서·UI에 thermal_anomaly 미등장.
 - M4 U-Net 단열 검출은 정상 가동.
 - 이번 3차 프로젝트 제출 범위: RGB 모델 (M1-M3) + M4 U-Net + M5 + M6 + Furniture(coco) + grade 시스템.
+
+### 🔁 R-v1.1.14 — chain v1.2 사후 처리 + 노트북 OFF 복구 (2026-05-29)
+
+> 18:24 chain 종료 (Furniture cuDNN 사망 epoch 18 / M4_Seg 라벨 사고 / ThermalAnomaly 성공). 라벨 수정 후 wait task가 18:29 M4_Seg 재시도 자동 시작 → 01:44 epoch 16 best 0.436 도달 → 노트북 종료 11:30까지 OFF → resume_m4_seg.py로 last.pt에서 재개.
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .14.1 | 2026-05-28 18:30 | export_furniture_onnx.py 신규 — Furniture cuDNN 사고 후 best.pt(0.349) → ONNX 98.9MB 별도 export. 학습 스크립트 내장 export 도달 못함. | training/export_furniture_onnx.py |
+| .14.2 | 2026-05-28 18:30 | train_m4_context_seg.py 끝에 verify_test_mode 자동 호출 추가 — 학습 완료 즉시 통합 검증 + cuDNN 안전화 (amp=False/workers=2/cache=False) 적용. | training/train_m4_context_seg.py |
+| .14.3 | 2026-05-29 11:30 | resume_m4_seg.py 신규 — 노트북 종료 / 사고 복구용 학습 재개 스크립트. ultralytics resume=True로 last.pt + optimizer state 완전 복원. ONNX export + verify 자동 연결. | training/resume_m4_seg.py |
+| .14.4 | 2026-05-29 11:30 | memory `project_m4_seg_resume_procedure` 신규 — "이어서 진행" 한 마디 트리거 절차. 데몬 자동 재가동 + cron/Monitor tool은 사용자 명시 시점. | memory |
+
+### 📐 설계 결정
+
+- **resume 스크립트 분리**: train_m4_context_seg.py와 별도. resume_m4_seg.py가 last.pt 자동 감지 + ultralytics resume=True 호출. 사용자 한 명령으로 재개 가능 (memory 룰).
+- **체크포인트 보존 확인**: ultralytics save_period=5라 epoch0/5/10/15.pt 별도 저장 + 매 epoch last.pt 갱신. 노트북 OFF 시점 epoch 16 + best 0.436 손실 0건.
+- **cron/Monitor 사용자 명시**: feedback_auto_progress는 학습 분기에만 적용. cron/Monitor 같은 외부 트리거는 사용자 결정 시점에만 (예측 어려움).
+- **cuDNN 안전화 검증**: Furniture는 amp=True에서 epoch 18 사망. M4는 amp=False로 epoch 16+ 안정 진행. 가설 확인.
+
+### 🚨 운영 영향
+
+- 학습 중 노트북 OFF 발생 시 자동 복구 절차 확립.
+- backup_checkpoints 데몬이 10분마다 별도 백업하므로 학습 폴더 손상 시에도 복원 가능.
+- 다음 사고 발생 시 사용자 한 마디 "이어서 진행" → memory + git log + Vibe log 참조 → resume_m4_seg.py 자동 실행 가능.

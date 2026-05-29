@@ -36,6 +36,11 @@ def train():
     print("[M4-Seg] yolov8m-seg 학습 시작 (5클래스: wall/ceiling/floor/window/door)")
     print("=" * 60)
 
+    # cuDNN 안전화 (2026-05-28 Furniture cuDNN_STATUS_EXECUTION_FAILED 학습 18 epoch 사망 교훈):
+    #   - amp=False: mixed precision OFF (cuDNN fp16 path 회피)
+    #   - workers=2: 메모리 압박 감소
+    #   - cache=False: RAM/디스크 IO 변동 제거
+    # 학습 시간은 +20~30% 늘지만 안정성 우선. 이번 제출은 한 번에 통과해야 함.
     model = YOLO("yolov8m-seg.pt")
     model.train(
         data=DATA_YAML,
@@ -43,15 +48,15 @@ def train():
         epochs=EPOCHS,
         batch=BATCH,
         imgsz=IMGSZ,
-        cache="disk",
-        workers=4,
+        cache=False,
+        workers=2,
         optimizer="AdamW",
         lr0=1e-3,
         lrf=0.01,
         patience=PATIENCE,
         warmup_epochs=3,
         close_mosaic=10,
-        amp=True,
+        amp=False,
         hsv_h=0.015, hsv_s=0.5, hsv_v=0.4,
         degrees=5.0, translate=0.1, scale=0.5,
         fliplr=0.5,
@@ -91,6 +96,22 @@ def train():
     print(f"  seg mAP50-95:  {metrics.seg.map:.4f}")
     print(f"  baseline 0.355 돌파? "
           f"{'YES ✅' if metrics.box.map >= 0.355 else 'NO'}")
+
+    # ── 학습 직후 verify_test_mode 자동 실행 ──
+    # 통합 검증 — test_external 카테고리별 추론 + 등급별 시각화 + Recall proxy
+    # Recall ≥99% 통과 못 하면 약한 모델 보완 사이클 필요
+    print("\n" + "=" * 60)
+    print("[M4-Seg → verify] test_external 자동 검증 시작")
+    print("=" * 60)
+    import subprocess as _sp
+    try:
+        _sp.run(
+            ["python", "verify_test_mode.py"],
+            cwd=str(Path(__file__).resolve().parent),
+            check=False,
+        )
+    except Exception as e:
+        print(f"[verify] 실행 실패 (수동 실행 필요): {e}")
 
 
 if __name__ == "__main__":
