@@ -30,13 +30,20 @@ from typing import Literal
 Grade = Literal["CONFIRMED", "REVIEW", "REFERENCE", "DROP"]
 
 
-CONFIRMED_STRONG = 0.85
-CONFIRMED_WITH_VOTING = 0.70
+# 2026-05-30 GT 검증 결과 반영: Precision 0.535 (목표 0.90 미달) — 임계 상향
+# M2/M3가 cross-domain (crack 이미지)에서 자기 클래스로 잘못 탐지 → CONFIRMED 임계 0.85→0.90
+# voting 동반 임계도 0.70→0.75로 +0.05 상향
+CONFIRMED_STRONG = 0.90        # 기존 0.85 → 0.90 (단일 모델 강검출 임계)
+CONFIRMED_WITH_VOTING = 0.75   # 기존 0.70 → 0.75 (voting 동반 시 임계)
 REVIEW_THRESHOLD = 0.40
 REFERENCE_THRESHOLD = 0.20
 
 # PatchCore anomaly 단독은 CONFIRMED 불가 — 라벨 없는 비지도 신호라
 # 단일 신호로 분쟁 책임 불가. 다른 모델과 동의해야 등급 상승 허용.
+#
+# 2026-05-30 시도: M2/M3 voting 필수 적용 → Recall 0.748 → 0.195 폭락. 즉시 revert.
+# voting은 cross-domain 검증 도구가 아님. M2/M3 도메인 mismatch는 conf threshold
+# 또는 학습 단계에서 해결해야 함.
 PATCHCORE_ONLY_SOURCES = {"patchcore", "thermal_anomaly"}
 
 
@@ -66,7 +73,7 @@ def grade_detection(det: dict) -> Grade:
     if conf < CONFIRMED_WITH_VOTING:
         return "REVIEW"
 
-    # conf >= 0.70 — CONFIRMED 후보
+    # conf >= 0.75 — CONFIRMED 후보
     # PatchCore/anomaly 단독은 voting 없으면 REVIEW로 강등
     if source in PATCHCORE_ONLY_SOURCES and not voted:
         return "REVIEW"
@@ -77,7 +84,7 @@ def grade_detection(det: dict) -> Grade:
     if voted:
         return "CONFIRMED"
 
-    # 0.70 <= conf < 0.85, voting X — 단일 모델 강검출이지만 voting 없음 → REVIEW
+    # 0.75 <= conf < 0.90, voting X — 단일 모델 강검출이지만 voting 없음 → REVIEW
     return "REVIEW"
 
 

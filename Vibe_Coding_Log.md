@@ -3115,3 +3115,29 @@ uploads/gazebo_worlds_real/
 - **verify는 Recall만 측정**: GT 라벨 비교 없음. test_external 각 카테고리에 roboflow 라벨(labels/) 존재하므로 IoU 기반 Precision 측정 스크립트 추가 필요.
 - **M4 seg ONNX 로더 호환성**: ONNXYoloDetector가 seg 2-output(det+mask proto)을 detection으로만 파싱. 게이팅엔 bbox만 쓰므로 동작하나, mask proto 활용 시 별도 처리 필요.
 - **집에서**: resume_m4_seg.py로 epoch 30→60 완주 + Precision GT 검증 + 과검출 원인 분석.
+
+### 🏁 R-v1.1.16 — M4 seg epoch 60 완주 + GT Precision 검증 + grade 임계 조정 (2026-05-30)
+
+> M4 seg 학습 epoch 30→60 완주 (best 0.503 baseline +0.148 +41.7%). GT 검증 3차 시도 끝에 도메인 mismatch 결론. grade 임계 0.85→0.90 + WITH_VOTING 0.70→0.75 적용.
+
+| 라운드 | 시각 | 작업 | 결과 |
+|-------|------|------|-------|
+| .16.1 | 2026-05-30 17:08 | M4 seg epoch 60 학습 완료, ONNX 자동 교체 + verify_test_mode 자동 호출 | best **mAP50-95 0.503** (mAP50 0.701) baseline +0.148 / verify 257장 CONFIRMED 737 (1차 1018→737 -28% 과검출 감소) 놓침 1건 |
+| .16.2 | 2026-05-30 17:35 | verify_gt_precision.py 신규 — roboflow GT polygon → bbox 변환 + IoU 0.5 매칭 + FP source 분포 | 1차 결과: P 0.535 / R 0.748, FP source: yolo_surface 37 / yolo_floor_window 32 / yolo_structural 11 / furniture 0 → Furniture 재학습 효과 없음 확정 |
+| .16.3 | 2026-05-30 19:18 | grade 임계 조정 시도 1: CONFIRMED_STRONG 0.85→0.90, WITH_VOTING 0.70→0.75 | 2차 결과: P 0.535 / R 0.740 — 거의 동일 (M2/M3 검출 spatial_boost로 conf 0.95+ 도달, 임계로 못 잡힘) |
+| .16.4 | 2026-05-30 19:22 | grade 임계 조정 시도 2: M2/M3 voting 필수 (PATCHCORE_ONLY와 동일) | 3차 결과: P 0.296 / R 0.195 — Recall 폭락, ext_glass(M3 단독으로 잘 잡던 영역) 60+ 결함 잃음. 즉시 롤백 |
+| .16.5 | 2026-05-30 19:26 | grade 최종 = 시도 1 상태 (CONFIRMED_STRONG 0.90 + WITH_VOTING 0.75 + voting 필수 없음) | 보고서 등재 기준 약간 강화, Recall 손실 최소 |
+
+### 📐 결론
+
+- M4 seg 학습 성공: 0.355 → 0.503 (+41.7%). cuDNN 안전화 + 노트북 OFF resume 검증 완료.
+- Furniture 재학습 불필요: FP 0건 기여. 15h 절약.
+- 도메인 mismatch 결론: test_external은 외부 인터넷 도메인(콘크리트 옹벽·유리 패널), 우리는 아파트 내부 학습. ext_glass(close-up dent)만 도메인 매칭 → P 0.93. crack 카테고리는 mismatch → P 0.22~0.26.
+- voting 필수는 cross-domain 검증 도구 아님: 같은 위치 검출 동의 ≠ 같은 도메인 정확도.
+
+### 🚨 다음 단계
+
+- 운영 영상 검증: 실제 아파트 내부 드론 영상으로 재평가 (test_external은 참고용)
+- M2/M3 cross-domain 데이터 추가 학습: 운영 결과도 낮으면 도메인 보강
+- frontend grade UI: CONFIRMED 빨강 / REVIEW 노랑 / REFERENCE 점선 + 보고서 필터
+- 문서 + 배포 + 노션 + 시연 자료.
