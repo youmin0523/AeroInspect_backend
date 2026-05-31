@@ -52,11 +52,20 @@ Spot, W.F_D.F, Wrong_punch, good
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
 | `GET` | `/health` | 카메라 + 3-모델 + 스트림 워커 상태 |
-| `POST` | `/api/v1/detect` | multipart 이미지 1장 → `DetectionResult` |
+| `POST` | `/api/v1/detect` | multipart 이미지 1장 → `DetectionResult` (R-v1.1.17: grade 필드 포함) |
 | `POST` | `/api/v1/detect/batch` | 최대 10장 → `List[DetectionResult]` |
 | `GET` | `/api/v1/defects/recent?limit=50&severity=HIGH` | 최신순 하자 로그 N건 |
 | `GET` | `/api/v1/defects` | 하자 로그 목록 (필터+페이지네이션) |
 | `POST` | `/api/v1/defects` | 하자 로그 저장 + WS broadcast |
+| `PATCH` | `/api/v1/defects/{id}/review` | 검수 승인/거부/플래그 (R-v1.1.08 감사 로그 기록) |
+| `GET` | `/api/v1/defects/{id}/audit-trail` | 단일 하자 검수 이력 조회 |
+| `GET` | `/api/v1/audit-logs` | 전체 감사 로그 (admin/owner/superadmin 전용) |
+| `GET` | `/api/v1/employee/schedule/today` | 오늘 점검 일정 (R-v1.1.05) |
+| `GET` | `/api/v1/employee/kpi/monthly` | 월간 KPI |
+| `GET` | `/api/v1/employee/activities` | 최근 활동 |
+| `GET` | `/api/v1/stream/stats` | 추론 워커 실시간 메트릭 |
+| `GET` | `/api/v1/coverage/{site_id}` | 현장별 점검 커버리지 |
+| `POST` | `/api/v1/auth/refresh` | refresh token rotation (R-v1.1.17) — 응답에 새 access_token + 새 refresh_token |
 
 ### WebSocket
 

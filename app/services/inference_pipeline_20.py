@@ -201,6 +201,8 @@ class InferencePipeline20:
             "M2-ResNet",
         )
         # M2 보조 ckpt (multi-ckpt WBF — 0.85 mAP 도달 핵심)
+        # class_names는 주 모델(M2-YOLO)과 동일 — _try_load_yolo가 dummy 추론으로 shape 검증.
+        # 4-way 매핑 일관성: ONNX out_dim(=2) ↔ class_names(2) ↔ taxonomy(surface_defect_wall/baseboard_defect)
         self._m2_yolo_v4s = self._try_load_yolo(
             wd, "m2_v4s.onnx", ["surface_defect_wall", "baseboard_defect"], "M2-v4s",
         )
@@ -210,6 +212,7 @@ class InferencePipeline20:
             wd, settings.M3_YOLO_ONNX, ["floor_defect", "glass_defect", "frame_defect"], "M3-YOLO",
         )
         # M3 보조 ckpt (multi-ckpt WBF — 0.85 mAP 도달 핵심)
+        # 4-way 매핑 일관성: ONNX out_dim(=3) ↔ class_names(3) ↔ taxonomy(floor/glass/frame)
         self._m3_yolo_v4s_retry = self._try_load_yolo(
             wd, "m3_v4s_retry.onnx", ["floor_defect", "glass_defect", "frame_defect"], "M3-v4s-retry",
         )

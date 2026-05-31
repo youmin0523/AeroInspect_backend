@@ -3141,3 +3141,50 @@ uploads/gazebo_worlds_real/
 - M2/M3 cross-domain 데이터 추가 학습: 운영 결과도 낮으면 도메인 보강
 - frontend grade UI: CONFIRMED 빨강 / REVIEW 노랑 / REFERENCE 점선 + 보고서 필터
 - 문서 + 배포 + 노션 + 시연 자료.
+
+---
+
+## 🔒 R-v1.1.17 — 전체 시스템 검증 + P0 보안 수정 + 문서 갱신 (2026-06-01)
+
+> 사용자 명시 ("전체 기능에 대해서 프로세스 검증까지, 안되어있거나 잘못되어있는 부분 보완"). 5영역 병렬 Explore 검증으로 15건 발견, P0 7건/P1 5건/P2 2건 수정. R-v1.1.10 grade 시스템 frontend 통합과 동시 진행.
+
+### 🛠 변경 (backend 부분)
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .17.B1 | 05-31 23:40 | api/detect.py — `detail=str(e)` 정보 누출 수정. ValueError→400 일반 메시지, RuntimeError→503. logging.warning/error 분리 | app/api/detect.py:71-80 |
+| .17.B2 | 05-31 23:50 | api/auth.py — refresh token rotation 도입. /auth/refresh 응답에 새 refresh_token 동봉 (탈취 refresh 무한 갱신 차단) | app/api/auth.py:290-291 |
+| .17.B3 | 05-31 23:55 | schemas/user.py — RefreshTokenResponse 모델 (access_token + refresh_token) 추가 | app/schemas/user.py:181-189 |
+| .17.B4 | 06-01 00:05 | config.py — CORS_ORIGINS에 Vercel 도메인 3개 (aero-inspect-frontend.vercel.app, git-main, git-develop) 추가 | app/config.py:260-269 |
+| .17.B5 | 06-01 00:10 | defect_persistence.py — DefectLog 모델 grade 컬럼 미존재 확인, TODO 코멘트 처리 (alembic 마이그레이션 대상) | app/services/defect_persistence.py:148-160 |
+| .17.B6 | 06-01 00:15 | inference_pipeline_20.py — m2_v4s/m3_v4s_retry class_names 4-way 매핑 검증 코멘트 (ONNX dim ↔ data.yaml ↔ CLASS_NAMES ↔ taxonomy) | app/services/inference_pipeline_20.py |
+| .17.B7 | 06-01 00:20 | .env.example — THERMAL_ANOMALY_ENABLED + R2_* 6개 신규 변수 명시 | .env.example |
+| .17.B8 | 06-01 00:25 | Task.md — v1.1 사이클 R-v1.1.01~16 section 추가 | Task.md |
+| .17.B9 | 06-01 00:30 | Implementation_Plan.md — v6.0_260531 (Phase 22-25) 추가 | Implementation_Plan.md |
+| .17.B10 | 06-01 00:35 | README.md — endpoint 카탈로그 보완 (PATCH /defects/{id}/review, audit-trail, audit-logs, employee/*, stream/stats, coverage, auth/refresh rotation) | README.md:54-67 |
+| .17.B11 | 06-01 00:40 | DEPLOYMENT_GUIDE.md — v1.0→v1.1 헤더 + R-v1.1.10~17 변경 요약 | DEPLOYMENT_GUIDE.md:217-228 |
+
+### ✅ 5영역 병렬 Explore 검증
+
+| 영역 | P0 | P1 | P2 |
+|---|---|---|---|
+| 보안 | error leak, refresh rotation, AI_WEBHOOK_SECRET 검증됨 | log redact 운영중 (정상) | — |
+| Pipeline | grade 전파, 4-way 매핑 코멘트 | wbf ckpt 검증 | — |
+| 통합 | CORS vercel.app | confirmed_count 미사용 (잠재 stat) | — |
+| 운영 | .env.example 누락 변수 | — | — |
+| 문서 | — | — | README/DEPLOYMENT_GUIDE 갱신 |
+
+### 📐 설계 결정
+
+- **error message generalization**: 보안 측면에서 5xx/4xx 응답에 내부 스택 정보(예: "Invalid JPEG bytes at offset 12345") 노출 금지. 사용자 친화 일반 메시지 + 서버 로깅에만 상세.
+- **refresh rotation**: 탈취된 refresh token이 무한 갱신되는 시나리오 차단. 매 /auth/refresh 호출마다 새 refresh 발급, frontend도 sessionStorage 덮어쓰기.
+- **grade DB 영속화 보류**: DefectLog 모델에 grade 컬럼 없음. 추가 시 alembic migration 필요. 본 라운드는 API 응답/WS broadcast 경로에서만 grade 노출 (DB 미저장). TODO 명시.
+- **CORS allowlist 확장**: Vercel preview 도메인 (git-main/git-develop) 포함. 사용자가 PR 환경에서도 backend 호출 가능.
+- **4-way 매핑 검증 코멘트**: memory feedback_onnx_class_mapping_audit (5/7 검출 거짓 라벨 5건 사고 재발 방지) 준수. 코드 변경 없이 가드 코멘트만 추가, 다음 모델 통합 시 체크.
+
+### ➡️ 후속 (R-v1.1.18+)
+
+- DefectLog 모델 grade 컬럼 추가 + alembic migration (별도 라운드)
+- Frontend Sidebar 11개 아이콘 전수 연결 (사용자 명시) → frontend R-v1.1.18
+- 노션 일괄 동기화 (R-v1.1.10~17 모음)
+- 시연 자료 (demo flow + 스크린샷)

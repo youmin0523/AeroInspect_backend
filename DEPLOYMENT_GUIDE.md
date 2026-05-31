@@ -214,5 +214,15 @@ flyctl releases rollback <version> --app aeroinspect-backend
 
 ---
 
-**문서 버전**: v1.0 (2026-05-27)
-**다음 갱신 트리거**: 신규 환경변수 추가, 신규 마이그레이션, RTO/RPO 변경
+**문서 버전**: v1.1 (2026-06-01)
+
+**v1.1 변경 (R-v1.1.10~17)**:
+- grade 시스템 (CONFIRMED/REVIEW/REFERENCE) 도입 — 보고서 등재 기준 강화
+- M4 Context bbox→seg 전환, mAP50-95 0.355→0.503 (+41.7%)
+- Thermal Anomaly PatchCore (Moisture/delam 대체), `THERMAL_ANOMALY_ENABLED=False` 보류 토글
+- refresh token rotation (auth/refresh 응답에 새 refresh_token 발급)
+- CORS_ORIGINS에 Vercel 도메인 3개 추가
+- .env.example 신규: `THERMAL_ANOMALY_ENABLED`, `R2_*` 6개
+- API 응답 정보 누출 수정 (detect.py `detail=str(e)` → 일반 메시지)
+
+**다음 갱신 트리거**: 신규 환경변수 추가, 신규 마이그레이션, RTO/RPO 변경, 신규 ML 모델 통합

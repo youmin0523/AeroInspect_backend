@@ -71,10 +71,14 @@ async def detect_single(
     try:
         return await detect_defects_async(raw)
     except ValueError as e:
-        # 이미지 디코딩 실패
-        raise HTTPException(status_code=400, detail=str(e))
+        # 이미지 디코딩 실패 — 내부 detail 로깅, 클라이언트엔 일반 메시지 (R-v1.1.17 보안)
+        import logging
+        logging.getLogger(__name__).warning("detect ValueError: %s", e)
+        raise HTTPException(status_code=400, detail="이미지 디코딩 실패 — 지원되지 않는 형식이거나 손상되었습니다.")
     except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        import logging
+        logging.getLogger(__name__).error("detect RuntimeError: %s", e)
+        raise HTTPException(status_code=503, detail="추론 서비스 일시 중단 — 잠시 후 다시 시도해주세요.")
 
 
 @router.post(

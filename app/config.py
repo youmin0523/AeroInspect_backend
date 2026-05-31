@@ -257,11 +257,15 @@ class Settings(BaseSettings):
     SENTRY_PROFILES_SAMPLE_RATE: float = 0.0
 
     # ── CORS ─────────────────────────────────
+    # R-v1.1.17: Vercel 배포 URL 추가 (memory reference_production_urls)
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://localhost:3000",
         "https://www.aeroinspect.site",
         "https://aeroinspect.site",
+        "https://aero-inspect-frontend.vercel.app",
+        "https://aero-inspect-frontend-git-main.vercel.app",
+        "https://aero-inspect-frontend-git-develop.vercel.app",
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")
