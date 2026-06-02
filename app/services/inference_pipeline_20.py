@@ -115,6 +115,9 @@ class InferencePipeline20:
         # M1: 구조·방수 (2-Stage)
         self._m1_yolo: Optional[ONNXYoloDetector] = None
         self._m1_resnet: Optional[ONNXResNetClassifier] = None
+        # M1 형제 ckpt (자가앙상블 WBF용 — 측정 0.904→0.941 recall, 2026-06-01 max_effect_grid)
+        self._m1_yolo_v3: Optional[ONNXYoloDetector] = None
+        self._m1_yolo_v4s: Optional[ONNXYoloDetector] = None
 
         # M2: 마감·표면 (2-Stage)
         self._m2_yolo: Optional[ONNXYoloDetector] = None
@@ -127,6 +130,8 @@ class InferencePipeline20:
         self._m3_resnet: Optional[ONNXResNetClassifier] = None
         # M3 보조 ckpt (multi-ckpt WBF용)
         self._m3_yolo_v4s_retry: Optional[ONNXYoloDetector] = None
+        # M3 형제 ckpt (자가앙상블 WBF용 — 측정 0.833→0.867 recall, 2026-06-01 max_effect_grid)
+        self._m3_yolo_v3: Optional[ONNXYoloDetector] = None
 
         # M4 Context: wall/ceiling/floor/window/door 인식 (게이팅 보조)
         self._m4_context: Optional[ONNXYoloDetector] = None
@@ -186,6 +191,14 @@ class InferencePipeline20:
             ["caulking_indicator", "crack_indicator", "moisture_indicator", "structural_damage", "waterproof_defect"],
             "M1-ResNet",
         )
+        # M1 형제 ckpt (자가앙상블 WBF — 측정 recall 0.904→0.941). class_names 동일(3-class).
+        # 4-way 매핑 일관성: ONNX out_dim(=3) ↔ class_names(3) ↔ taxonomy(crack/waterproof/caulking)
+        self._m1_yolo_v3 = self._try_load_yolo(
+            wd, "m1_structural_v3.onnx", ["crack", "waterproof_defect", "caulking_defect"], "M1-v3",
+        )
+        self._m1_yolo_v4s = self._try_load_yolo(
+            wd, "m1_structural_v4s.onnx", ["crack", "waterproof_defect", "caulking_defect"], "M1-v4s",
+        )
 
         # M2: 마감·표면
         self._m2_yolo = self._try_load_yolo(
@@ -215,6 +228,11 @@ class InferencePipeline20:
         # 4-way 매핑 일관성: ONNX out_dim(=3) ↔ class_names(3) ↔ taxonomy(floor/glass/frame)
         self._m3_yolo_v4s_retry = self._try_load_yolo(
             wd, "m3_v4s_retry.onnx", ["floor_defect", "glass_defect", "frame_defect"], "M3-v4s-retry",
+        )
+        # M3 형제 ckpt (자가앙상블 WBF — 측정 recall 0.833→0.867).
+        # 4-way 매핑 일관성: ONNX out_dim(=3) ↔ class_names(3) ↔ taxonomy(floor/glass/frame)
+        self._m3_yolo_v3 = self._try_load_yolo(
+            wd, "m3_floor_window_v3.onnx", ["floor_defect", "glass_defect", "frame_defect"], "M3-v3",
         )
         # M3-ResNet은 ImageFolder 알파벳 순서로 학습됨 (training/train_m3_resnet_floor_window.py
         # 의 CLASS_NAMES 선언은 문서용일 뿐, 실제 모델 인덱스는 알파벳 순)
@@ -267,6 +285,7 @@ class InferencePipeline20:
              "cabinet_builtin", "kitchen_appliance",
              "countertop_sink", "kitchen_island", "shelf"],
             "FurnitureAware",
+            input_size=768,  # furniture ONNX는 [1,3,768,768] 고정입력 (640 호출 시 차원에러)
         )
 
         # 후처리 게이트 초기화 (postprocess_config.yaml 기반)
@@ -339,7 +358,7 @@ class InferencePipeline20:
         m2_dets: List[dict] = []
         m3_dets: List[dict] = []
         if tier >= 1:
-            m1_dets = self._run_m1(frame_bgr, use_tiling=use_tiling)
+            m1_dets = self._run_m1(frame_bgr, use_tiling=use_tiling, tier=tier)
             m2_dets = self._run_m2(frame_bgr, use_tiling=use_tiling, tier=tier)
             all_dets.extend(m1_dets)
             all_dets.extend(m2_dets)
@@ -528,12 +547,25 @@ class InferencePipeline20:
         )
 
     # ── 2-Stage 실행 (YOLO → ResNet) ─────────
-    def _run_m1(self, frame_bgr: np.ndarray, use_tiling: bool = False) -> List[dict]:
-        """M1: 구조·방수 — crack→ResNet 분류."""
+    def _run_m1(self, frame_bgr: np.ndarray, use_tiling: bool = False, tier: int = 1) -> List[dict]:
+        """M1: 구조·방수 — crack→ResNet 분류.
+
+        Tier 3 + 형제 ckpt 가용 시 자가앙상블 WBF 자동 적용
+        (측정 2026-06-01: recall 0.904→0.941, +9건 회수. max_effect_grid).
+        """
         if self._m1_yolo is None:
             return []
 
-        if use_tiling:
+        siblings = [c for c in (self._m1_yolo_v3, self._m1_yolo_v4s) if c is not None]
+        if tier >= 3 and siblings:
+            dets = self._run_yolo_multi_ckpt_wbf(
+                frame_bgr,
+                ckpts=[self._m1_yolo, *siblings],
+                imgsz_per_ckpt=[[640]] * (1 + len(siblings)),
+                conf=settings.M1_CONF_THRESHOLD,
+                source_tag="yolo_structural",
+            )
+        elif use_tiling:
             dets = tiled_predict(frame_bgr, self._m1_yolo, conf=settings.M1_CONF_THRESHOLD)
         else:
             dets = self._m1_yolo.predict(frame_bgr, conf=settings.M1_CONF_THRESHOLD)
@@ -586,11 +618,13 @@ class InferencePipeline20:
         if self._m3_yolo is None:
             return []
 
-        if tier >= 3 and self._m3_yolo_v4s_retry is not None:
+        m3_siblings = [c for c in (self._m3_yolo_v4s_retry, self._m3_yolo_v3) if c is not None]
+        if tier >= 3 and m3_siblings:
             dets = self._run_yolo_multi_ckpt_wbf(
                 frame_bgr,
-                ckpts=[self._m3_yolo, self._m3_yolo_v4s_retry],
-                imgsz_per_ckpt=[[800, 960, 1024], [640, 800, 960]],
+                # 자가앙상블: 주 + 형제(v4s_retry, v3). 측정 recall 0.833→0.867 (+65건).
+                ckpts=[self._m3_yolo, *m3_siblings],
+                imgsz_per_ckpt=[[800, 960, 1024]] + [[640, 800, 960]] * len(m3_siblings),
                 conf=settings.M3_CONF_THRESHOLD,
                 source_tag="yolo_floor_window",
             )
@@ -692,15 +726,17 @@ class InferencePipeline20:
     @staticmethod
     def _try_load_yolo(
         weights_dir: str, filename: str, class_names: List[str], label: str,
+        input_size: int = 640,
     ) -> Optional[ONNXYoloDetector]:
+        # input_size: 고정입력 ONNX(예 furniture 768) 대응. dynamic ONNX는 640 기본 OK.
         path = os.path.join(weights_dir, filename)
         if not os.path.exists(path):
             print(f"[{label}] 경고: {path} 없음 — 스킵")
             return None
         try:
-            detector = ONNXYoloDetector(path, class_names)
-            # 더미 추론으로 shape 검증 (640x640 검정 이미지)
-            dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+            detector = ONNXYoloDetector(path, class_names, input_size=input_size)
+            # 더미 추론으로 shape 검증 (input_size 기준)
+            dummy = np.zeros((input_size, input_size, 3), dtype=np.uint8)
             detector.predict(dummy, conf=0.99)  # 고신뢰 임계값 → 결과 무시, shape만 확인
             print(f"[{label}] 로드+검증 완료: {path}")
             return detector

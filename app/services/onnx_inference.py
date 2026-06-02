@@ -147,9 +147,11 @@ class ONNXYoloDetector:
         iou_threshold: float = 0.45,
     ) -> List[dict]:
         """YOLO 출력 → NMS → 검출 리스트."""
-        out = output[0].T  # [num_anchors, 4+nc]
+        out = output[0].T  # [num_anchors, 4+nc(+32 mask coef for seg)]
         boxes = out[:, :4]
-        scores = out[:, 4:]
+        # seg 모델은 4+nc 뒤에 32개 mask 계수가 붙음 → nc개만 슬라이스(mask coef 제외).
+        # detect 모델은 채널이 정확히 4+nc라 [4:4+nc] == [4:] 로 동일하게 안전.
+        scores = out[:, 4:4 + self.nc]
 
         max_scores = scores.max(axis=1)
         mask = max_scores >= conf_threshold

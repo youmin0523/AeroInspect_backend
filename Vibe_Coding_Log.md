@@ -3188,3 +3188,28 @@ uploads/gazebo_worlds_real/
 - Frontend Sidebar 11개 아이콘 전수 연결 (사용자 명시) → frontend R-v1.1.18
 - 노션 일괄 동기화 (R-v1.1.10~17 모음)
 - 시연 자료 (demo flow + 스크린샷)
+
+## 🔧 R-v1.1.19 — 전체 기능 검증 + 운영 버그 5건 수정 + Roboflow fine-tune (2026-06-02)
+
+> 사용자 명시 ("전체 기능 및 UI/UX 검증"). 백엔드 pytest 전체 + frontend build 검증으로 운영 결함 5건 발견·수정. 동시에 Roboflow 데이터 fine-tune 작업(약한 모델만 효과 측정) 수행.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| .19.1 | 06-02 08:4x | 누락 모듈 복구 gazebo_world_generator (도면→Gazebo SDF world) | app/services/gazebo_world_generator.py |
+| .19.2 | 06-02 09:1x | 누락 모듈 복구 autonomous_flight_simulator (boustrophedon 커버리지+WS emit) | app/services/autonomous_flight_simulator.py |
+| .19.3 | 06-02 09:2x | furniture/M5 ONNX 차원에러: _try_load_yolo input_size 인자, furniture 768 | inference_pipeline_20.py, onnx_inference.py |
+| .19.4 | 06-02 09:3x | organization join_by_invite_code 가입 알림 누락 추가 + regenerate 오삽입 알림 제거 | app/api/organization.py |
+| .19.5 | 06-02 09:3x | 테스트 현행화: inference_pipeline(인증401/503), yolo(가중치 skip) | tests/test_inference_pipeline.py, test_yolo_inference.py |
+| .19.6 | 06-01~02 | Roboflow fine-tune: adapter+순환학습+eval 하네스+자가앙상블 검증 | training/roboflow_adapter.py, finetune_rf_cycle.py, eval/* |
+
+### 📐 설계 결정
+
+- **누락 모듈 = import만 있고 파일 미커밋 사고**: floorplan.py/missions.py가 import하던 2개 모듈이 git에 없어 `app.main` import 자체가 실패(백엔드 부팅 불가). 검증으로 발견, 실동작 구현으로 복구.
+- **고정입력 ONNX 대응**: furniture(768)/thermal(960)/M5(seg)는 입력 고정 export. _try_load_yolo에 input_size 인자 추가(기본 640, dynamic 무영향), 고정모델만 명시. feedback_onnx_class_mapping_audit 패턴.
+- **Roboflow fine-tune 결론(측정)**: 약한 모델(thermal recall +1.1%p)만 이득, 강한 모델(M2 -5.3%p)은 손해→롤백. M3/M4/M5/furniture는 Roboflow 서버 export zip 미생성(NoSuchKey)로 다운 불가. 자가앙상블(우리 형제버전 WBF)은 운영서 M1 +9.9%p/M3 +5.4%p 효과 확정.
+- **검증 결과**: 백엔드 227 passed/11 skipped/0 fail (시작 5fail+2error→0), frontend build OK.
+
+### ➡️ 후속
+
+- thermal/M4/furniture는 데이터 부족이 근본 — 추가 데이터 확보 시 재학습
+- 노션 일괄 동기화
