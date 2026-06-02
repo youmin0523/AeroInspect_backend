@@ -20,9 +20,12 @@ from app.utils.severity_mapper import (
 
 @pytest.fixture
 def service():
-    """테스트용 YOLO 서비스 (더미 모드)"""
+    """테스트용 YOLO 서비스. 가중치(구 pipeline) 없으면 skip — 운영엔 가중치 존재."""
     svc = YOLOInferenceService()
-    svc.load_model()  # 가중치 없으면 더미 모드
+    try:
+        svc.load_model()
+    except FileNotFoundError:
+        pytest.skip("구 pipeline 가중치 미존재 환경 — 더미 로드 불가, 스킵")
     return svc
 
 

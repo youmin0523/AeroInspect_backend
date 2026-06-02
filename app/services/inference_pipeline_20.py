@@ -30,6 +30,10 @@ from app.schemas.detection import (
     ModelsLoadedStatus20,
 )
 from app.services.alignment_detector import alignment_detector
+from app.services.confidence_grader import (
+    grade_detection,
+    grade_display_ko,
+)
 from app.services.defect_taxonomy import get_20defect_info
 from app.services.ensemble import (
     compute_combined_confidence,
@@ -47,6 +51,41 @@ from app.services.onnx_inference import (
 )
 from app.services.geometric_gate import GeometricGate, load_geometric_gate_from_config
 from app.services.furniture_gate import FurnitureGate, load_furniture_gate_from_config
+
+
+def _anomaly_mask_to_bboxes(
+    mask: Optional[np.ndarray],
+    dst_shape: tuple,
+    min_area: int,
+    score: float,
+) -> List[dict]:
+    """PatchCore anomaly mask → 연결성분 bbox 리스트.
+
+    Args:
+        mask: uint8 binary mask (0 or 255), 학습 입력 해상도 (보통 224)
+        dst_shape: 원본 frame (H, W) — bbox 좌표계
+        min_area: 최소 픽셀 영역 (이하 제거)
+        score: PatchCore 단일 anomaly score — 모든 component에 부여
+    """
+    if mask is None or mask.size == 0:
+        return []
+    try:
+        import cv2  # 지연 import (모듈 import 비용 방어)
+    except ImportError:
+        return []
+    h, w = dst_shape
+    mask_resized = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
+    n_labels, _, stats, _ = cv2.connectedComponentsWithStats(mask_resized, connectivity=8)
+    bboxes: List[dict] = []
+    for i in range(1, n_labels):  # 0 = background
+        x, y, bw, bh, area = stats[i]
+        if area < min_area:
+            continue
+        bboxes.append({
+            "bbox_xyxy": [float(x), float(y), float(x + bw), float(y + bh)],
+            "conf": float(score),
+        })
+    return bboxes
 
 
 # postprocess_config.yaml 로딩 (모듈 레벨 — 한 번만)
@@ -76,6 +115,9 @@ class InferencePipeline20:
         # M1: 구조·방수 (2-Stage)
         self._m1_yolo: Optional[ONNXYoloDetector] = None
         self._m1_resnet: Optional[ONNXResNetClassifier] = None
+        # M1 형제 ckpt (자가앙상블 WBF용 — 측정 0.904→0.941 recall, 2026-06-01 max_effect_grid)
+        self._m1_yolo_v3: Optional[ONNXYoloDetector] = None
+        self._m1_yolo_v4s: Optional[ONNXYoloDetector] = None
 
         # M2: 마감·표면 (2-Stage)
         self._m2_yolo: Optional[ONNXYoloDetector] = None
@@ -88,6 +130,8 @@ class InferencePipeline20:
         self._m3_resnet: Optional[ONNXResNetClassifier] = None
         # M3 보조 ckpt (multi-ckpt WBF용)
         self._m3_yolo_v4s_retry: Optional[ONNXYoloDetector] = None
+        # M3 형제 ckpt (자가앙상블 WBF용 — 측정 0.833→0.867 recall, 2026-06-01 max_effect_grid)
+        self._m3_yolo_v3: Optional[ONNXYoloDetector] = None
 
         # M4 Context: wall/ceiling/floor/window/door 인식 (게이팅 보조)
         self._m4_context: Optional[ONNXYoloDetector] = None
@@ -95,8 +139,11 @@ class InferencePipeline20:
         # furniture_aware: 빌트인 가구 인식 (FP 차단 보조)
         self._furniture_aware: Optional[ONNXYoloDetector] = None
 
-        # M6: PatchCore
+        # M6: PatchCore (RGB 표면 anomaly)
         self._m6_patchcore: Optional[ONNXPatchCoreDetector] = None
+
+        # Thermal Anomaly PatchCore (Moisture/delam YOLO 대체 — 의사컬러 입력)
+        self._thermal_anomaly: Optional[ONNXPatchCoreDetector] = None
 
         # 후처리 게이트 (postprocess_config.yaml 기반)
         self._postprocess_config: dict = _load_postprocess_config()
@@ -144,6 +191,14 @@ class InferencePipeline20:
             ["caulking_indicator", "crack_indicator", "moisture_indicator", "structural_damage", "waterproof_defect"],
             "M1-ResNet",
         )
+        # M1 형제 ckpt (자가앙상블 WBF — 측정 recall 0.904→0.941). class_names 동일(3-class).
+        # 4-way 매핑 일관성: ONNX out_dim(=3) ↔ class_names(3) ↔ taxonomy(crack/waterproof/caulking)
+        self._m1_yolo_v3 = self._try_load_yolo(
+            wd, "m1_structural_v3.onnx", ["crack", "waterproof_defect", "caulking_defect"], "M1-v3",
+        )
+        self._m1_yolo_v4s = self._try_load_yolo(
+            wd, "m1_structural_v4s.onnx", ["crack", "waterproof_defect", "caulking_defect"], "M1-v4s",
+        )
 
         # M2: 마감·표면
         self._m2_yolo = self._try_load_yolo(
@@ -159,6 +214,8 @@ class InferencePipeline20:
             "M2-ResNet",
         )
         # M2 보조 ckpt (multi-ckpt WBF — 0.85 mAP 도달 핵심)
+        # class_names는 주 모델(M2-YOLO)과 동일 — _try_load_yolo가 dummy 추론으로 shape 검증.
+        # 4-way 매핑 일관성: ONNX out_dim(=2) ↔ class_names(2) ↔ taxonomy(surface_defect_wall/baseboard_defect)
         self._m2_yolo_v4s = self._try_load_yolo(
             wd, "m2_v4s.onnx", ["surface_defect_wall", "baseboard_defect"], "M2-v4s",
         )
@@ -168,8 +225,14 @@ class InferencePipeline20:
             wd, settings.M3_YOLO_ONNX, ["floor_defect", "glass_defect", "frame_defect"], "M3-YOLO",
         )
         # M3 보조 ckpt (multi-ckpt WBF — 0.85 mAP 도달 핵심)
+        # 4-way 매핑 일관성: ONNX out_dim(=3) ↔ class_names(3) ↔ taxonomy(floor/glass/frame)
         self._m3_yolo_v4s_retry = self._try_load_yolo(
             wd, "m3_v4s_retry.onnx", ["floor_defect", "glass_defect", "frame_defect"], "M3-v4s-retry",
+        )
+        # M3 형제 ckpt (자가앙상블 WBF — 측정 recall 0.833→0.867).
+        # 4-way 매핑 일관성: ONNX out_dim(=3) ↔ class_names(3) ↔ taxonomy(floor/glass/frame)
+        self._m3_yolo_v3 = self._try_load_yolo(
+            wd, "m3_floor_window_v3.onnx", ["floor_defect", "glass_defect", "frame_defect"], "M3-v3",
         )
         # M3-ResNet은 ImageFolder 알파벳 순서로 학습됨 (training/train_m3_resnet_floor_window.py
         # 의 CLASS_NAMES 선언은 문서용일 뿐, 실제 모델 인덱스는 알파벳 순)
@@ -202,6 +265,18 @@ class InferencePipeline20:
             self._m6_patchcore = ONNXPatchCoreDetector(pc_path, settings.PATCHCORE_THRESHOLD)
             print(f"[M6-PatchCore] 로드 완료: {pc_path}")
 
+        # Thermal Anomaly (Moisture/delam YOLO 대체) — 의사컬러 입력 PatchCore
+        # 사용자 명시 보류 (2026-05-28): THERMAL_ANOMALY_ENABLED=False면 로드 X
+        if settings.THERMAL_ANOMALY_ENABLED:
+            ta_path = os.path.join(wd, settings.THERMAL_ANOMALY_ONNX)
+            if os.path.exists(ta_path):
+                self._thermal_anomaly = ONNXPatchCoreDetector(ta_path, settings.THERMAL_ANOMALY_THRESHOLD)
+                print(f"[ThermalAnomaly] 로드 완료: {ta_path}")
+            else:
+                print(f"[ThermalAnomaly] ONNX 없음 — 비활성 (학습 완료 후 자동 활성)")
+        else:
+            print(f"[ThermalAnomaly] 보류 상태 (THERMAL_ANOMALY_ENABLED=False) — ONNX 보존, 로드 X")
+
         # furniture_aware: 빌트인 가구 인식 (FP 차단)
         self._furniture_aware = self._try_load_yolo(
             wd, settings.FURNITURE_AWARE_ONNX,
@@ -210,6 +285,7 @@ class InferencePipeline20:
              "cabinet_builtin", "kitchen_appliance",
              "countertop_sink", "kitchen_island", "shelf"],
             "FurnitureAware",
+            input_size=768,  # furniture ONNX는 [1,3,768,768] 고정입력 (640 호출 시 차원에러)
         )
 
         # 후처리 게이트 초기화 (postprocess_config.yaml 기반)
@@ -228,6 +304,7 @@ class InferencePipeline20:
             self._m6_patchcore is not None,
             self._m4_context is not None,
             self._furniture_aware is not None,
+            self._thermal_anomaly is not None,
         ])
 
         # 최소 필수 모델: M1-YOLO + M2-YOLO (구조+마감 하자 탐지 필수)
@@ -254,6 +331,7 @@ class InferencePipeline20:
         thermal_map: Optional[np.ndarray] = None,
         imu_data: Optional[dict] = None,
         tier: int = 1,
+        thermal_frame_bgr: Optional[np.ndarray] = None,
     ) -> DetectionResult20:
         """
         통합 추론. tier로 계층적 실행 제어.
@@ -262,7 +340,8 @@ class InferencePipeline20:
             frame_bgr: RGB 카메라 프레임 (BGR)
             thermal_map: 열화상 온도맵 float32 [H,W] °C (선택)
             imu_data: 드론 IMU {roll, pitch, yaw} (선택)
-            tier: 실행 계층 (1=M1+M2, 2=+M3+M5, 3=+M4+M6)
+            tier: 실행 계층 (1=M1+M2, 2=+M3+M5, 3=+M4+M6+ThermalAnomaly)
+            thermal_frame_bgr: 열화상 의사컬러 프레임 BGR (Thermal Anomaly 입력, 선택)
         """
         h, w = frame_bgr.shape[:2]
         all_dets: List[dict] = []
@@ -279,7 +358,7 @@ class InferencePipeline20:
         m2_dets: List[dict] = []
         m3_dets: List[dict] = []
         if tier >= 1:
-            m1_dets = self._run_m1(frame_bgr, use_tiling=use_tiling)
+            m1_dets = self._run_m1(frame_bgr, use_tiling=use_tiling, tier=tier)
             m2_dets = self._run_m2(frame_bgr, use_tiling=use_tiling, tier=tier)
             all_dets.extend(m1_dets)
             all_dets.extend(m2_dets)
@@ -319,6 +398,28 @@ class InferencePipeline20:
                 mask, score = self._m6_patchcore.detect(frame_bgr)
                 anomaly_score = score
                 all_dets = ensemble_with_patchcore(all_dets, mask, score)
+
+            # ── Thermal Anomaly (Moisture/delam YOLO 대체) ──
+            # thermal_frame_bgr 제공 시 PatchCore anomaly heatmap → bbox 변환
+            # Recall 우선 — 점검자 모드 노출용 REVIEW/REFERENCE 등급으로 분류 가능
+            if self._thermal_anomaly is not None and thermal_frame_bgr is not None:
+                try:
+                    ta_mask, ta_score = self._thermal_anomaly.detect(thermal_frame_bgr)
+                    ta_bboxes = _anomaly_mask_to_bboxes(
+                        ta_mask,
+                        dst_shape=(h, w),
+                        min_area=settings.THERMAL_ANOMALY_BBOX_MIN_AREA,
+                        score=ta_score,
+                    )
+                    for bb in ta_bboxes:
+                        all_dets.append({
+                            "class": "thermal_anomaly_area",
+                            "conf": bb["conf"],
+                            "bbox_xyxy": bb["bbox_xyxy"],
+                            "defect_source": "thermal_anomaly",
+                        })
+                except Exception as e:
+                    print(f"[ThermalAnomaly] 추론 실패: {e}")
 
         # ── 환경 컨텍스트 추론 (M4 Context: wall/ceiling/floor/window/door) ──
         context_detections: List[dict] = []
@@ -360,10 +461,13 @@ class InferencePipeline20:
         all_dets = cross_model_nms(all_dets)
         after_nms_count = len(all_dets)
 
-        # ── severity_mapper 매핑 ──
+        # ── severity_mapper 매핑 + 신뢰도 등급(grade) 산정 ──
         defect_detections: List[DefectDetection] = []
         for det in all_dets:
             code, display_ko, severity, area = get_20defect_info(det["class"])
+            g = grade_detection(det)
+            if g == "DROP":
+                continue  # 표시 임계 미달
             defect_detections.append(DefectDetection(**{
                 "class": det["class"],
                 "class_display_en": det["class"].replace("_", " ").title(),
@@ -372,12 +476,36 @@ class InferencePipeline20:
                 "conf": det["conf"],
                 "bbox_xyxy": det.get("bbox_xyxy", []),
                 "severity": det.get("severity") or severity,
+                "grade": g,
+                "grade_display_ko": grade_display_ko(g),
                 "defect_source": det.get("defect_source", ""),
                 "ensemble_boosted": det.get("ensemble_boosted", False),
+                "cross_model_boosted": det.get("cross_model_boosted", False),
             }))
+
+        # insulation/alignment에도 grade 부여 (보고서 노출 일관성)
+        for ins in insulation_results:
+            g = grade_detection({"conf": ins.conf, "defect_source": ins.defect_source})
+            ins.grade = g if g != "DROP" else "REFERENCE"
+            ins.grade_display_ko = grade_display_ko(ins.grade)
+        for al in alignment_results:
+            g = grade_detection({"conf": al.conf, "defect_source": al.defect_source})
+            al.grade = g if g != "DROP" else "REFERENCE"
+            al.grade_display_ko = grade_display_ko(al.grade)
 
         defect_count = len(defect_detections) + len(insulation_results) + len(alignment_results)
         has_defect = defect_count > 0
+
+        confirmed_count = (
+            sum(1 for d in defect_detections if d.grade == "CONFIRMED")
+            + sum(1 for i in insulation_results if i.grade == "CONFIRMED")
+            + sum(1 for a in alignment_results if a.grade == "CONFIRMED")
+        )
+        review_count = (
+            sum(1 for d in defect_detections if d.grade == "REVIEW")
+            + sum(1 for i in insulation_results if i.grade == "REVIEW")
+            + sum(1 for a in alignment_results if a.grade == "REVIEW")
+        )
 
         # ── 진단 트레이스: 0건 검출 시 단계별 손실 지점 추적 ──
         # Why: mock 폴백을 제거한 뒤 검출이 안 되는 케이스가 어디서 빠지는지(M1/M2/M3 raw,
@@ -399,6 +527,8 @@ class InferencePipeline20:
             anomaly_score=anomaly_score,
             has_defect=has_defect,
             defect_count=defect_count,
+            confirmed_count=confirmed_count,
+            review_count=review_count,
             image_shape=ImageShape(width=w, height=h),
             tier_executed=tier,
         )
@@ -409,17 +539,33 @@ class InferencePipeline20:
         thermal_map: Optional[np.ndarray] = None,
         imu_data: Optional[dict] = None,
         tier: int = 1,
+        thermal_frame_bgr: Optional[np.ndarray] = None,
     ) -> DetectionResult20:
         """비동기 래퍼."""
-        return await asyncio.to_thread(self.detect, frame_bgr, thermal_map, imu_data, tier)
+        return await asyncio.to_thread(
+            self.detect, frame_bgr, thermal_map, imu_data, tier, thermal_frame_bgr,
+        )
 
     # ── 2-Stage 실행 (YOLO → ResNet) ─────────
-    def _run_m1(self, frame_bgr: np.ndarray, use_tiling: bool = False) -> List[dict]:
-        """M1: 구조·방수 — crack→ResNet 분류."""
+    def _run_m1(self, frame_bgr: np.ndarray, use_tiling: bool = False, tier: int = 1) -> List[dict]:
+        """M1: 구조·방수 — crack→ResNet 분류.
+
+        Tier 3 + 형제 ckpt 가용 시 자가앙상블 WBF 자동 적용
+        (측정 2026-06-01: recall 0.904→0.941, +9건 회수. max_effect_grid).
+        """
         if self._m1_yolo is None:
             return []
 
-        if use_tiling:
+        siblings = [c for c in (self._m1_yolo_v3, self._m1_yolo_v4s) if c is not None]
+        if tier >= 3 and siblings:
+            dets = self._run_yolo_multi_ckpt_wbf(
+                frame_bgr,
+                ckpts=[self._m1_yolo, *siblings],
+                imgsz_per_ckpt=[[640]] * (1 + len(siblings)),
+                conf=settings.M1_CONF_THRESHOLD,
+                source_tag="yolo_structural",
+            )
+        elif use_tiling:
             dets = tiled_predict(frame_bgr, self._m1_yolo, conf=settings.M1_CONF_THRESHOLD)
         else:
             dets = self._m1_yolo.predict(frame_bgr, conf=settings.M1_CONF_THRESHOLD)
@@ -472,11 +618,13 @@ class InferencePipeline20:
         if self._m3_yolo is None:
             return []
 
-        if tier >= 3 and self._m3_yolo_v4s_retry is not None:
+        m3_siblings = [c for c in (self._m3_yolo_v4s_retry, self._m3_yolo_v3) if c is not None]
+        if tier >= 3 and m3_siblings:
             dets = self._run_yolo_multi_ckpt_wbf(
                 frame_bgr,
-                ckpts=[self._m3_yolo, self._m3_yolo_v4s_retry],
-                imgsz_per_ckpt=[[800, 960, 1024], [640, 800, 960]],
+                # 자가앙상블: 주 + 형제(v4s_retry, v3). 측정 recall 0.833→0.867 (+65건).
+                ckpts=[self._m3_yolo, *m3_siblings],
+                imgsz_per_ckpt=[[800, 960, 1024]] + [[640, 800, 960]] * len(m3_siblings),
                 conf=settings.M3_CONF_THRESHOLD,
                 source_tag="yolo_floor_window",
             )
@@ -578,15 +726,17 @@ class InferencePipeline20:
     @staticmethod
     def _try_load_yolo(
         weights_dir: str, filename: str, class_names: List[str], label: str,
+        input_size: int = 640,
     ) -> Optional[ONNXYoloDetector]:
+        # input_size: 고정입력 ONNX(예 furniture 768) 대응. dynamic ONNX는 640 기본 OK.
         path = os.path.join(weights_dir, filename)
         if not os.path.exists(path):
             print(f"[{label}] 경고: {path} 없음 — 스킵")
             return None
         try:
-            detector = ONNXYoloDetector(path, class_names)
-            # 더미 추론으로 shape 검증 (640x640 검정 이미지)
-            dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+            detector = ONNXYoloDetector(path, class_names, input_size=input_size)
+            # 더미 추론으로 shape 검증 (input_size 기준)
+            dummy = np.zeros((input_size, input_size, 3), dtype=np.uint8)
             detector.predict(dummy, conf=0.99)  # 고신뢰 임계값 → 결과 무시, shape만 확인
             print(f"[{label}] 로드+검증 완료: {path}")
             return detector
@@ -628,8 +778,9 @@ def detect_20(
     thermal_map: Optional[np.ndarray] = None,
     imu_data: Optional[dict] = None,
     tier: int = 1,
+    thermal_frame_bgr: Optional[np.ndarray] = None,
 ) -> DetectionResult20:
-    return pipeline20.detect(frame_bgr, thermal_map, imu_data, tier)
+    return pipeline20.detect(frame_bgr, thermal_map, imu_data, tier, thermal_frame_bgr)
 
 
 async def detect_20_async(
@@ -637,5 +788,6 @@ async def detect_20_async(
     thermal_map: Optional[np.ndarray] = None,
     imu_data: Optional[dict] = None,
     tier: int = 1,
+    thermal_frame_bgr: Optional[np.ndarray] = None,
 ) -> DetectionResult20:
-    return await pipeline20.detect_async(frame_bgr, thermal_map, imu_data, tier)
+    return await pipeline20.detect_async(frame_bgr, thermal_map, imu_data, tier, thermal_frame_bgr)

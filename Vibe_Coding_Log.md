@@ -2943,3 +2943,273 @@ uploads/gazebo_worlds_real/
 ### 🚨 운영 영향
 
 - 사용자 후속 작업: ① Sentry DSN 발급 → flyctl secrets set ② flyctl ssh console -C "alembic upgrade head" (R-v1.1.08 마이그레이션 적용) ③ 백업 cron 등록 ④ min_machines_running 결정.
+
+
+---
+
+## 🎯 R-v1.1.10 — 신뢰도 3단계 등급 시스템 + Thermal/M4 재설계 학습 스크립트 (2026-05-28 오전)
+
+> "false negative(놓침)도 문제지만 false positive(오탐)로 시시비비 따져야 되는 부분도 사용자 입장에서 문제" — Precision↔Recall 균형 재설계. 단일 threshold 대신 신뢰도 등급으로 분리.
+
+### 🛠 변경
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .10.1 | 2026-05-28 오전 | 체이닝 학습 중단 (M4 epoch 20/50 best 0.384, +0.029 개선중) — 점진 개선보다 근본 재설계 우선. | (배경) |
+| .10.2 | 2026-05-28 오전 | confidence_grader.py 신규 — CONFIRMED(≥0.85 or ≥0.70+voting) / REVIEW(0.40~0.70) / REFERENCE(0.20~0.40) / DROP(<0.20) 4단계 분류. PatchCore·anomaly 단독은 CONFIRMED 불가 규칙(분쟁 책임 회피). 12 케이스 단위 테스트 PASS. | app/services/confidence_grader.py |
+| .10.3 | 2026-05-28 오전 | schema 확장 — DefectDetection/InsulationDetection/AlignmentDetection 모두 `grade` + `grade_display_ko` 필드. DetectionResult20에 `confirmed_count`/`review_count` 분류 카운트. | app/schemas/detection.py |
+| .10.4 | 2026-05-28 오전 | inference_pipeline_20에 grade 산정 통합 — cross_model_nms 후 grade_detection() 호출, DROP 검출은 출력에서 제거. insulation/alignment도 동일 등급 부여. | app/services/inference_pipeline_20.py |
+| .10.5 | 2026-05-28 오전 | onnx_inference ONNXPatchCoreDetector — anomalib 1.x(2-output)/2.x(4-output) 출력 호환 분기. | app/services/onnx_inference.py |
+| .10.6 | 2026-05-28 오전 | train_m4_context_seg.py 신규 — bbox→seg 전환. M4 라벨이 이미 polygon 형식이라 변환 작업 불필요(큰 발견). M5 seg 전환 성공 패턴(0.355→0.466) 재현 목표. | training/train_m4_context_seg.py |
+| .10.7 | 2026-05-28 오전 | prepare_thermal_anomaly.py + train_thermal_anomaly.py 신규 — Moisture/delam YOLO 포기, PatchCore unsupervised로 대체. 1788장 라벨 과밀(평균 8.8/최대 170 인스턴스) → 박스 라벨 자체가 노이즈. 정상 패치 추출 후 anomaly heatmap. | training/prepare_thermal_anomaly.py, training/train_thermal_anomaly.py |
+| .10.8 | 2026-05-28 오전 | cleanup_furniture_coco.py 신규 — furniture 학습 후 coco_* 보강 파일 삭제. dry-run 기본, --apply 명시 시 실제 삭제 (안전장치). | training/cleanup_furniture_coco.py |
+| .10.9 | 2026-05-28 오전 | 이전 라운드 누락 sync — analyze_datasets/monitor_report/remap_thermal_v2/train_chain_v1_1/train_furniture_aware/train_thermal_yolo/wait_musdb_then_train + train_m5_frame_seg/train_m6_patchcore 수정. | training/ 9건 |
+
+### 📐 설계 결정
+
+- 단일 threshold 폐지 — 모든 검출을 동일 conf 임계로 판정하면 Precision/Recall 둘 다 못 잡음. 등급 분리로 보고서(CONFIRMED만)·점검자 모드(REVIEW까지)·디버그 모드(REFERENCE까지) 3 단계 노출 제어.
+- 20종 클래스 통일 — 사용자 명시 "왜 단열만 특례 대우?". `feedback_insulation_strict` memory 정책 갱신, 단열 권장점검 threshold 0.35 → 0.40 통일.
+- PatchCore/anomaly 단독 CONFIRMED 불가 — 라벨 없는 비지도 신호로 분쟁 책임 불가. voting 통과(cross_model_boosted/ensemble_boosted) 시에만 CONFIRMED 승격.
+- Thermal Moisture/delam YOLO 포기 — 10번 재학습해도 mAP50-95 0.18 한계. 데이터 구조 문제(과밀 라벨)지 모델 문제 아님. PatchCore anomaly heatmap으로 영역 단위 표시 + Recall 100% 가능.
+- M4 seg 전환 — 데이터 라벨이 이미 polygon 형식이라 추가 작업 없음. M5 seg 전환 성공 사례(+0.111) 재현 가능성 높음.
+
+### ✅ 검증
+
+- confidence_grader 12 케이스 단위 테스트 PASS (CONFIRMED 강검출/voting, REVIEW 중간, REFERENCE 약, DROP 임계 미달, PatchCore 단독 강등 등 전 경로).
+- DefectDetection(class="crack", conf=0.8) 인스턴스 생성 OK, grade 기본값 "REVIEW".
+- inference_pipeline_20 import OK (pipeline20 인스턴스화).
+
+### 🚨 운영 영향
+
+- API 응답 형식 변경: detections[].grade / grade_display_ko 신규 필드, DetectionResult20.confirmed_count·review_count 신규. 기존 frontend는 무시(낙수 호환).
+- frontend 미반영: 등급별 시각화(빨강 확정 / 노랑 권장점검 / 점선 참고용) + 보고서 필터(CONFIRMED만)는 frontend repo에서 별도 작업. v1.2 예정.
+- 학습 미실행: 스크립트만 작성, GPU 학습은 사용자 신호 시점에 시작. 예상 ~15h (M4 seg 6h + thermal_anomaly 30min + furniture 8h).
+
+### 🔧 R-v1.1.10 patch — gitignore audit + coco_furniture_supplement sync (2026-05-28 오전)
+
+- `.gitignore`: `training/results/` (120MB Patchcore 산출물) + `datasets/` (분기 repo root 25MB) 추가. memory `feedback_gitignore_periodic_audit` 정기 점검 룰 적용.
+- `training/coco_furniture_supplement.py` 신규 sync (R-v1.0 furniture COCO 보강 스크립트 누락분).
+
+### 🚀 R-v1.1.11 — v1.2 학습 chain 가동 + 자동저장 안전장치 (2026-05-28 오전)
+
+> 사용자 결정: "학습 시작해 확실하게 하자". 후속: "컴퓨터가 뻗을 수도 있으니까 중간중간 자동저장되도록".
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .11.1 | 2026-05-28 오전 | prepare_thermal_anomaly.py 실행 — thermal_yolo 6994장에서 라벨 영역 제외 정상 패치 2000개 추출 (datasets/thermal_anomaly/good/). | datasets/thermal_anomaly/good/×2000 |
+| .11.2 | 2026-05-28 오전 | train_chain_v1_2.py 신규 — STAGES = [M4_Seg, ThermalAnomaly, Furniture]. precondition_ok() 자동 검증 (thermal_anomaly 정상 패치 ≥100). 한 단계 실패해도 다음 계속. | training/train_chain_v1_2.py |
+| .11.3 | 2026-05-28 오전 | monitor_report.py META 확장 — M4_Seg(runs/segment/...), ThermalAnomaly, Furniture 키 추가. results_csv_for()가 seg 모델 경로 분기. | training/monitor_report.py |
+| .11.4 | 2026-05-28 오전 | backup_checkpoints.py 신규 — 10분 주기로 runs/ 트리 스캔, best.pt/last.pt/best.onnx를 training/backups/<run_id>/로 복사. mtime 비교로 IO 절약. 컴퓨터 뻗을 경우 학습 산출물 보호. | training/backup_checkpoints.py |
+| .11.5 | 2026-05-28 오전 | 가동: chain v1.2 + monitor 5min loop + backup_checkpoints 10min loop (3개 백그라운드 데몬). | (runtime) |
+
+### 🛠 안전장치 설계
+
+- **체크포인트 자동 백업**: ultralytics는 epoch 끝마다 last.pt, mAP 최고 시 best.pt 저장. backup_checkpoints.py가 10분마다 별도 backups/ 폴더로 복제 — 학습 폴더 손상 시 복구 가능.
+- **chain 진행 추적**: runs/chain_status.txt + runs/chain_history.log로 단계 전환 영구 기록.
+- **모니터 누적 로그**: runs/monitor_log.txt에 5분 단위 진행률·자원 누적 — power 손실 시 마지막 알려진 상태 재구성 가능.
+- **결과 자동 백업**: 학습 스크립트들이 best.pt → ONNX → models_weights/_prev.onnx 백업 후 교체. 직전 버전 자동 보존.
+
+### 🚨 운영 영향
+
+- 예상 학습 시간: M4 seg ~10h + Thermal Anomaly ~30min + Furniture ~8h = 총 ~18~19h.
+- GPU 8GB 단독 사용 — 다른 GPU 작업 영향 받음. 사용자 다른 musdb 등 무관.
+- 학습 완료 후 자동 처리: M4_Seg ONNX → m4_yolo_context_elements.onnx 교체, thermal_anomaly 분기 코드 통합, cleanup_furniture_coco --apply 디스크 회수.
+
+### 🔧 R-v1.1.12 — chain 사고 복구 + thermal_anomaly 사전 통합 + verify_test_mode (2026-05-28 오후)
+
+> v1.2 chain 첫 시도에서 M4_Seg가 38초만에 실패. 원인 분석 → bbox 라벨 80% → polygon 변환 → 자동 재시도 대기. 동시에 학습 진행 중 사전 통합 작업 진행.
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .12.1 | 2026-05-28 14:25 | M4_Seg 38초 실패 진단 — `validate_m4_seg_labels.py` 신규로 라벨 무결성 검사. 104,460 polygon 중 83,159 (80%)가 2점만 (bbox 형식) 발견. ADE=polygon ✅ / fw_agdd (Roboflow floor_window)=bbox ❌. | training/validate_m4_seg_labels.py |
+| .12.2 | 2026-05-28 14:35 | `convert_m4_bbox_to_polygon.py` 신규 — bbox(cx cy w h) → 4꼭짓점 polygon 변환. 원본 백업 datasets/m4_context/labels_bbox_backup/. 95,875개 변환 + 검증 PASS. | training/convert_m4_bbox_to_polygon.py |
+| .12.3 | 2026-05-28 14:45 | `wait_furniture_then_m4_seg.py` 신규 — chain v1.2 완료 감지 시 M4_Seg 자동 재시도. 5분 polling. | training/wait_furniture_then_m4_seg.py |
+| .12.4 | 2026-05-28 14:50 | monitor_report.py stage_key 긴 키 우선 정렬 — "M4_Seg"가 "M4"보다 먼저 매칭. 14:24 monitor 보고 시 이전 v1.1 M4 results.csv 잘못 읽은 사고 차단. | training/monitor_report.py |
+| .12.5 | 2026-05-28 15:00 | config.py — THERMAL_ANOMALY_ONNX/THRESHOLD/BBOX_MIN_AREA 키 신규 추가. | app/config.py |
+| .12.6 | 2026-05-28 15:00 | defect_taxonomy — "thermal_anomaly_area" 클래스 추가 (B-04 매핑, 점검자가 단열/누수 현장 판단). | app/services/defect_taxonomy.py |
+| .12.7 | 2026-05-28 15:10 | inference_pipeline_20 — `_anomaly_mask_to_bboxes()` 모듈 헬퍼 신규 + `_thermal_anomaly` ONNXPatchCoreDetector 로드 (graceful, ONNX 없으면 skip) + detect()/detect_async()/detect_20()/detect_20_async() 시그니처에 `thermal_frame_bgr` 인자 추가 (backward compatible None). Tier 3에서 thermal_frame_bgr 제공 시 anomaly mask → bbox → "thermal_anomaly_area" 검출. | app/services/inference_pipeline_20.py |
+| .12.8 | 2026-05-28 15:20 | verify_test_mode.py 신규 — test_external/ 카테고리별 자동 추론 + 등급별 시각화 (CONFIRMED 빨강 / REVIEW 노랑 / REFERENCE 회색) + 통계 JSON + review_required.txt. Recall ≥99% proxy 임계. 0건 검출 카테고리 자동 표시. | training/verify_test_mode.py |
+
+### 📐 설계 결정
+
+- **graceful skip 패턴**: thermal_anomaly ONNX가 학습 완료 전 없어도 inference_pipeline_20 로드 성공. 학습 끝나면 ONNX 파일만 models_weights/에 있으면 자동 활성. 호환성 보호.
+- **thermal_frame_bgr 인자 분리**: M4 U-Net (float32 °C thermal_map)과 thermal_anomaly (BGR 의사컬러)는 입력 분리. 호출자가 명시적 전달.
+- **anomaly mask → bbox 변환**: PatchCore는 영역 출력이라 cv2.connectedComponentsWithStats로 component bbox 추출. min_area=400 픽셀 이하 노이즈 제거.
+- **thermal_anomaly_area 클래스명**: 비지도라 sub 분류 X. 점검자가 현장에서 B-02(단열)/B-04(누수) 판단. taxonomy 기본 B-04로 매핑.
+- **verify_test_mode Recall proxy**: ground truth 없어 IoU 정확도 자동 측정 X. 대신 "검출 0건 이미지"를 표시해 사람이 직접 확인. 통과 조건: 카테고리별 검출률 95%+ + 전체 Recall proxy 99%+.
+
+### 🚨 운영 영향
+
+- **chain 진행 상태**: ThermalAnomaly ✅ 완료 (150MB ONNX) / Furniture 🟢 진행중 (epoch 2/80) / M4_Seg 🔁 라벨 수정 완료, Furniture 후 자동 재시도.
+- **이번이 3차 프로젝트 마지막 제출**: 자유 진행 X, Recall ≥99% 통과 + 약한 모델 보완 사이클 필요 시 반복.
+- 호출자 (defect_processor.py, test_stream.py, api routes) thermal_frame_bgr 전달은 학습 완료 시 함께 통합.
+
+### 🛑 R-v1.1.13 — Thermal Anomaly 일시 보류 + stream_inference thermal_frame_bgr 사전 전달 (2026-05-28 오후)
+
+> 사용자 명시 (18:18): "thermal은 일단 보류해줘" → 후속 확인: "Thermal Anomaly만 (M4 U-Net 단열은 유지)".
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .13.1 | 2026-05-28 18:20 | config.py `THERMAL_ANOMALY_ENABLED: bool = False` 토글 추가. ONNX 파일과 통합 코드는 보존, 로드만 차단. | app/config.py |
+| .13.2 | 2026-05-28 18:20 | inference_pipeline_20.load_models() — `if settings.THERMAL_ANOMALY_ENABLED` 분기. False면 로드 자체 X, "보류 상태" 명시 print. | app/services/inference_pipeline_20.py |
+| .13.3 | 2026-05-28 18:00 | stream_inference.py — QueuedFrame에 thermal_frame_bgr 필드 + submit() 인자 + _process_20()에서 detect_async 전달. backward compatible (default None). | app/core/stream_inference.py |
+| .13.4 | 2026-05-28 18:25 | memory `project_thermal_anomaly_on_hold` 신규 — 보류 사유·범위·활성화 조건 기록. | (memory) |
+
+### 📐 설계 결정
+
+- **ONNX 보존 + 토글 비활성화**: 재학습 없이 즉시 활성화 가능. .env로 THERMAL_ANOMALY_ENABLED=True 설정만으로 다음 시작 시 로드. 학습 산출물 폐기 X.
+- **M4 U-Net 단열은 유지**: thermal_map float °C 입력 검출. B-01/B-02 단열 검출은 그대로 가동.
+- **stream_inference 사전 통합**: thermal_anomaly가 보류 상태여도 thermal_frame_bgr 인자 흐름은 유지 — 추후 활성화 시 호출 경로 변경 불필요. 현재는 None 흘러도 graceful.
+
+### 🚨 운영 영향
+
+- thermal_anomaly_area 클래스는 검출 X. taxonomy 코드는 보존.
+- verify_test_mode 결과·보고서·UI에 thermal_anomaly 미등장.
+- M4 U-Net 단열 검출은 정상 가동.
+- 이번 3차 프로젝트 제출 범위: RGB 모델 (M1-M3) + M4 U-Net + M5 + M6 + Furniture(coco) + grade 시스템.
+
+### 🔁 R-v1.1.14 — chain v1.2 사후 처리 + 노트북 OFF 복구 (2026-05-29)
+
+> 18:24 chain 종료 (Furniture cuDNN 사망 epoch 18 / M4_Seg 라벨 사고 / ThermalAnomaly 성공). 라벨 수정 후 wait task가 18:29 M4_Seg 재시도 자동 시작 → 01:44 epoch 16 best 0.436 도달 → 노트북 종료 11:30까지 OFF → resume_m4_seg.py로 last.pt에서 재개.
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .14.1 | 2026-05-28 18:30 | export_furniture_onnx.py 신규 — Furniture cuDNN 사고 후 best.pt(0.349) → ONNX 98.9MB 별도 export. 학습 스크립트 내장 export 도달 못함. | training/export_furniture_onnx.py |
+| .14.2 | 2026-05-28 18:30 | train_m4_context_seg.py 끝에 verify_test_mode 자동 호출 추가 — 학습 완료 즉시 통합 검증 + cuDNN 안전화 (amp=False/workers=2/cache=False) 적용. | training/train_m4_context_seg.py |
+| .14.3 | 2026-05-29 11:30 | resume_m4_seg.py 신규 — 노트북 종료 / 사고 복구용 학습 재개 스크립트. ultralytics resume=True로 last.pt + optimizer state 완전 복원. ONNX export + verify 자동 연결. | training/resume_m4_seg.py |
+| .14.4 | 2026-05-29 11:30 | memory `project_m4_seg_resume_procedure` 신규 — "이어서 진행" 한 마디 트리거 절차. 데몬 자동 재가동 + cron/Monitor tool은 사용자 명시 시점. | memory |
+
+### 📐 설계 결정
+
+- **resume 스크립트 분리**: train_m4_context_seg.py와 별도. resume_m4_seg.py가 last.pt 자동 감지 + ultralytics resume=True 호출. 사용자 한 명령으로 재개 가능 (memory 룰).
+- **체크포인트 보존 확인**: ultralytics save_period=5라 epoch0/5/10/15.pt 별도 저장 + 매 epoch last.pt 갱신. 노트북 OFF 시점 epoch 16 + best 0.436 손실 0건.
+- **cron/Monitor 사용자 명시**: feedback_auto_progress는 학습 분기에만 적용. cron/Monitor 같은 외부 트리거는 사용자 결정 시점에만 (예측 어려움).
+- **cuDNN 안전화 검증**: Furniture는 amp=True에서 epoch 18 사망. M4는 amp=False로 epoch 16+ 안정 진행. 가설 확인.
+
+### 🚨 운영 영향
+
+- 학습 중 노트북 OFF 발생 시 자동 복구 절차 확립.
+- backup_checkpoints 데몬이 10분마다 별도 백업하므로 학습 폴더 손상 시에도 복원 가능.
+- 다음 사고 발생 시 사용자 한 마디 "이어서 진행" → memory + git log + Vibe log 참조 → resume_m4_seg.py 자동 실행 가능.
+
+### 📊 R-v1.1.15 — M4 seg epoch 30 중간 ONNX + verify 경로 버그 수정 (2026-05-29 17:30)
+
+> 사용자 18:30 노트북 정리 데드라인 → 17:30 학습 안전 stop + 중간 결과 ONNX 배포 + verify. 집에서 epoch 30→60 완주 예정.
+
+| 라운드 | 시각 | 작업 | 결과 |
+|-------|------|------|------|
+| .15.1 | 2026-05-29 17:30 | M4 seg 학습 stop (epoch 30/60) — last.pt 보존, 집에서 resume 가능 | best **mAP50-95 0.483** (mAP50 0.682) baseline 0.355 → **+0.128** (M5 seg 사례 +0.111 초과) |
+| .15.2 | 2026-05-29 17:31 | best.pt → ONNX export, m4_yolo_context_elements.onnx 교체 (이전 _prev 백업) | seg ONNX 104.5MB, 출력 (1,41,12096)+(1,32,192,192) |
+| .15.3 | 2026-05-29 17:33 | verify_test_mode 경로 버그 2건 수정 — ① cwd를 backend/로 변경 (settings 상대경로 ./models_weights 정상화) ② roboflow 형식 cat/test/images/*.jpg 재귀 탐색 + 카테고리당 60장 상한 | 첫 실행은 모델 전부 미로드(0건)였음 |
+| .15.4 | 2026-05-29 17:35 | verify 재실행 — 257장 7카테고리 추론 | 검출률 100% (놓침 0), CONFIRMED 1018 / REVIEW 369 / REFERENCE 673 |
+
+### 📐 학습 성과 (epoch 30 중간)
+
+- M4 bbox 0.355 → **M4 seg 0.483** (+0.128, +36% 향상). 60 epoch 완주 시 0.50~0.55 예상.
+- cuDNN 안전화 (amp=False) 효과 검증 — Furniture(amp=True) epoch 18 사망 vs M4(amp=False) epoch 30+ 안정.
+- 노트북 OFF(01:44~11:30) 사고에도 last.pt 무손실 — resume 절차 검증 완료.
+
+### ⚠️ 미해결 — 다음 세션 처리
+
+- **과검출 의심**: ext_glass 745건/60장(장당 12건), ext_building_crack 491건/60장. CONFIRMED 등급이 과다 → Precision 검증 필요.
+- **verify는 Recall만 측정**: GT 라벨 비교 없음. test_external 각 카테고리에 roboflow 라벨(labels/) 존재하므로 IoU 기반 Precision 측정 스크립트 추가 필요.
+- **M4 seg ONNX 로더 호환성**: ONNXYoloDetector가 seg 2-output(det+mask proto)을 detection으로만 파싱. 게이팅엔 bbox만 쓰므로 동작하나, mask proto 활용 시 별도 처리 필요.
+- **집에서**: resume_m4_seg.py로 epoch 30→60 완주 + Precision GT 검증 + 과검출 원인 분석.
+
+### 🏁 R-v1.1.16 — M4 seg epoch 60 완주 + GT Precision 검증 + grade 임계 조정 (2026-05-30)
+
+> M4 seg 학습 epoch 30→60 완주 (best 0.503 baseline +0.148 +41.7%). GT 검증 3차 시도 끝에 도메인 mismatch 결론. grade 임계 0.85→0.90 + WITH_VOTING 0.70→0.75 적용.
+
+| 라운드 | 시각 | 작업 | 결과 |
+|-------|------|------|-------|
+| .16.1 | 2026-05-30 17:08 | M4 seg epoch 60 학습 완료, ONNX 자동 교체 + verify_test_mode 자동 호출 | best **mAP50-95 0.503** (mAP50 0.701) baseline +0.148 / verify 257장 CONFIRMED 737 (1차 1018→737 -28% 과검출 감소) 놓침 1건 |
+| .16.2 | 2026-05-30 17:35 | verify_gt_precision.py 신규 — roboflow GT polygon → bbox 변환 + IoU 0.5 매칭 + FP source 분포 | 1차 결과: P 0.535 / R 0.748, FP source: yolo_surface 37 / yolo_floor_window 32 / yolo_structural 11 / furniture 0 → Furniture 재학습 효과 없음 확정 |
+| .16.3 | 2026-05-30 19:18 | grade 임계 조정 시도 1: CONFIRMED_STRONG 0.85→0.90, WITH_VOTING 0.70→0.75 | 2차 결과: P 0.535 / R 0.740 — 거의 동일 (M2/M3 검출 spatial_boost로 conf 0.95+ 도달, 임계로 못 잡힘) |
+| .16.4 | 2026-05-30 19:22 | grade 임계 조정 시도 2: M2/M3 voting 필수 (PATCHCORE_ONLY와 동일) | 3차 결과: P 0.296 / R 0.195 — Recall 폭락, ext_glass(M3 단독으로 잘 잡던 영역) 60+ 결함 잃음. 즉시 롤백 |
+| .16.5 | 2026-05-30 19:26 | grade 최종 = 시도 1 상태 (CONFIRMED_STRONG 0.90 + WITH_VOTING 0.75 + voting 필수 없음) | 보고서 등재 기준 약간 강화, Recall 손실 최소 |
+
+### 📐 결론
+
+- M4 seg 학습 성공: 0.355 → 0.503 (+41.7%). cuDNN 안전화 + 노트북 OFF resume 검증 완료.
+- Furniture 재학습 불필요: FP 0건 기여. 15h 절약.
+- 도메인 mismatch 결론: test_external은 외부 인터넷 도메인(콘크리트 옹벽·유리 패널), 우리는 아파트 내부 학습. ext_glass(close-up dent)만 도메인 매칭 → P 0.93. crack 카테고리는 mismatch → P 0.22~0.26.
+- voting 필수는 cross-domain 검증 도구 아님: 같은 위치 검출 동의 ≠ 같은 도메인 정확도.
+
+### 🚨 다음 단계
+
+- 운영 영상 검증: 실제 아파트 내부 드론 영상으로 재평가 (test_external은 참고용)
+- M2/M3 cross-domain 데이터 추가 학습: 운영 결과도 낮으면 도메인 보강
+- frontend grade UI: CONFIRMED 빨강 / REVIEW 노랑 / REFERENCE 점선 + 보고서 필터
+- 문서 + 배포 + 노션 + 시연 자료.
+
+---
+
+## 🔒 R-v1.1.17 — 전체 시스템 검증 + P0 보안 수정 + 문서 갱신 (2026-06-01)
+
+> 사용자 명시 ("전체 기능에 대해서 프로세스 검증까지, 안되어있거나 잘못되어있는 부분 보완"). 5영역 병렬 Explore 검증으로 15건 발견, P0 7건/P1 5건/P2 2건 수정. R-v1.1.10 grade 시스템 frontend 통합과 동시 진행.
+
+### 🛠 변경 (backend 부분)
+
+| 라운드 | 시각 | 작업 | 산출물 |
+|-------|------|------|-------|
+| .17.B1 | 05-31 23:40 | api/detect.py — `detail=str(e)` 정보 누출 수정. ValueError→400 일반 메시지, RuntimeError→503. logging.warning/error 분리 | app/api/detect.py:71-80 |
+| .17.B2 | 05-31 23:50 | api/auth.py — refresh token rotation 도입. /auth/refresh 응답에 새 refresh_token 동봉 (탈취 refresh 무한 갱신 차단) | app/api/auth.py:290-291 |
+| .17.B3 | 05-31 23:55 | schemas/user.py — RefreshTokenResponse 모델 (access_token + refresh_token) 추가 | app/schemas/user.py:181-189 |
+| .17.B4 | 06-01 00:05 | config.py — CORS_ORIGINS에 Vercel 도메인 3개 (aero-inspect-frontend.vercel.app, git-main, git-develop) 추가 | app/config.py:260-269 |
+| .17.B5 | 06-01 00:10 | defect_persistence.py — DefectLog 모델 grade 컬럼 미존재 확인, TODO 코멘트 처리 (alembic 마이그레이션 대상) | app/services/defect_persistence.py:148-160 |
+| .17.B6 | 06-01 00:15 | inference_pipeline_20.py — m2_v4s/m3_v4s_retry class_names 4-way 매핑 검증 코멘트 (ONNX dim ↔ data.yaml ↔ CLASS_NAMES ↔ taxonomy) | app/services/inference_pipeline_20.py |
+| .17.B7 | 06-01 00:20 | .env.example — THERMAL_ANOMALY_ENABLED + R2_* 6개 신규 변수 명시 | .env.example |
+| .17.B8 | 06-01 00:25 | Task.md — v1.1 사이클 R-v1.1.01~16 section 추가 | Task.md |
+| .17.B9 | 06-01 00:30 | Implementation_Plan.md — v6.0_260531 (Phase 22-25) 추가 | Implementation_Plan.md |
+| .17.B10 | 06-01 00:35 | README.md — endpoint 카탈로그 보완 (PATCH /defects/{id}/review, audit-trail, audit-logs, employee/*, stream/stats, coverage, auth/refresh rotation) | README.md:54-67 |
+| .17.B11 | 06-01 00:40 | DEPLOYMENT_GUIDE.md — v1.0→v1.1 헤더 + R-v1.1.10~17 변경 요약 | DEPLOYMENT_GUIDE.md:217-228 |
+
+### ✅ 5영역 병렬 Explore 검증
+
+| 영역 | P0 | P1 | P2 |
+|---|---|---|---|
+| 보안 | error leak, refresh rotation, AI_WEBHOOK_SECRET 검증됨 | log redact 운영중 (정상) | — |
+| Pipeline | grade 전파, 4-way 매핑 코멘트 | wbf ckpt 검증 | — |
+| 통합 | CORS vercel.app | confirmed_count 미사용 (잠재 stat) | — |
+| 운영 | .env.example 누락 변수 | — | — |
+| 문서 | — | — | README/DEPLOYMENT_GUIDE 갱신 |
+
+### 📐 설계 결정
+
+- **error message generalization**: 보안 측면에서 5xx/4xx 응답에 내부 스택 정보(예: "Invalid JPEG bytes at offset 12345") 노출 금지. 사용자 친화 일반 메시지 + 서버 로깅에만 상세.
+- **refresh rotation**: 탈취된 refresh token이 무한 갱신되는 시나리오 차단. 매 /auth/refresh 호출마다 새 refresh 발급, frontend도 sessionStorage 덮어쓰기.
+- **grade DB 영속화 보류**: DefectLog 모델에 grade 컬럼 없음. 추가 시 alembic migration 필요. 본 라운드는 API 응답/WS broadcast 경로에서만 grade 노출 (DB 미저장). TODO 명시.
+- **CORS allowlist 확장**: Vercel preview 도메인 (git-main/git-develop) 포함. 사용자가 PR 환경에서도 backend 호출 가능.
+- **4-way 매핑 검증 코멘트**: memory feedback_onnx_class_mapping_audit (5/7 검출 거짓 라벨 5건 사고 재발 방지) 준수. 코드 변경 없이 가드 코멘트만 추가, 다음 모델 통합 시 체크.
+
+### ➡️ 후속 (R-v1.1.18+)
+
+- DefectLog 모델 grade 컬럼 추가 + alembic migration (별도 라운드)
+- Frontend Sidebar 11개 아이콘 전수 연결 (사용자 명시) → frontend R-v1.1.18
+- 노션 일괄 동기화 (R-v1.1.10~17 모음)
+- 시연 자료 (demo flow + 스크린샷)
+
+## 🔧 R-v1.1.19 — 전체 기능 검증 + 운영 버그 5건 수정 + Roboflow fine-tune (2026-06-02)
+
+> 사용자 명시 ("전체 기능 및 UI/UX 검증"). 백엔드 pytest 전체 + frontend build 검증으로 운영 결함 5건 발견·수정. 동시에 Roboflow 데이터 fine-tune 작업(약한 모델만 효과 측정) 수행.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| .19.1 | 06-02 08:4x | 누락 모듈 복구 gazebo_world_generator (도면→Gazebo SDF world) | app/services/gazebo_world_generator.py |
+| .19.2 | 06-02 09:1x | 누락 모듈 복구 autonomous_flight_simulator (boustrophedon 커버리지+WS emit) | app/services/autonomous_flight_simulator.py |
+| .19.3 | 06-02 09:2x | furniture/M5 ONNX 차원에러: _try_load_yolo input_size 인자, furniture 768 | inference_pipeline_20.py, onnx_inference.py |
+| .19.4 | 06-02 09:3x | organization join_by_invite_code 가입 알림 누락 추가 + regenerate 오삽입 알림 제거 | app/api/organization.py |
+| .19.5 | 06-02 09:3x | 테스트 현행화: inference_pipeline(인증401/503), yolo(가중치 skip) | tests/test_inference_pipeline.py, test_yolo_inference.py |
+| .19.6 | 06-01~02 | Roboflow fine-tune: adapter+순환학습+eval 하네스+자가앙상블 검증 | training/roboflow_adapter.py, finetune_rf_cycle.py, eval/* |
+
+### 📐 설계 결정
+
+- **누락 모듈 = import만 있고 파일 미커밋 사고**: floorplan.py/missions.py가 import하던 2개 모듈이 git에 없어 `app.main` import 자체가 실패(백엔드 부팅 불가). 검증으로 발견, 실동작 구현으로 복구.
+- **고정입력 ONNX 대응**: furniture(768)/thermal(960)/M5(seg)는 입력 고정 export. _try_load_yolo에 input_size 인자 추가(기본 640, dynamic 무영향), 고정모델만 명시. feedback_onnx_class_mapping_audit 패턴.
+- **Roboflow fine-tune 결론(측정)**: 약한 모델(thermal recall +1.1%p)만 이득, 강한 모델(M2 -5.3%p)은 손해→롤백. M3/M4/M5/furniture는 Roboflow 서버 export zip 미생성(NoSuchKey)로 다운 불가. 자가앙상블(우리 형제버전 WBF)은 운영서 M1 +9.9%p/M3 +5.4%p 효과 확정.
+- **검증 결과**: 백엔드 227 passed/11 skipped/0 fail (시작 5fail+2error→0), frontend build OK.
+
+### ➡️ 후속
+
+- thermal/M4/furniture는 데이터 부족이 근본 — 추가 데이터 확보 시 재학습
+- 노션 일괄 동기화

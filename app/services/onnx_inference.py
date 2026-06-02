@@ -147,9 +147,11 @@ class ONNXYoloDetector:
         iou_threshold: float = 0.45,
     ) -> List[dict]:
         """YOLO 출력 → NMS → 검출 리스트."""
-        out = output[0].T  # [num_anchors, 4+nc]
+        out = output[0].T  # [num_anchors, 4+nc(+32 mask coef for seg)]
         boxes = out[:, :4]
-        scores = out[:, 4:]
+        # seg 모델은 4+nc 뒤에 32개 mask 계수가 붙음 → nc개만 슬라이스(mask coef 제외).
+        # detect 모델은 채널이 정확히 4+nc라 [4:4+nc] == [4:] 로 동일하게 안전.
+        scores = out[:, 4:4 + self.nc]
 
         max_scores = scores.max(axis=1)
         mask = max_scores >= conf_threshold
@@ -362,8 +364,14 @@ class ONNXPatchCoreDetector:
 
         outputs = self.session.run(None, {self.input_name: blob})
 
-        # anomalib ONNX 출력: [anomaly_map, pred_score] 또는 단일 텐서
-        if len(outputs) >= 2:
+        # anomalib export 버전별 출력 형식 분기
+        if len(outputs) >= 4:
+            # anomalib 2.x (surface.onnx): [pred_score, pred_label, anomaly_map, pred_mask]
+            s = outputs[0]
+            score = float(s.item() if s.size == 1 else s.flatten()[0])
+            anomaly_map = outputs[2][0]
+        elif len(outputs) >= 2:
+            # anomalib 1.x: [anomaly_map, pred_score]
             anomaly_map = outputs[0][0]
             score = float(outputs[1][0]) if outputs[1].size == 1 else float(outputs[1][0][0])
         else:

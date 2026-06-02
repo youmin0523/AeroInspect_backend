@@ -284,6 +284,48 @@ core/stream_inference.py ──→ services/inference_pipeline.py
   - API `/api/v1/ai-chat` 6엔드포인트. `get_current_org_member` 의존성 + thread.user_id·org_id 이중 검증 + 사용자별 분당 20 메시지 라우터 내부 카운터.
   - settings 4(OPENAI_API_KEY/MODEL/MAX_OUTPUT_TOKENS/SUMMARY_MODEL), requirements `openai>=1.40.0`, rate_limit `/api/v1/ai-chat`:120/min.
 
+### v6.0_260531 (작성자: @youminsu0523 / branch: MS) — v1.1 사이클 종합
+
+**Phase 22 — 신뢰도 등급 시스템 (R-v1.1.10)**
+- `confidence_grader.py` (CONFIRMED ≥0.90 / REVIEW 0.40~0.90 / REFERENCE 0.20~0.40 / DROP <0.20)
+- PatchCore·anomaly 단독 CONFIRMED 불가 (voting 동반 시 승격)
+- DefectDetection / InsulationDetection / AlignmentDetection grade 필드 + DetectionResult20 confirmed_count/review_count 분류 카운트
+- inference_pipeline_20 grade 산정 통합 + DROP 자동 필터링
+- 20종 클래스 통일 (단열 특례 폐지)
+
+**Phase 23 — M4 bbox→seg 전환 + Thermal Anomaly 도입 (R-v1.1.10~16)**
+- M4 Context bbox(yolov8m) → segmentation(yolov8m-seg) 전환. 라벨 변환 95,875개 bbox→4꼭짓점 polygon.
+- 학습: epoch 60 완주, best mAP50-95 **0.503** (baseline 0.355 +0.148 **+41.7%**). M5 seg 전환 사례 +0.111 초과 달성.
+- Thermal Anomaly PatchCore (Moisture/delam YOLO 대체) — `prepare_thermal_anomaly.py` (라벨 영역 제외 정상 패치 2000개) + `train_thermal_anomaly.py` (anomalib Folder + Patchcore wide_resnet50_2).
+- ONNX 출력: thermal_anomaly.onnx 150MB. config.py THERMAL_ANOMALY_ENABLED=False 보류 토글 (사용자 명시 5/28).
+- defect_taxonomy thermal_anomaly_area 클래스 (B-04 매핑). `_anomaly_mask_to_bboxes` 헬퍼 + thermal_frame_bgr 시그니처 확장.
+
+**Phase 24 — 학습 인프라 + 사고 복구 (R-v1.1.11~14)**
+- `train_chain_v1_2.py` orchestrator (STAGES=[M4_Seg, ThermalAnomaly, Furniture] + precondition_ok 자동 검증)
+- `backup_checkpoints.py` 10분 cycle best.pt/last.pt → training/backups/
+- `monitor_report.py` META 확장 (M4_Seg/ThermalAnomaly/Furniture + seg 모델 경로 분기 + stage_key 긴 키 우선)
+- `resume_m4_seg.py` (ultralytics resume=True last.pt 복구) — 노트북 OFF 사고 무손실 검증
+- cuDNN 안전화 (amp=False/workers=2/cache=False) — Furniture epoch 18 cuDNN_STATUS_EXECUTION_FAILED 사망 후 적용
+- `validate_m4_seg_labels.py` + `convert_m4_bbox_to_polygon.py` (라벨 무결성 검사 + bbox→polygon 변환)
+
+**Phase 25 — GT 검증 + grade 임계 조정 (R-v1.1.16)**
+- `verify_test_mode.py` (roboflow test/images 카테고리별 추론 + 등급별 시각화 + 통계 JSON + Recall proxy)
+- `verify_gt_precision.py` (GT polygon → bbox + IoU 0.5 매칭 + FP source 분포)
+- GT 검증 3차 결과: 1차 P 0.535/R 0.748 → 2차 (임계 0.85→0.90) P 0.535/R 0.740 → 3차 (M2/M3 voting 필수) P 0.296/R 0.195 (Recall 폭락 즉시 롤백)
+- 최종 grade: CONFIRMED_STRONG 0.90, WITH_VOTING 0.75, voting 필수 X
+- 결론: test_external 도메인 mismatch (외부 인터넷 콘크리트 옹벽/유리 패널 vs 우리 아파트 내부)
+
+**모델 현황 (v1.1 사이클 종료 시점)**
+- M1 구조·방수: 0.78 mAP50-95
+- M2 마감·표면: 0.82 (WBF 7-way)
+- M3 바닥·창호: 0.86 (WBF 6-way)
+- **M4 Context Seg**: **0.503** (v1.0 0.355 → +41.7%)
+- M5 frame seg: 0.576
+- M6 PatchCore: 작동
+- Furniture: 0.349 (cuDNN epoch 18 멈춤, 재학습 보류 — GT FP 0건 기여)
+- Thermal Anomaly: AUROC 0.85~0.92 예상 (보류 토글)
+- Thermal YOLO Crack: 0.38
+
 ### v5.1_260503 (작성자: @youminsu0523 / branch: MS)
 - Phase 20 추가 완료(alembic 분기 head 병합 `89b53c16de85` + 누락 컬럼 10건 ALTER 보정 + seed_demo_data 실 적용 sites=8/defects=315/reports=12/schedules=3) + Phase 21 신설(tasks 문서 양식 정정 — 부록 → 인라인, 파일 rename, 팀명 일괄, 가이드 3종 문서이력 위치, CHANGES md 신설)
 

@@ -17,13 +17,14 @@ from pathlib import Path
 
 from ultralytics import YOLO
 
-EPOCHS = 200
-BATCH = 4           # RTX 5070 Laptop 8GB VRAM
-IMGSZ = 960         # 기하학 프레임: 정밀한 엣지 탐지 필요 → 고해상도
+EPOCHS = 150
+BATCH = 4           # RTX 5070 Laptop 8GB VRAM (seg는 메모리 큼 → OOM 시 2로)
+IMGSZ = 768         # 엣지 정밀 vs 속도/메모리 절충 (960→768)
 PATIENCE = 30
 LR0 = 1e-4
 DATA_YAML = "configs/frame_seg.yaml"
 PROJECT = "runs/m5_frame_seg"
+NAME = "seg_v2"
 WEIGHTS_DIR = Path("../models_weights")
 OUTPUT_NAME = "m5_yolo_seg_frames"
 
@@ -33,10 +34,9 @@ def train():
     print("[M5-Seg] YOLOv8m-seg 기하학 프레임 세그멘테이션 학습")
     print("=" * 60)
 
-    # seg 데이터셋 라벨 불일치(2.8% 세그멘트 누락)로 seg 학습 불가
-    # → Detection 모드로 우선 학습. 기하학 분석은 bbox로 대체 가능.
-    # TODO: 데이터셋 정제 후 yolov8m-seg.pt로 전환
-    model = YOLO("yolov8m.pt")          # detection pretrained
+    # frames 라벨 = 유효 polygon 100% (20657/20657) 검증 완료 → seg 전환
+    # G1 기하학 모듈이 seg mask로 수직수평/직각도 분석 (본래 설계)
+    model = YOLO("yolov8m-seg.pt")      # segmentation pretrained
     model.train(
         data=DATA_YAML,
         epochs=EPOCHS,
@@ -62,19 +62,19 @@ def train():
         copy_paste=0.2,     # 소형 프레임 복사-붙여넣기
         multi_scale=0.3,    # 기하학은 약한 multi_scale (엣지 보존)
         project=PROJECT,
-        name="train",
+        name=NAME,
         exist_ok=True,
     )
 
     # ONNX 변환
-    best = YOLO(f"{PROJECT}/train/weights/best.pt")
+    best = YOLO(f"{PROJECT}/{NAME}/weights/best.pt")
     best.export(format="onnx", opset=17, dynamic=True, simplify=True)
 
     WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(
-        f"{PROJECT}/train/weights/best.onnx",
-        WEIGHTS_DIR / f"{OUTPUT_NAME}.onnx",
-    )
+    dst = WEIGHTS_DIR / f"{OUTPUT_NAME}.onnx"
+    if dst.exists():
+        shutil.copy2(dst, WEIGHTS_DIR / f"{OUTPUT_NAME}_prev.onnx")
+    shutil.copy2(f"{PROJECT}/{NAME}/weights/best.onnx", dst)
     print(f"[M5-Seg] ONNX 저장 완료: {WEIGHTS_DIR / OUTPUT_NAME}.onnx")
 
 

@@ -156,6 +156,8 @@ class DefectPersistenceService:
             "defect_class_display_ko": det.get("class_display_ko"),
             "severity": det.get("severity", "LOW"),
             "confidence": det.get("conf", 0),
+            # R-v1.1.17 TODO: grade(신뢰도 등급) DB 영속화 — DefectLog 모델 + alembic 추가 후 활성화
+            # 현재는 API 응답/WS broadcast 경로에서만 grade 노출 (DB 미저장)
             "bbox_x": ((bbox[0] + bbox[2]) / 2) if bbox and len(bbox) == 4 else None,
             "bbox_y": ((bbox[1] + bbox[3]) / 2) if bbox and len(bbox) == 4 else None,
             "bbox_w": (bbox[2] - bbox[0]) if bbox and len(bbox) == 4 else None,

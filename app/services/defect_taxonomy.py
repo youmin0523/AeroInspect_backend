@@ -208,6 +208,10 @@ DEFECT_20_MAP: Dict[str, Tuple[str, str, str, str]] = {
     "floor_defect":         ("D-03", "바닥 오염·스크래치",      "LOW",  "D"),
     "glass_defect":         ("E-01", "창호 유리 스크래치·파손",  "MED",  "E"),
     "frame_defect":         ("E-02", "창틀·문틀 도장 불량",     "LOW",  "E"),
+
+    # Thermal Anomaly (PatchCore) — Moisture/delam YOLO 대체
+    # 비지도 학습이라 sub 분류 X — 점검자가 현장에서 B-02(단열)/B-04(누수) 판단
+    "thermal_anomaly_area": ("B-04", "열화상 이상영역 (단열·누수 의심)", "HIGH", "B"),
 }
 
 

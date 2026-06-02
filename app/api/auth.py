@@ -269,8 +269,11 @@ async def refresh_access_token(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    유효한 refresh_token → 새 access_token 재발급.
-    refresh_token 자체는 그대로 재사용 (기간 만료 전까지).
+    유효한 refresh_token → 새 access_token + 새 refresh_token 재발급 (회전).
+
+    R-v1.1.17: refresh token rotation 도입. 매 refresh 시 새 refresh도 발급.
+    탈취된 refresh로 무제한 access 갱신을 차단 (P0 보안).
+    클라이언트는 응답의 refresh_token으로 localStorage 덮어써야 함.
     """
     user_id = decode_refresh_token(payload.refresh_token)
     if user_id is None:
@@ -288,7 +291,8 @@ async def refresh_access_token(
         )
 
     new_access = create_access_token(user.id)
-    return RefreshTokenResponse(access_token=new_access)
+    new_refresh = create_refresh_token(user.id)  # 회전: 새 refresh도 발급
+    return RefreshTokenResponse(access_token=new_access, refresh_token=new_refresh)
 
 
 # ── 현재 사용자 조회 ────────────────────────

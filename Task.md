@@ -260,6 +260,23 @@
 - **R24 (5/3 본 세션)** Swagger Phase 1~3 — main.py에 HTTPBearer(bearerFormat=JWT)/AIWebhookSecret 보안 스키마 명시 등록, 17개 tags_metadata, persistAuthorization. PROTECTED/PUBLIC/WEBHOOK 공통 responses(401/403). schemas/common.py 신규. user/site/defect schema에 example 추가. config.py/init_db.py에 `APP_ENV=production` 가드 (placeholder secret 차단 + create_all 자동 스킵, alembic 책임 분리). `.env.example` APP_ENV·AI_WEBHOOK_SECRET·PUSH_PROVIDER·OAUTH_REDIRECT_BASE 보강.
 - **R25 (5/3 본 세션)** InspectionSchedule 모델 + alembic migration `i2c3d4e5f6a7` 신규. `/api/v1/employee` 라우터(schedule/today + kpi/monthly + activities) 신규 — 조직 단위 격리. `scripts/seed_demo_data.py` 신설: 조직(DRONE INSPECT 데모) + 부서 3 + 사용자(백승희/오희진) + 현장 8 + 하자 25~60건/현장 + 보고서 3~5건/완료현장 + 오늘 일정 3건(09:00 헬리오시티/14:00 잠실 리센츠 백승희/16:30 잠실 엘스 오희진) + 알림 8종. idempotent + APP_ENV 가드 + `--reset`/`--force-prod` 옵션. router.py에 employee 등록.
 
+## v1.1 사이클 (2026-05-07 ~ 2026-05-31) — 3차 프로젝트 최종 제출 사이클
+
+> 5/6 1차 배포 후 시작. memory: 자유 진행 X, 약한 모델 보완 + 검증 통과 후 최종 제출.
+
+- **R-v1.1.01~05 (5/7~5/26)** v1.1 초기 작업 — 영상 수신기 미도착 임시 정책 (testMode 위장), 모델 v1.1 ckpt 학습 라운드들 (m1_v4/v5, m2_v4/v4s, m3_v4/v4s, m4_v2, m5_v2, m6 PatchCore 재구축). 약점 모델 Roboflow 데이터 보강 + 자체 학습 (3자 .pt 다운 금지, [[project_roboflow_finetune_program]]).
+- **R-v1.1.06 (5/26)** Sentry 에러 모니터링 통합 — DSN 환경변수 + APP_ENV 기반 활성화 + sensitive data scrubbing.
+- **R-v1.1.07 (5/27)** ONNX 4-way 매핑 회귀 가드 — 신규/갱신 모델 통합 시 ONNX dim ↔ data.yaml/CLASS_NAMES ↔ inference 매핑 ↔ taxonomy 4-way cross-check. 5/7 검출 거짓 라벨 5건 동시 사고 재발 방지 ([[feedback_onnx_class_mapping_audit]]).
+- **R-v1.1.08 (5/27)** 하자 검수 메타 + 감사 로그 인프라 — defect_log review/audit-trail 라우터 8 routes. flagged_false_positive 컬럼 추가 (Active Learning hook). audit_logs 테이블 + admin/owner/superadmin 권한.
+- **R-v1.1.09 (5/27 오후)** 운영 신뢰성 가이드 + PostgreSQL 백업 — DEPLOYMENT_GUIDE.md 작성, scripts/backup_pg.ps1 (pg_dump custom format + R2 업로드), fly.toml min_machines_running 가이드 주석.
+- **R-v1.1.10 (5/28 오전)** 신뢰도 3단계 등급 시스템 + Thermal/M4 재설계 학습 스크립트 — `confidence_grader.py` 신규 (CONFIRMED/REVIEW/REFERENCE/DROP). PatchCore/anomaly 단독은 CONFIRMED 불가. schema/Pipeline20에 grade 필드. 20종 클래스 통일 (단열 특례 폐지). 학습 스크립트 신규: train_m4_context_seg.py (bbox→seg 전환), prepare_thermal_anomaly.py + train_thermal_anomaly.py (Moisture/delam → PatchCore unsupervised), cleanup_furniture_coco.py.
+- **R-v1.1.11 (5/28 오전)** v1.2 학습 chain 가동 + 자동저장 안전장치 — train_chain_v1_2.py (STAGES=[M4_Seg, ThermalAnomaly, Furniture] precondition_ok 자동 검증). monitor_report.py META 확장 (seg 모델 경로 분기). backup_checkpoints.py 신규 (10분 best.pt/last.pt 복제).
+- **R-v1.1.12 (5/28 오후)** chain 사고 복구 + thermal_anomaly 사전 통합 + verify_test_mode — M4_Seg 38초 실패 진단(bbox 라벨 80%) → validate_m4_seg_labels.py + convert_m4_bbox_to_polygon.py (95,875개 변환 + 원본 백업). config.py THERMAL_ANOMALY_ONNX 키. defect_taxonomy thermal_anomaly_area 클래스. inference_pipeline_20 `_anomaly_mask_to_bboxes` 헬퍼 + thermal_frame_bgr 시그니처. verify_test_mode.py (등급별 시각화 + Recall proxy).
+- **R-v1.1.13 (5/28 오후)** Thermal Anomaly 일시 보류 + stream thermal_frame_bgr 사전 전달 — 사용자 명시 ("thermal은 일단 보류"). THERMAL_ANOMALY_ENABLED=False 토글. M4 U-Net 단열은 유지. stream_inference QueuedFrame/submit/_process_20 thermal_frame_bgr 전달.
+- **R-v1.1.14 (5/29)** chain 사후 처리 + 노트북 OFF 복구 절차 — export_furniture_onnx.py (Furniture cuDNN 사고 best.pt 0.349 → ONNX 98.9MB). train_m4_context_seg.py cuDNN 안전화 (amp=False/workers=2/cache=False) + verify_test_mode 자동 호출. resume_m4_seg.py 신규 (ultralytics resume=True 복구). 노트북 OFF 무손실 검증.
+- **R-v1.1.15 (5/29 오후)** M4 seg epoch 30 중간 ONNX + verify 경로 버그 수정 — best mAP50-95 0.483 baseline +0.128 (M5 seg 사례 +0.111 초과). verify_test_mode 경로 버그 2건 수정 (cwd backend + roboflow test/images 재귀). 257장 검출률 100% (놓침 0), CONFIRMED 1018 / REVIEW 369 / REFERENCE 673.
+- **R-v1.1.16 (5/30)** M4 epoch 60 best 0.503 + GT Precision 검증 + grade 임계 조정 — M4 seg epoch 30→60 완주, best mAP50-95 **0.503** (baseline +0.148 **+41.7%**). verify_gt_precision.py 신규 (roboflow GT IoU 매칭 + FP source 분석). GT 3차 시도: 1차 P 0.535/R 0.748, 2차 (임계 0.85→0.90) 거의 동일, 3차 (M2/M3 voting 필수) Recall 폭락 롤백. 결론: 도메인 mismatch (test_external 외부 도메인). grade CONFIRMED_STRONG 0.90 + WITH_VOTING 0.75 적용. Furniture 재학습 취소 (FP 0건 기여).
+
 ### v4.0_260427 (작성자: @youminsu0523 / branch: MS)
 - 전면 재작성: git log 기반 @youminsu0523 + @Hijin554 10일간 백엔드 작업 상세 기록
 - 각 버전별 변경 파일 수, 함수명/클래스명/API 엔드포인트/DB 컬럼/스키마/테스트 상세

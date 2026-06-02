@@ -179,8 +179,14 @@ class RefreshTokenRequest(BaseModel):
 
 
 class RefreshTokenResponse(BaseModel):
-    """새 access_token 반환 (refresh_token은 재사용 권장)"""
+    """새 access_token + 회전된 refresh_token (R-v1.1.17 — refresh 회전 도입).
+
+    refresh_token은 매 refresh 시 새로 발급되며, 클라이언트는 응답의
+    refresh_token으로 localStorage를 덮어써야 한다. 회전 미적용 시 탈취된
+    refresh로 무제한 access 갱신 가능 (P0 보안).
+    """
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
 
 
