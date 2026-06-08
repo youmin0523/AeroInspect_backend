@@ -3213,3 +3213,17 @@ uploads/gazebo_worlds_real/
 
 - thermal/M4/furniture는 데이터 부족이 근본 — 추가 데이터 확보 시 재학습
 - 노션 일괄 동기화
+
+## 🔧 R-v1.1.20 — 테스트모드 영상 라우트 누락 복구 (2026-06-08)
+
+> 사용자 보고("배포·로컬에서 업로드 후 START 무반응, 영상 안 뜸"). 프론트 인증누락(401)이 주원인이나, 동영상 직접재생에 필요한 백엔드 라우트 2개가 통째로 누락된 것도 확인.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| .20.5a | 06-08 16:4x | `GET /test/active` 신설 — test_stream_service.active_media 반환. 프론트 useTestActiveMedia 폴링 대상이었으나 라우트 부재로 404 → 영상/이미지 분기 실패 | app/api/stream.py |
+| .20.5b | 06-08 16:4x | `GET /test/upload/file/{filename}` 신설 — 업로드 원본을 <video> src 로 직접 서빙. basename + commonpath 로 path-traversal 방어, FileResponse(Range 자동) | app/api/stream.py |
+
+### 📐 설계 결정
+
+- **인증 정책**: 두 라우트 모두 GET 스트림 계열(public). `<video>`/`<img>` 는 Authorization 헤더를 못 붙이므로 제어용 POST(start/source/upload)만 인증, 미디어 GET 은 미인증 유지.
+- **프론트 짝**: TestModeBar 제어호출 토큰 첨부(frontend R-v1.1.20.4)와 동시 수정해야 end-to-end 동작.

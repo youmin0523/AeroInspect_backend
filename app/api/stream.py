@@ -432,6 +432,40 @@ async def list_test_uploads():
     return {"files": test_stream_service.list_uploaded_files()}
 
 
+@router.get("/test/active")
+async def get_test_active_media():
+    """현재 재생 대상이 영상인지 이미지인지 메타 반환.
+    프론트 useTestActiveMedia 가 폴링 → 영상이면 <video src=/test/upload/file/{name}>
+    직접 재생, 이미지면 기존 MJPEG <img src=/test/rgb>. 인증 불요(GET 스트림 계열과 동일).
+    """
+    if not settings.TEST_MODE_ENABLED:
+        raise HTTPException(status_code=404, detail="Test mode is disabled")
+
+    from app.services.test_stream import test_stream_service
+    return test_stream_service.active_media
+
+
+@router.get("/test/upload/file/{filename}")
+async def serve_test_upload_file(filename: str):
+    """업로드된 원본 파일(주로 영상)을 <video>/<img> src 로 직접 서빙.
+    인증 불요 — <video> 태그는 Authorization 헤더를 못 붙임(스트림 계열과 동일 정책).
+    경로 traversal 방어: basename 만 취하고 실제 경로가 업로드 디렉터리 내부인지 재확인.
+    """
+    if not settings.TEST_MODE_ENABLED:
+        raise HTTPException(status_code=404, detail="Test mode is disabled")
+
+    upload_dir = os.path.abspath(settings.TEST_UPLOAD_DIR)
+    safe_name = os.path.basename(filename)  # ../ 류 제거
+    full_path = os.path.abspath(os.path.join(upload_dir, safe_name))
+    # 정규화 후에도 업로드 디렉터리 밖이면 거부
+    if os.path.commonpath([upload_dir, full_path]) != upload_dir:
+        raise HTTPException(status_code=400, detail="잘못된 파일 경로입니다.")
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+    # FileResponse 는 Range 요청(영상 탐색)을 자동 처리.
+    return FileResponse(full_path)
+
+
 @router.get("/test/defect/{defect_id}/{channel}")
 async def get_test_defect_frame(
     defect_id: str, channel: str, mode: str = "bbox"
