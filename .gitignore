@@ -11,6 +11,9 @@ venv/
 .venv/
 env/
 
+# Node 의존성 (일부 JS 툴링용 — 대용량, 실수 커밋 방지)
+node_modules/
+
 # Python 캐시
 __pycache__/
 *.py[cod]
