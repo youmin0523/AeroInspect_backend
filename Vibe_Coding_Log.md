@@ -3290,3 +3290,26 @@ uploads/gazebo_worlds_real/
 ### ➡️ 후속
 
 - 노션 일괄 동기화
+
+## 🔧 R-v1.1.24 — VLM 주도 검출 + ONNX 교차검증 + gemini/openai 앙상블 (2026-06-09)
+
+> ONNX recall 약점 보완: 검출 주도권을 VLM(grounding)으로 전환. gemini+openai 동시 호출(앙상블) 후 ONNX와 교차검증.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| .24.1 | 06-09 | `VLM_PRIMARY=True`: hybrid.detect 가 _detect_vlm_primary 분기 — VLM(grounding) 1차 검출 주도 + ONNX 교차검증 | app/services/hybrid_detector.py, app/config.py |
+| .24.2 | 06-09 | 앙상블: VLM_ENSEMBLE("gemini:..,openai:..") 병렬 grounding → IoU 클러스터 합의(agree_count) | app/services/hybrid_detector.py |
+| .24.3 | 06-09 | 병합 규칙: VLM∩ONNX(IoU≥VLM_PRIMARY_IOU)→CONFIRMED(박스=ONNX 정밀·종류=VLM 권위) / VLM 단독→box_refiner 보정 REVIEW / ONNX 단독→REVIEW | app/services/hybrid_detector.py |
+| .24.4 | 06-09 | TEST MODE 표시 필터: is_listable(CONFIRMED-only) 대신 CONFIRMED+REVIEW 노출(CONFIRMED 우선) — VLM recall 검출이 숨지 않게 | app/services/test_stream.py |
+
+### 📐 설계 결정
+
+- **왜 VLM 주도**: ONNX 미검출(recall)이 병목. VLM은 의미기반 recall 강함. 단 박스 정밀도는 ONNX가 우위 → 겹치면 ONNX 박스 채택, VLM 단독은 box_refiner 보정.
+- **앙상블 degrade**: 한 provider 실패(키/쿼터/네트워크)면 gather(return_exceptions)로 살아남은 쪽만 사용. VLM 전원 실패해도 ONNX 단독(REVIEW)은 노출.
+- **토글**: VLM_PRIMARY=False 면 기존 ONNX 주도 캐스케이드로 복귀(A/B 비교 가능).
+- **검증**: app.main import OK(154 routes), 병합 로직 단위검증(CONFIRMED/REVIEW/ONNX-only) OK, test_geometric_gate 23 passed.
+
+### ➡️ 후속
+
+- gpt-4o grounding 박스 품질 실측 — 약하면 openai는 검증역할로, gemini를 주 검출로 조정
+- 노션 일괄 동기화
