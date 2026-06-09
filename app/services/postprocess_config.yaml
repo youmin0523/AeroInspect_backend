@@ -193,7 +193,14 @@ furniture_gate:
 geometric_gate:
   enabled: true
   # 검출 클래스가 어떤 컨텍스트(wall/ceiling/floor/window/door) 위에서만 유효한가
+  #
+  # ⚠️ 키는 "게이트 통과 시점의 det['class']" = 모델 raw 출력명이어야 한다.
+  #    파이프라인은 get_20defect_info() 직전(라벨링)까지 raw명(floor_defect/glass_defect/
+  #    frame_defect, crack_indicator, surface_defect …)을 유지하므로, 아래 정식명
+  #    (crack_structural/glass_scratch …)만 있으면 raw 검출은 no_mapping_pass 로 전부
+  #    무조건 통과해 게이트가 사실상 무력화된다 (2026-06-08 바닥균열→E-01 사고 원인).
   valid_context:
+    # ── 정식 코드명(severity_mapper/DEFECT_20_MAP) ── 보고서/일부 경로 호환 유지
     crack_structural:        ["wall", "ceiling", "floor"]
     crack_finishing:         ["wall", "ceiling"]
     caulking_defect:         ["window", "door"]
@@ -214,8 +221,41 @@ geometric_gate:
     vertical_horizontal_defect: ["wall", "ceiling"]
     frame_squareness_defect: ["window", "door"]
     floor_lifting:           ["floor"]
+    # ── 모델 raw 출력명(실제 게이트에 들어오는 키) ──
+    # M3 YOLO/ResNet — 표면이 명확히 갈리는 3종 (strict_classes 로 hard block)
+    floor_defect:            ["floor"]
+    glass_defect:            ["window"]
+    frame_defect:            ["window", "door"]
+    # M1 YOLO/ResNet
+    crack_indicator:         ["wall", "ceiling", "floor"]
+    structural_damage:       ["wall", "ceiling", "floor"]
+    moisture_indicator:      ["wall", "ceiling", "floor"]
+    caulking_indicator:      ["window", "door"]
+    # M2 YOLO/ResNet
+    surface_defect:          ["wall", "ceiling"]
+    surface_defect_wall:     ["wall", "ceiling"]
+    # Thermal Anomaly (B영역 — 단열/누수, 가시 표면 광범위)
+    thermal_anomaly_area:    ["wall", "ceiling", "floor", "window"]
   # 검출의 IoU가 컨텍스트 mask와 이 임계 이상이어야 통과
   context_iou_threshold: 0.4
+  # ── context_relabel: 표면이 유일한 구분자인 혼동 클래스를 M4 표면으로 교정 ──
+  # floor_defect/glass_defect/frame_defect 는 결함 형태가 동일하고 표면만 다르다.
+  # crop 분류(M3 ResNet)로는 표면을 못 가리므로 M4 Context 표면을 권위로 삼아 재라벨한다.
+  # 차단(strict block, 미탐 발생) 보다 우선 — 올바른 코드로 교정하면 하자를 안 놓친다.
+  # ⚠️ 모호하지 않은 표면만 등록: floor 는 바닥 결함만 존재 → 안전. window 는 유리+창틀
+  #    공존, door 는 창틀 가능 → 정답이 1:1이 아니므로 제외(strict block 가 처리).
+  context_relabel:
+    group: [floor_defect, glass_defect, frame_defect]
+    surface_to_class:
+      floor: floor_defect
+  # ── strict_classes: 맥락 불일치 시 weak penalty 가 아니라 hard block ──
+  # "유리 결함이 바닥 위" 처럼 물리적으로 불가능한 조합. 이 클래스들은 표면이
+  # 명확히 갈려 M4 Context(floor↔window) 가 잘 맞히므로, 불일치 시 노출 자체를 차단해도
+  # recall 손실이 거의 없다. 목록에 없는 클래스는 기존 weak_mode(conf×0.6) 유지.
+  strict_classes:
+    - floor_defect
+    - glass_defect
+    - frame_defect
   # M4 Context가 미로드/실패 시 게이트 비활성화 (graceful degradation)
   fallback_when_unavailable: pass  # pass = 게이트 무시, block = 검출 차단
 

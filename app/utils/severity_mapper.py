@@ -46,6 +46,13 @@ DEFECT_CATALOG: Dict[str, Dict] = {
     # E. 창호·문 외관 영역
     "E-01": {"name": "창호 유리 스크래치·파손",   "area": "E", "severity": "MED",  "class_name": "glass_scratch"},
     "E-02": {"name": "창틀·문틀 도장 불량",       "area": "E", "severity": "LOW",  "class_name": "frame_paint_defect"},
+
+    # ── 확장 항목 (2026-06-08, 외벽/옥상 점검 실사진 검증으로 추가) ──
+    # ⚠️ 반드시 맨 끝에 append — DEFECT_CLASS_NAMES / DEFECT_CLASS_ID_TO_CODE 가
+    #    enumerate(DEFECT_CATALOG) 라서 중간 삽입 시 기존 ONNX 클래스 인덱스(0~19)가 어긋남.
+    #    현재 ONNX 미학습 → VLM/하이브리드 검출 전용. 향후 학습 시 인덱스 20, 21 사용.
+    "A-05": {"name": "철근 노출·부식 (녹물)",     "area": "A", "severity": "HIGH", "class_name": "rebar_corrosion"},
+    "C-06": {"name": "도장·마감 박리·탈락",       "area": "C", "severity": "MED",  "class_name": "finish_delamination"},
 }
 
 # ── class_name → category_code 역방향 매핑 ──
