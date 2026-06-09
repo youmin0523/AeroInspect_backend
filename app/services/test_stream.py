@@ -107,6 +107,7 @@ class TestStreamService:
 
         self._source: str = "project"
         self._models_loaded: bool = False
+        self._models_loading: bool = False  # load_models 진행 중 플래그 (사전로드/중복로드 가드 + 프론트 로딩 표시)
         self._frame_counter: int = 0
         self._scanned: bool = False
 
@@ -305,9 +306,18 @@ class TestStreamService:
                     self._uploaded_files.append(os.path.join(upload_dir, f))
 
     # ── 모델 로드 ────────────────────────────
+    @property
+    def models_status(self) -> dict:
+        """프론트가 '로딩 중 / 준비됨 / 오류'를 구분해 표시하도록 노출하는 모델 상태."""
+        return {"models_loaded": self._models_loaded, "models_loading": self._models_loading}
+
     async def load_models(self) -> dict:
         if self._models_loaded:
             return {"status": "already_loaded"}
+        # 이미 다른 호출(사전로드 warmup ↔ start)이 로딩 중이면 중복 to_thread 로드 방지.
+        if self._models_loading:
+            return {"status": "loading"}
+        self._models_loading = True
         try:
             from app.services.inference_pipeline_20 import pipeline20
             await asyncio.to_thread(pipeline20.load_models)
@@ -317,6 +327,8 @@ class TestStreamService:
         except Exception as e:
             print(f"[TestStream] 모델 로드 실패 (목업 폴백 사용): {e}")
             return {"status": "fallback_mock", "error": str(e)}
+        finally:
+            self._models_loading = False
 
     # ── 소스 전환 ────────────────────────────
     def set_source(self, source: str) -> None:
@@ -882,8 +894,15 @@ class TestStreamService:
         각 detection 에는 video_timestamp_sec(=frame_idx/fps) 가 포함되어 프론트가
         <video>.currentTime 과 동기화하여 SVG 오버레이를 띄울 수 있게 한다.
         play_state(_playing/_paused) 존중. 영상 끝나면 자연 종료."""
+        # 콜드 스타트 시 모델 로드(10~20초)가 끝나기 전에 영상이 activate 될 수 있다.
+        # 과거: 여기서 즉시 return → 영상은 재생되는데 검출이 영영 안 떠서 "로딩인지
+        # 오류인지" 분간 안 되는 사고. 이제 로드 완료를 기다렸다가 추론을 시작한다.
+        waited = 0.0
+        while not self._models_loaded and self._playing and waited < 30.0:
+            await asyncio.sleep(0.5)
+            waited += 0.5
         if not self._models_loaded:
-            print("[TestStream] 모델 미로드 — 영상 inference 스킵")
+            print(f"[TestStream] 모델 미로드(대기 {waited:.0f}s 초과) — 영상 inference 스킵")
             return
 
         cap = cv2.VideoCapture(filepath)
