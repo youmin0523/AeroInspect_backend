@@ -3399,3 +3399,16 @@ uploads/gazebo_worlds_real/
 - _box2d_to_xyxy 축-스왑 은폐(VLM grounding 깨질 위험), JWT 레거시 토큰 허용(기존 발급 토큰 호환), get_messages O(n×readers)/list_conversations over-fetch(동작 정상·성능만), _process_20 인라인 import(순환참조 방어).
 
 ### ✅ 최종: 282 passed, 3 skipped, 1 xfailed, 0 failed
+
+## 🚀 배포 전 점검 (2026-06-09)
+
+| 점검 | 결과 |
+|---|---|
+| JWT fail-closed | SAFE — prod 시크릿(JWT/webhook/DB/OAuth 3종) 전부 설정 확인(flyctl secrets), APP_ENV=production 이나 placeholder 없음 → 부팅 정상 |
+| /detect/batch 스키마 변경 | SAFE — 프론트는 WS(defects)+/defects 로 검출 수신, /detect/batch 미사용 |
+| 마이그레이션 | 자동실행 아님(release_command 없음)·앱은 미적용 상태로도 부팅 → 배포와 분리된 후속 작업. SQL offline 렌더 정상, 단일 head |
+| Docker 빌드 리스크 | **수정**: Dockerfile=python:3.11 인데 핀은 3.12 기준 → 무거운 ML 라이브러리(torch/numpy 등) 유연 specifier 로 복원(빌드 안전), 경량/LLM/프레임워크 핀은 유지 |
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| DEP.1 | 06-09 | ML 라이브러리 exact-pin 해제(빌드 휠 부재 위험 제거), 나머지 핀 유지 | requirements.txt |
