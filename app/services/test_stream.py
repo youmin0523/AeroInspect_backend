@@ -969,14 +969,18 @@ class TestStreamService:
         image_bytes = await asyncio.to_thread(self._encode_jpeg, frame)
         result = await detect_hybrid_async(image_bytes)
 
-        # bbox 있는 listable 검출 우선(이미지전체 박스는 후순위), 신뢰도 최고 1건
-        cands = [d for d in result.detections
-                 if d.listable and d.bbox_xyxy and d.localization == "bbox"]
-        if not cands:
-            cands = [d for d in result.detections if d.listable and d.bbox_xyxy]
-        if not cands:
+        # TEST MODE는 데모/검증용이라 CONFIRMED 뿐 아니라 REVIEW(VLM 단독·ONNX 단독)도 노출.
+        # (is_listable 는 보고서 등재 기준이라 CONFIRMED-only → 그걸 쓰면 VLM recall 검출이 다 숨음)
+        usable = [d for d in result.detections
+                  if d.grade in ("CONFIRMED", "REVIEW") and d.bbox_xyxy and d.localization == "bbox"]
+        if not usable:
+            usable = [d for d in result.detections
+                      if d.grade in ("CONFIRMED", "REVIEW") and d.bbox_xyxy]
+        if not usable:
             return None
-        det = max(cands, key=lambda d: d.conf)
+        # CONFIRMED 우선(더 신뢰), 없으면 REVIEW 중 최고 신뢰 1건
+        confirmed = [d for d in usable if d.grade == "CONFIRMED"]
+        det = max(confirmed or usable, key=lambda d: d.conf)
 
         x1, y1, x2, y2 = [int(v) for v in det.bbox_xyxy[:4]]
         bbox_dict = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}

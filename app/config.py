@@ -213,6 +213,17 @@ class Settings(BaseSettings):
     # (균열=선형, 녹물=색, 박리=텍스처). 실패 시 원본 박스 유지(안전).
     VLM_BOX_REFINE: bool = True
 
+    # ── 검출 주도권 / VLM 앙상블 (2026-06-09) ──
+    #   VLM_PRIMARY: True면 VLM(grounding)이 1차 검출 주도 + ONNX 교차검증(합의→CONFIRMED,
+    #                박스=ONNX 정밀 / VLM 단독=box_refiner 보정 후 REVIEW / ONNX 단독=REVIEW).
+    #                False면 기존 ONNX 주도 캐스케이드(adjudicate).  ONNX recall이 약해 VLM 우선.
+    #   VLM_ENSEMBLE: 병렬 호출할 "provider:model" 쉼표구분 — 여러 VLM 합의(앙상블)로 신뢰도↑.
+    #   VLM_PRIMARY_IOU: VLM↔ONNX를 같은 검출로 볼 IoU 하한.
+    VLM_PRIMARY: bool = True
+    VLM_ENSEMBLE_ENABLED: bool = True
+    VLM_ENSEMBLE: str = "gemini:gemini-2.5-flash,openai:gpt-4o"
+    VLM_PRIMARY_IOU: float = 0.3
+
     # ── JWT ──────────────────────────────────
     JWT_SECRET: str = "change-me-in-production"
     JWT_EXPIRE_MINUTES: int = 120
