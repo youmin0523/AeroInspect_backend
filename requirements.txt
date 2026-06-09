@@ -30,14 +30,18 @@ bcrypt==5.0.0
 python-jose[cryptography]==3.5.0
 
 # ── Computer Vision / AI ───────────────────
-opencv-python==4.13.0.92
-numpy==2.4.6
-torch==2.12.0
-torchvision==0.27.0
-ultralytics==8.4.61
-anomalib==2.5.0
-onnxruntime==1.26.0
-ensemble-boxes==1.0.9  # multi-checkpoint WBF (M3/M2 0.85 mAP 도달 핵심)
+# 주의: 무거운 ML 라이브러리는 exact-pin 하지 않는다.
+#   - Docker 빌드는 python:3.11-slim 인데 로컬 검증 env 는 3.12 → 3.12 기준 exact 핀이
+#     3.11 휠 부재로 빌드 실패할 수 있음(특히 torch/torchvision/numpy).
+#   - 빌드 환경에서 호환 버전을 해석하도록 원래의 유연한 specifier 유지(기존 검증된 동작).
+opencv-python
+numpy
+torch>=2.1
+torchvision
+ultralytics>=8.3.0
+anomalib
+onnxruntime
+ensemble-boxes  # multi-checkpoint WBF (M3/M2 0.85 mAP 도달 핵심)
 
 # ── Hardware ───────────────────────────────
 pyserial==3.5
