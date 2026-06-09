@@ -3325,3 +3325,15 @@ uploads/gazebo_worlds_real/
 | Q.3 | 06-09 | 인증/DB: bcrypt to_thread(signup/find-pw), find-pw 이메일실패 롤백, 레이트리밋 키 정리, XFF 안전화, oauth logger | app/api/auth.py, app/core/rate_limit.py, app/core/security.py, app/api/oauth.py |
 | Q.4 | 06-09 | 외부: SMTP 비동기+정직한 상태, image_storage aiofiles, 알림 팬아웃 동시화, RAG 라운드트립 축소(GROUP BY), gcp aclose·녹화정리 셧다운 배선 | app/services/email_service.py, app/services/image_storage.py, app/services/notification_service.py, app/services/openai_chat.py, app/main.py |
 | Q.5 | 06-09 | 비동기化 호출부 await 갱신 + 테스트 갱신 | app/api/ai_webhook.py, app/api/defects.py, tests/test_image_storage.py |
+
+## 📦 전체 점검 5/5 — 의존성 고정 (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| P.1 | 06-09 | requirements 전체 == 고정(검증된 설치 버전). LLM SDK(anthropic 0.107.1/openai 2.41.0/google-generativeai 0.8.6) 포함, bcrypt 명시 | requirements.txt |
+
+### ✅ 검증
+- 전체 테스트 274 passed (회귀 0). 실패 9건은 기존 결함(클래스 수 20→22 드리프트, ONNX M5_SEG, floorplan 시그니처)으로 이번 작업과 무관(stash 대조 확인).
+
+### ⏭️ 보류(결정·자격증명 필요)
+- FCM/APNs 실제 푸시(자격증명), 이메일 citext 유니크(데이터 마이그레이션), 토큰 폐기/블랙리스트(설계), 레이트리밋/스트림모드 Redis 통일, /detect/batch 부분실패 응답 스키마, tiled inference 실배치화
