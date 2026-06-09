@@ -134,27 +134,28 @@ class HybridDetector:
         self, frame: np.ndarray, thermal_map: Optional[np.ndarray]
     ) -> Tuple[str, List[Dict[str, Any]]]:
         """활성 파이프라인 실행 → 정규화 후보 리스트 {id, class_name, conf, bbox_xyxy}."""
-        # 20종 파이프라인 우선 (taxonomy 직접 매칭)
-        if settings.USE_20DEFECT_PIPELINE:
-            try:
-                from app.services.inference_pipeline_20 import pipeline20
-                if pipeline20.is_loaded:
-                    result = await pipeline20.detect_async(
-                        frame, thermal_map=thermal_map, tier=3
-                    )
-                    cands = []
-                    for i, d in enumerate(result.detections):
-                        if not d.bbox_xyxy:
-                            continue
-                        cands.append({
-                            "id": i,
-                            "class_name": d.class_,
-                            "conf": float(d.conf),
-                            "bbox_xyxy": list(d.bbox_xyxy),
-                        })
-                    return "pipeline20", cands
-            except Exception as e:
-                logger.warning("pipeline20 실행 실패, 3-모델로 폴백: %s", e)
+        # 20종 파이프라인 우선 (taxonomy 직접 매칭).
+        # USE_20DEFECT_PIPELINE 플래그가 꺼져 있어도 이미 로드돼 있으면 사용 —
+        # TEST MODE 가 lazy-load 해둔 파이프라인을 하이브리드에서도 활용(플래그는 startup 자동로드 여부만 제어).
+        try:
+            from app.services.inference_pipeline_20 import pipeline20
+            if pipeline20.is_loaded:
+                result = await pipeline20.detect_async(
+                    frame, thermal_map=thermal_map, tier=3
+                )
+                cands = []
+                for i, d in enumerate(result.detections):
+                    if not d.bbox_xyxy:
+                        continue
+                    cands.append({
+                        "id": i,
+                        "class_name": d.class_,
+                        "conf": float(d.conf),
+                        "bbox_xyxy": list(d.bbox_xyxy),
+                    })
+                return "pipeline20", cands
+        except Exception as e:
+            logger.warning("pipeline20 실행 실패, 3-모델로 폴백: %s", e)
 
         # 3-모델 파이프라인 (Crack/Moisture/delamination → 브리지)
         try:
