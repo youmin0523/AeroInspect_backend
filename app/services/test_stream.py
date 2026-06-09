@@ -911,8 +911,11 @@ class TestStreamService:
             return
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        # 0.33초마다 1회 추론 (30fps → 매 10프레임, 60fps → 매 20프레임)
-        sample_interval = max(1, int(round(fps / 3.0)))
+        # 하이브리드(VLM) 비용 통제: VLM_KEYFRAME_INTERVAL_SEC 주기로만 샘플 추론.
+        # (Live _vlm_keyframe_loop 와 동일 정책 — 영상 프레임 폭주로 VLM 일일상한/동시성 소진 방지.
+        #  과거 fps/3(초당 3회)면 VLM 경로에서 즉시 쿼터 고갈.)
+        kf = max(1.0, float(settings.VLM_KEYFRAME_INTERVAL_SEC))
+        sample_interval = max(1, int(round(fps * kf)))
         frame_idx = 0
 
         try:
@@ -964,10 +967,64 @@ class TestStreamService:
           2 = M4(thermal) + M6(patchcore) 제외. 영상 경로 기본 — RGB 영상에 thermal U-Net은
               무의미하고 PatchCore는 무거워 60fps 동시 inference 시 결정적 병목.
           1 = M1+M2 만. 경량 (필요 시).
-        Why: 디렉토리명 기반 mock 라벨이 실제 추론 자리를 가로채면 입주자 신뢰 직결 사고."""
+        Why: 디렉토리명 기반 mock 라벨이 실제 추론 자리를 가로채면 입주자 신뢰 직결 사고.
+
+        2026-06-09: TEST MODE 도 항상 하이브리드(ONNX 후보 → VLM 판정) 경로를 탄다.
+        VLM 인프라 실패(키 미설정/쿼터/네트워크)일 때만 ONNX 단독으로 폴백 — 화면이
+        빈 채로 멎지 않게. 하이브리드가 정상 동작하며 0건을 반환한 경우(VLM 기각 등)는
+        그 판정을 존중하여 None."""
         if not self._models_loaded:
             return None
-        return await self._detect_real(frame, filepath, tier=tier)
+        try:
+            return await self._detect_hybrid(frame, filepath)
+        except Exception as e:
+            print(f"[TestStream] 하이브리드 실패 — ONNX 단독 폴백: {e}")
+            return await self._detect_real(frame, filepath, tier=tier)
+
+    async def _detect_hybrid(self, frame: np.ndarray, filepath: str) -> Optional[dict]:
+        """ONNX 후보 → VLM 판정(하이브리드). 보고서 등재 가능(listable) 검출 중 bbox 있는
+        최고 신뢰 1건을 골라 기존 broadcast 스키마로 매핑. 인프라 실패는 호출부(_detect)가 폴백."""
+        from app.services.hybrid_detector import detect_hybrid_async
+        image_bytes = await asyncio.to_thread(self._encode_jpeg, frame)
+        result = await detect_hybrid_async(image_bytes)
+
+        # bbox 있는 listable 검출 우선(이미지전체 박스는 후순위), 신뢰도 최고 1건
+        cands = [d for d in result.detections
+                 if d.listable and d.bbox_xyxy and d.localization == "bbox"]
+        if not cands:
+            cands = [d for d in result.detections if d.listable and d.bbox_xyxy]
+        if not cands:
+            return None
+        det = max(cands, key=lambda d: d.conf)
+
+        x1, y1, x2, y2 = [int(v) for v in det.bbox_xyxy[:4]]
+        bbox_dict = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+        image_crop_b64 = self._crop_to_base64(frame, x1, y1, x2, y2)
+        conf_rounded = round(float(det.conf), 3)
+        class_name = getattr(det, "class_", "") or ""
+        class_en = getattr(det, "class_display_en", "") or class_name
+        grade_ko = getattr(det, "grade_display_ko", "") or ""
+        label = f"{det.code} {det.class_display_ko} ({conf_rounded*100:.0f}%·{grade_ko})".strip()
+
+        return {
+            "id": uuid.uuid4().hex,
+            "bbox": bbox_dict,
+            "label": label,
+            "severity": det.severity or "HIGH",
+            "image_crop": image_crop_b64,
+            "confidence": conf_rounded,
+            "filepath": filepath,
+            "defect_info": {
+                "area": det.area,
+                "category_code": det.code,
+                "defect_type": det.class_display_ko,
+                "severity": det.severity,
+                "defect_class": class_name,
+                "defect_class_display_en": class_en,
+                "defect_class_display_ko": det.class_display_ko,
+            },
+            "source": det.source,  # onnx+vlm | vlm | onnx
+        }
 
     def _detect_mock(self, frame: np.ndarray, filepath: str) -> dict:
         """[DEPRECATED — 호출되지 않음] 디렉토리명 기반 가짜 라벨.
