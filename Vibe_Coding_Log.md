@@ -3348,3 +3348,12 @@ uploads/gazebo_worlds_real/
 | R.2 | 06-09 | 레이트리밋 Redis 고정윈도우 백엔드(RATE_LIMIT_BACKEND) + 메모리 폴백 | app/core/rate_limit.py |
 | R.3 | 06-09 | 스트림 카메라 모드 Redis 공유(멀티워커 GET 정합) + 메모리 폴백 | app/api/stream.py |
 | R.4 | 06-09 | 설정 추가(RATE_LIMIT_BACKEND/TOKEN_DENYLIST/FCM·APNS/TILED_IMGSZ), 셧다운 close_redis, redis 의존성 | app/config.py, app/main.py, requirements.txt |
+
+## 🧩 보류 항목 보완 2/4 — 토큰 폐기 + 이메일 대소문자 유일성 (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| T.1 | 06-09 | JWT 에 jti 추가 + decode_token_claims(전체 payload 반환) | app/core/jwt.py |
+| T.2 | 06-09 | Redis denylist(revoke_jti/is_revoked, fail-open) | app/core/token_denylist.py |
+| T.3 | 06-09 | get_current_user 에 폐기 검사, /auth/logout 신규, refresh 회전 시 옛 토큰 폐기 | app/dependencies.py, app/api/auth.py |
+| T.4 | 06-09 | 이메일 대소문자 무시 유일성: 저장/조회 normalize + lower(email) UNIQUE 인덱스(+무손실 마이그레이션) | app/api/auth.py, app/models/user.py, alembic/versions/q9d0e1f2a3b4_email_case_insensitive_unique.py |

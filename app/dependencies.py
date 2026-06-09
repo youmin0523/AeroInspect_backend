@@ -18,7 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.session import async_session_factory
-from app.core.jwt import decode_access_token
+from app.core.jwt import decode_token_claims
+from app.core.token_denylist import is_revoked
 from app.services.camera import rgb_camera_service, thermal_camera_service
 from app.services.recording import recording_service
 from app.services.yolo_inference import yolo_service
@@ -53,9 +54,13 @@ async def get_current_user(
     if cred is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증 토큰이 필요합니다.")
 
-    user_id = decode_access_token(cred.credentials)
-    if user_id is None:
+    claims = decode_token_claims(cred.credentials, "access")
+    if claims is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않거나 만료된 토큰입니다.")
+    # 폐기(로그아웃/회전)된 토큰 차단 — Redis 미가용 시 fail-open(검사 생략)
+    if await is_revoked(claims.get("jti")):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="로그아웃되었거나 폐기된 토큰입니다.")
+    user_id = claims.get("sub")
 
     from app.models.user import User  # 순환 임포트 방지
     result = await db.execute(select(User).where(User.id == UUID(user_id)))
@@ -237,10 +242,10 @@ async def verify_ai_webhook_or_user(
         return None  # webhook 측 통과 (사용자 컨텍스트 없음)
 
     if cred is not None:
-        user_id = decode_access_token(cred.credentials)
-        if user_id is not None:
+        claims = decode_token_claims(cred.credentials, "access")
+        if claims is not None and not await is_revoked(claims.get("jti")):
             from app.models.user import User  # 순환 임포트 방지
-            result = await db.execute(select(User).where(User.id == UUID(user_id)))
+            result = await db.execute(select(User).where(User.id == UUID(claims["sub"])))
             user = result.scalar_one_or_none()
             if user is not None:
                 return user
