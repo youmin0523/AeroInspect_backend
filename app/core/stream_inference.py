@@ -71,6 +71,7 @@ class StreamInferenceWorker:
         # ── VLM 키프레임 오버레이 (근실시간 비전 LLM 검출) ──
         # 30fps ONNX 경로와 별개로, N초마다 최신 프레임 1장만 VLM에 비동기 제출.
         self._last_frame_bgr: Optional[np.ndarray] = None
+        self._last_frame_id: int = 0  # _last_frame_bgr 에 대응하는 frame_id (VLM 이벤트 정합)
         self._vlm_task: Optional[asyncio.Task] = None
         self._vlm_count: int = 0            # VLM 키프레임 처리 횟수
         self._vlm_errors: int = 0           # VLM 실패 횟수
@@ -213,6 +214,7 @@ class StreamInferenceWorker:
         # (enqueue 되는 프레임에서만 갱신 — 키프레임 주기가 초 단위라 충분히 신선)
         if settings.VLM_DETECTION_ENABLED:
             self._last_frame_bgr = frame_bgr
+            self._last_frame_id = self._submitted_count  # 이 프레임의 정확한 id 캡처
 
         item = QueuedFrame(
             frame_bgr=frame_bgr,
@@ -462,6 +464,7 @@ class StreamInferenceWorker:
                 break
 
             frame = self._last_frame_bgr
+            frame_id = self._last_frame_id  # 캡처 당시 id 고정 (이후 submit 으로 드리프트 방지)
             if frame is None:
                 continue
 
@@ -486,7 +489,7 @@ class StreamInferenceWorker:
                     await ws_manager.broadcast("stream", {
                         "type": "hybrid_detection",
                         "timestamp": now,
-                        "frame_id": self._submitted_count,
+                        "frame_id": frame_id,
                         "result": json.loads(hr.model_dump_json()),
                         "lidar_position": lidar_pos,
                     })
@@ -498,7 +501,7 @@ class StreamInferenceWorker:
                     await ws_manager.broadcast("stream", {
                         "type": "vlm_detection",
                         "timestamp": now,
-                        "frame_id": self._submitted_count,
+                        "frame_id": frame_id,
                         "result": json.loads(vr.model_dump_json()),
                         "lidar_position": lidar_pos,
                     })
@@ -519,7 +522,7 @@ class StreamInferenceWorker:
                             "defect_source": d.get("defect_source"),
                             "defect_class": d.get("class"),
                             "defect_class_display_ko": d.get("class_display_ko"),
-                            "frame_id": self._submitted_count,
+                            "frame_id": frame_id,
                             "localization": d.get("localization"),
                         },
                     })

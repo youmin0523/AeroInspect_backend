@@ -81,7 +81,7 @@ async def send_found_username_email(to: str, name: str, username: str):
         <p style="margin:4px 0 0;font-size:20px;font-weight:bold;color:#1e40af;">{username}</p>
       </div>
       <p style="font-size:13px;color:#94a3b8;">
-        본 메일은 발신전용이며, 로그인은 <a href="http://localhost:5173/login">여기</a>에서 가능합니다.
+        본 메일은 발신전용이며, 로그인은 <a href="{settings.FRONTEND_BASE_URL}/login">여기</a>에서 가능합니다.
       </p>
     </div>
     """
@@ -103,7 +103,7 @@ async def send_temp_password_email(to: str, name: str, temp_password: str):
         보안을 위해 로그인 후 반드시 비밀번호를 변경해주세요.
       </p>
       <p style="font-size:13px;color:#94a3b8;">
-        본 메일은 발신전용이며, 로그인은 <a href="http://localhost:5173/login">여기</a>에서 가능합니다.
+        본 메일은 발신전용이며, 로그인은 <a href="{settings.FRONTEND_BASE_URL}/login">여기</a>에서 가능합니다.
       </p>
     </div>
     """

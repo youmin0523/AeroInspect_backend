@@ -15,7 +15,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import aiofiles
@@ -40,7 +40,7 @@ class ImageStorage:
         os.makedirs(os.path.join(self.UPLOAD_ROOT, self.DEFECT_SUBDIR), exist_ok=True)
 
     def _today_dir(self) -> str:
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         path = os.path.join(self.UPLOAD_ROOT, self.DEFECT_SUBDIR, today)
         os.makedirs(path, exist_ok=True)
         return path

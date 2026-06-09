@@ -3384,3 +3384,18 @@ uploads/gazebo_worlds_real/
 ### 📌 핵심 발견
 - F.2 는 단순 stale 테스트가 아니라 **실제 운영 버그**였음: MS 의 missions.py/floorplan.py 는 신규 시뮬레이터 API 를 호출하는데 시뮬레이터 파일만 옛 버전 → 해당 엔드포인트 500. main 복원으로 해소.
 - M5_SEG 만 코드로 해결 불가(올바른 4클래스 frames ONNX 재export 필요).
+
+## 🧽 저위험 잔여 항목(B) 정리 (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| C.1 | 06-09 | PatchCore score [0,1] 클램프 — raw/비정규화 점수가 conf>=CONFIRMED_STRONG 로 오토CONFIRM 되는 것 방지 | app/services/onnx_inference.py |
+| C.2 | 06-09 | crop_roi → crop_roi_xyxy 개명(픽셀-xyxy) — image_utils.crop_roi(xywhn)와 동명 혼동 제거 | app/services/onnx_inference.py, app/services/inference_pipeline_20.py |
+| C.3 | 06-09 | 이메일 로그인 링크 하드코딩 → settings.FRONTEND_BASE_URL | app/services/email_service.py, app/config.py |
+| C.4 | 06-09 | image_storage datetime.utcnow() → timezone-aware now(utc) | app/services/image_storage.py |
+| C.5 | 06-09 | VLM 키프레임 frame_id 드리프트 수정 — 캡처 당시 id 고정(이후 submit 으로 어긋나던 DB/이벤트 frame_id 정합) | app/core/stream_inference.py |
+
+### ⏭️ 의도적 보류(위험/저가치)
+- _box2d_to_xyxy 축-스왑 은폐(VLM grounding 깨질 위험), JWT 레거시 토큰 허용(기존 발급 토큰 호환), get_messages O(n×readers)/list_conversations over-fetch(동작 정상·성능만), _process_20 인라인 import(순환참조 방어).
+
+### ✅ 최종: 282 passed, 3 skipped, 1 xfailed, 0 failed

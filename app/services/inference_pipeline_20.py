@@ -47,7 +47,7 @@ from app.services.onnx_inference import (
     ONNXPatchCoreDetector,
     ONNXResNetClassifier,
     ONNXYoloDetector,
-    crop_roi,
+    crop_roi_xyxy,
 )
 from app.services.geometric_gate import GeometricGate, load_geometric_gate_from_config
 from app.services.furniture_gate import FurnitureGate, load_furniture_gate_from_config
@@ -576,7 +576,7 @@ class InferencePipeline20:
         for det in dets:
             det["defect_source"] = "yolo_structural"
             if det["class"] == "crack" and self._m1_resnet:
-                roi = crop_roi(frame_bgr, det["bbox_xyxy"])
+                roi = crop_roi_xyxy(frame_bgr, det["bbox_xyxy"])
                 crack_type, crack_conf, _ = self._m1_resnet.classify(roi)
                 det["class"] = crack_type
                 det["conf"] = compute_combined_confidence(det["conf"], crack_conf)
@@ -606,7 +606,7 @@ class InferencePipeline20:
         for det in dets:
             det["defect_source"] = "yolo_surface"
             if det["class"] == "surface_defect_wall" and self._m2_resnet:
-                roi = crop_roi(frame_bgr, det["bbox_xyxy"])
+                roi = crop_roi_xyxy(frame_bgr, det["bbox_xyxy"])
                 surface_type, surface_conf, _ = self._m2_resnet.classify(roi)
                 det["class"] = surface_type
                 det["conf"] = compute_combined_confidence(det["conf"], surface_conf)
@@ -639,7 +639,7 @@ class InferencePipeline20:
         for det in dets:
             det["defect_source"] = "yolo_floor_window"
             if self._m3_resnet and det["class"] in ("floor_defect", "glass_defect", "frame_defect"):
-                roi = crop_roi(frame_bgr, det["bbox_xyxy"])
+                roi = crop_roi_xyxy(frame_bgr, det["bbox_xyxy"])
                 sub_type, sub_conf, _ = self._m3_resnet.classify(roi)
                 # 표면(floor/glass/frame) 권위는 M4 Context(geometric_gate context_relabel)로 이관.
                 # crop-ResNet 은 컨텍스트가 잘려 floor↔glass 를 뒤집는 사고(2026-06-08)를 내므로

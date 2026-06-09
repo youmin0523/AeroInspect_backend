@@ -456,6 +456,9 @@ class ONNXPatchCoreDetector:
         norm_map = (anomaly_map - anomaly_map.min()) / (anomaly_map.max() - anomaly_map.min() + 1e-6)
         mask = (norm_map > self.threshold).astype(np.uint8) * 255
 
+        # score 는 계약상 0.0~1.0 (docstring). export 버전/폴백(raw max)에서 범위를 벗어나면
+        # grading 에서 conf>=CONFIRMED_STRONG 로 잘못 자동 CONFIRM 될 수 있어 클램프.
+        score = max(0.0, min(1.0, score))
         return mask, score
 
 
@@ -463,12 +466,16 @@ class ONNXPatchCoreDetector:
 # 유틸리티
 # ═══════════════════════════════════════════════
 
-def crop_roi(
+def crop_roi_xyxy(
     frame: np.ndarray,
     bbox_xyxy: List[float],
     padding: float = 0.1,
 ) -> np.ndarray:
-    """bbox 영역을 패딩과 함께 크롭. 빈 크롭 시 원본 반환."""
+    """bbox(xyxy 픽셀) 영역을 패딩과 함께 크롭. 빈 크롭 시 원본 반환.
+
+    주의: app.utils.image_utils.crop_roi 는 xywh-normalized 규약의 *다른* 함수다.
+    혼동 방지를 위해 이 픽셀-xyxy 버전은 _xyxy 접미사로 구분한다.
+    """
     h, w = frame.shape[:2]
     x1, y1, x2, y2 = bbox_xyxy
     pw = (x2 - x1) * padding

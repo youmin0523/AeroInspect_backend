@@ -305,6 +305,9 @@ class Settings(BaseSettings):
     NAVER_CLIENT_SECRET: str = ""
     OAUTH_REDIRECT_BASE: str = "http://localhost:5173"
 
+    # 이메일 본문 등에서 쓰는 프론트엔드 기본 URL (로그인 링크 등). 운영에선 실제 도메인으로.
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
+
     # ── WebSocket ────────────────────────────
     WS_HEARTBEAT_INTERVAL: int = 3
 
