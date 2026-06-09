@@ -2,7 +2,8 @@
 # app/api/detect.py
 # 역할: 3-모델 추론 REST 엔드포인트 (이미지 업로드 → 즉시 추론)
 #       - POST /detect        → multipart 단건 업로드 → DetectionResult
-#       - POST /detect/batch  → 최대 10장 일괄 업로드 → List[DetectionResult]
+#       - POST /detect/batch  → 최대 10장 일괄 업로드 → BatchDetectionResponse
+#                                (per-item 격리: 한 장 실패가 배치 전체를 죽이지 않음)
 #
 # 에러 코드:
 #   400: 이미지 디코딩 실패 / 지원 안 되는 파일
@@ -21,6 +22,8 @@ from fastapi.responses import Response
 from app.config import settings
 from app.dependencies import verify_ai_webhook_or_user
 from app.schemas.detection import (
+    BatchDetectionItem,
+    BatchDetectionResponse,
     CompareResult,
     DetectionResult,
     HybridDetectionResult,
@@ -93,14 +96,21 @@ async def detect_single(
 
 @router.post(
     "/batch",
-    response_model=List[DetectionResult],
-    summary="다중 이미지 하자 탐지 (배치)",
-    description=f"최대 {MAX_BATCH_SIZE}장을 한 번에 업로드. 각 이미지마다 독립 추론 후 리스트로 반환.",
+    response_model=BatchDetectionResponse,
+    summary="다중 이미지 하자 탐지 (배치, per-item 격리)",
+    description=(
+        f"최대 {MAX_BATCH_SIZE}장을 한 번에 업로드. 각 이미지마다 독립 추론 후 "
+        "per-item 결과(success/result/error)로 반환. 한 장이 실패해도 나머지는 정상 처리."
+    ),
 )
 async def detect_batch(
     images: List[UploadFile] = File(..., description=f"이미지 파일 리스트 (최대 {MAX_BATCH_SIZE}장)"),
     _auth=Depends(verify_ai_webhook_or_user),
-) -> List[DetectionResult]:
+) -> BatchDetectionResponse:
+    # ⚠️ 응답 스키마 변경(승인됨): 과거 List[DetectionResult] → BatchDetectionResponse.
+    #    이전 구현은 asyncio.gather(return_exceptions 없이) + HTTPException 재발생이라
+    #    한 장 디코딩 실패가 배치 전체를 4xx 로 죽였다. 이제 per-item 으로 격리한다.
+    #    프론트엔드는 items[].success 로 분기 처리해야 함.
     _ensure_loaded()
 
     if len(images) == 0:
@@ -111,27 +121,57 @@ async def detect_batch(
             detail=f"배치 크기 초과: {len(images)} > {MAX_BATCH_SIZE}",
         )
 
-    # 1) 모든 업로드를 먼저 읽고 검증 (순차 I/O — UploadFile.read는 stream)
-    raws: List[bytes] = []
-    for upload in images:
-        _validate_content_type(upload)
-        raw = await upload.read()
-        if not raw:
-            raise HTTPException(status_code=400, detail=f"빈 파일: {upload.filename}")
-        raws.append(raw)
-
-    # 2) 이미지별 추론을 동시 실행 (입력 순서 보존). per-image 오류는 태스크 단위로
-    #    잡아 한 장 실패가 배치 전체를 죽이지 않도록 유지.
-    async def _detect_one(upload: UploadFile, raw: bytes) -> DetectionResult:
+    # 1) 이미지별 추론을 per-item 격리로 실행 (입력 순서 보존).
+    #    읽기/검증/디코딩/추론 전 과정을 태스크 단위 try/except 로 감싸 한 장의
+    #    실패(content-type 오류, 빈 파일, 디코딩 실패, 추론 오류)가 배치 전체를
+    #    중단시키지 않게 한다. 반환값은 (성공 result | 오류 메시지) 튜플.
+    async def _detect_one(upload: UploadFile) -> tuple[Optional[DetectionResult], Optional[str]]:
         try:
-            return await detect_defects_async(raw)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"{upload.filename}: {e}")
+            _validate_content_type(upload)
+            raw = await upload.read()
+            if not raw:
+                return None, "빈 파일입니다."
+            result = await detect_defects_async(raw)
+            return result, None
+        except HTTPException as e:
+            # _validate_content_type 등이 던지는 4xx 도 per-item 오류로 흡수
+            return None, str(e.detail)
+        except ValueError:
+            return None, "이미지 디코딩 실패 — 지원되지 않는 형식이거나 손상되었습니다."
+        except Exception as e:  # noqa: BLE001 — 한 장 실패가 배치를 죽이지 않도록 흡수
+            import logging
+            logging.getLogger(__name__).error("batch detect 실패(%s): %s", upload.filename, e)
+            return None, "추론 실패 — 잠시 후 다시 시도해주세요."
 
-    return list(
-        await asyncio.gather(
-            *(_detect_one(upload, raw) for upload, raw in zip(images, raws))
-        )
+    # 2) 동시 실행. return_exceptions=True 로 예기치 못한 예외도 결과 슬롯에 담아
+    #    순서를 보존(gather 는 입력 순서대로 결과를 정렬).
+    outcomes = await asyncio.gather(
+        *(_detect_one(upload) for upload in images),
+        return_exceptions=True,
+    )
+
+    items: List[BatchDetectionItem] = []
+    for idx, (upload, outcome) in enumerate(zip(images, outcomes)):
+        if isinstance(outcome, BaseException):
+            # _detect_one 이 모든 예외를 흡수하므로 여기 도달은 이론상 없으나
+            # 방어적으로 처리 (gather return_exceptions 안전망).
+            result, error = None, "내부 처리 오류"
+        else:
+            result, error = outcome
+        items.append(BatchDetectionItem(
+            index=idx,
+            filename=upload.filename,
+            success=result is not None,
+            result=result,
+            error=error,
+        ))
+
+    success_count = sum(1 for it in items if it.success)
+    return BatchDetectionResponse(
+        items=items,
+        total=len(items),
+        success_count=success_count,
+        failure_count=len(items) - success_count,
     )
 
 

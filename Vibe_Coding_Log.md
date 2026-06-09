@@ -3357,3 +3357,15 @@ uploads/gazebo_worlds_real/
 | T.2 | 06-09 | Redis denylist(revoke_jti/is_revoked, fail-open) | app/core/token_denylist.py |
 | T.3 | 06-09 | get_current_user 에 폐기 검사, /auth/logout 신규, refresh 회전 시 옛 토큰 폐기 | app/dependencies.py, app/api/auth.py |
 | T.4 | 06-09 | 이메일 대소문자 무시 유일성: 저장/조회 normalize + lower(email) UNIQUE 인덱스(+무손실 마이그레이션) | app/api/auth.py, app/models/user.py, alembic/versions/q9d0e1f2a3b4_email_case_insensitive_unique.py |
+
+## 🧩 보류 항목 보완 3/4 — 검출 타일 배치 + /batch 스키마 / 4/4 — FCM·APNs (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| B.1 | 06-09 | ONNXYoloDetector.predict_batch(동적 배치축 확인 후 단일 배치 추론), generate_tiles 중복 타일 제거 | app/services/onnx_inference.py, app/services/tiled_inference.py |
+| B.2 | 06-09 | /detect/batch 부분실패 격리: BatchDetectionItem/Response(per-item success/error) | app/api/detect.py, app/schemas/detection.py |
+| B.3 | 06-09 | FCM HTTP v1(서비스계정 JWT→토큰, 재사용 httpx) + APNs(ES256 JWT, http2) 실제 전송, 자격증명 없으면 noop | app/services/push_notifications.py |
+
+### ⚠️ 검증 한계
+- FCM/APNs 는 실제 자격증명 없이는 end-to-end 전송 검증 불가(코드 correct-by-construction). 운영 키 주입 후 실측 필요.
+- Redis 기능은 dev 에 redis 미설치 → 메모리 폴백 경로로 동작 검증(274 passed). Redis 경로는 운영에서 실측 권장.

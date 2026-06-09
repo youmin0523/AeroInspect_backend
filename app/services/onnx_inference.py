@@ -194,6 +194,23 @@ class ONNXYoloDetector:
             })
         return results
 
+    @property
+    def supports_batch(self) -> bool:
+        """ONNX 입력의 batch 축이 동적(N>1 허용)인지 여부.
+
+        ultralytics를 dynamic=True 로 export 하면 입력 shape[0] 이 정수 1 이
+        아니라 심볼릭 문자열('batch')로 남는다. 이 경우 여러 타일/프레임을
+        하나의 배치로 묶어 단일 추론 호출이 가능하다.
+        고정 export(shape[0]==1)면 진짜 배치가 불가능하므로 False.
+        """
+        try:
+            n = self.session.get_inputs()[0].shape[0]
+        except Exception:
+            return False
+        # 정수 1 이면 고정 batch=1 export → 배치 불가.
+        # 심볼릭('batch') 또는 정수 >1 이면 동적 → 배치 가능.
+        return not (isinstance(n, int) and n == 1)
+
     def predict(
         self,
         frame_bgr: np.ndarray,
@@ -204,6 +221,54 @@ class ONNXYoloDetector:
         blob, scale, pad_w, pad_h, orig_w, orig_h = self.preprocess(frame_bgr)
         output = self.session.run([self.output_name], {self.input_name: blob})[0]
         return self.postprocess(output, scale, pad_w, pad_h, orig_w, orig_h, conf, iou)
+
+    def predict_batch(
+        self,
+        frames_bgr: List[np.ndarray],
+        conf: float = 0.25,
+        iou: float = 0.45,
+    ) -> List[List[dict]]:
+        """여러 프레임을 단일 ONNX 추론으로 일괄 처리.
+
+        각 프레임을 letterbox 전처리(모두 input_size×input_size 로 정규화)한 뒤
+        [N,3,S,S] 로 스택하여 ONNX 세션을 *한 번만* 호출한다. 출력 [N, 4+nc, A]
+        를 프레임별로 분리해 각자의 letterbox 스케일/패딩으로 postprocess 한다.
+
+        입력 batch 축이 고정(batch=1)인 모델이면 진짜 배치가 불가능하므로
+        프레임별 순차 predict 로 폴백한다(supports_batch 로 판단).
+
+        Returns:
+            프레임별 검출 리스트의 리스트 (입력 순서 보존).
+        """
+        if not frames_bgr:
+            return []
+
+        # 고정 batch=1 export → 진짜 배치 불가. 순차 폴백.
+        if not self.supports_batch:
+            return [self.predict(f, conf=conf, iou=iou) for f in frames_bgr]
+
+        blobs: List[np.ndarray] = []
+        metas: List[Tuple[float, int, int, int, int]] = []
+        for frame in frames_bgr:
+            blob, scale, pad_w, pad_h, orig_w, orig_h = self.preprocess(frame)
+            blobs.append(blob)  # blob: [1,3,S,S]
+            metas.append((scale, pad_w, pad_h, orig_w, orig_h))
+
+        # [N,3,S,S] 단일 텐서로 결합 → ONNX 1회 호출
+        batch_blob = np.concatenate(blobs, axis=0)
+        outputs = self.session.run([self.output_name], {self.input_name: batch_blob})[0]
+
+        results: List[List[dict]] = []
+        for i, (scale, pad_w, pad_h, orig_w, orig_h) in enumerate(metas):
+            # postprocess 는 output[0] 으로 첫 배치 요소를 집으므로,
+            # i번째 요소만 잘라 다시 [1, 4+nc, A] 형태로 넣어 재사용.
+            single = outputs[i : i + 1]
+            results.append(
+                self.postprocess(
+                    single, scale, pad_w, pad_h, orig_w, orig_h, conf, iou,
+                )
+            )
+        return results
 
 
 # ═══════════════════════════════════════════════
