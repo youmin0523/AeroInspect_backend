@@ -18,7 +18,7 @@ from uuid import UUID
 import aiofiles
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, get_current_user, get_current_org_member, get_ws_manager
@@ -547,27 +547,36 @@ async def get_unread_counts(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """전체 미읽음 카운트 조회"""
-    members_q = await db.execute(
-        select(ConversationMember)
-        .where(ConversationMember.user_id == current_user.id)
+    """전체 미읽음 카운트 조회.
+
+    단일 GROUP BY 쿼리로 모든 대화방의 미읽음 수를 한 번에 집계한다.
+    (과거: 대화방 1개당 COUNT 1쿼리 = N+1. 50개 방이면 51왕복 → 1쿼리로 축소)
+    """
+    cm = ConversationMember
+    q = (
+        select(cm.conversation_id, func.count(Message.id))
+        .join(
+            Message,
+            and_(
+                Message.conversation_id == cm.conversation_id,
+                Message.sender_id != current_user.id,
+                or_(
+                    cm.last_read_at.is_(None),
+                    Message.created_at > cm.last_read_at,
+                ),
+            ),
+        )
+        .where(cm.user_id == current_user.id)
+        .group_by(cm.conversation_id)
     )
-    members = members_q.scalars().all()
+    rows = (await db.execute(q)).all()
 
     per_conversation = {}
     total = 0
-
-    for m in members:
-        base = select(func.count(Message.id)).where(
-            Message.conversation_id == m.conversation_id,
-            Message.sender_id != current_user.id,
-        )
-        if m.last_read_at:
-            base = base.where(Message.created_at > m.last_read_at)
-
-        count = await db.scalar(base) or 0
+    for conv_id, count in rows:
+        count = count or 0
         if count > 0:
-            per_conversation[str(m.conversation_id)] = count
+            per_conversation[str(conv_id)] = count
             total += count
 
     return UnreadCountResponse(total=total, per_conversation=per_conversation)

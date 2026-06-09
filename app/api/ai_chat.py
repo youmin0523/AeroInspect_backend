@@ -30,6 +30,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import async_session_factory
 from app.dependencies import get_db, get_current_org_member
 from app.models.ai_chat import AiChatMessage, AiChatThread
 from app.schemas.ai_chat import (
@@ -68,6 +69,10 @@ async def _check_user_message_rate(user_id: UUID) -> None:
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=f"메시지 전송이 너무 잦습니다. {retry}초 후 다시 시도해 주세요.",
             )
+        if not q:
+            # 만료 후 빈 deque가 사용자별로 무한 누적되는 것을 방지 — 키 제거 후 새로 생성해 append.
+            _USER_MSG_HITS.pop(user_id, None)
+            q = _USER_MSG_HITS[user_id]
         q.append(now)
 
 
@@ -251,17 +256,37 @@ async def post_message_stream(
     if should_summarize:
         background.add_task(openai_chat_service.run_summarization, thread.id)
 
+    # SSE 제너레이터는 라우트 반환 *이후* 실행되므로 요청 스코프 db(get_db)는
+    # 이미 commit/close 된다. 전용 세션을 제너레이터 내부에서 열어 수명을 일치시킨다.
+    thread_id_v = thread.id
+    user_id_v = user.id
+    org_id_v = org.id
+    user_text_v = payload.content
+
     async def stream():
-        async for chunk in openai_chat_service.astream(
-            thread=thread,
-            user_id=user.id,
-            org_id=org.id,
-            user_text=payload.content,
-            db=db,
-            is_disconnected=request.is_disconnected,
-            background_tasks=background,
-        ):
-            yield chunk
+        async with async_session_factory() as sdb:
+            t = await sdb.get(AiChatThread, thread_id_v)
+            if t is None:
+                yield openai_chat_service._sse({"error": "대화방을 찾을 수 없습니다."})
+                return
+            try:
+                async for chunk in openai_chat_service.astream(
+                    thread=t,
+                    user_id=user_id_v,
+                    org_id=org_id_v,
+                    user_text=user_text_v,
+                    db=sdb,
+                    is_disconnected=request.is_disconnected,
+                    background_tasks=background,
+                ):
+                    yield chunk
+            finally:
+                # astream 은 user/assistant 메시지를 flush 만 한다(commit 은 호출자 책임).
+                # 끊김/취소 시에도 부분 응답을 보존하도록 여기서 확정한다.
+                try:
+                    await sdb.commit()
+                except Exception:
+                    await sdb.rollback()
 
     return StreamingResponse(
         stream(),

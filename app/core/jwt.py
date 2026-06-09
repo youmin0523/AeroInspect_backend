@@ -8,6 +8,7 @@
 #       decode_access_token, decode_refresh_token
 # =============================================
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -24,25 +25,51 @@ TOKEN_TYPE_REFRESH = "refresh"
 def create_access_token(user_id: str, expires_minutes: Optional[int] = None) -> str:
     """
     사용자 UUID를 sub 클레임에 담은 JWT 액세스 토큰 발급.
-    type="access"로 리프레시 토큰과 혼용 방지.
+    type="access"로 리프레시 토큰과 혼용 방지. jti 로 개별 폐기(denylist) 지원.
     """
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=expires_minutes or settings.JWT_EXPIRE_MINUTES
     )
-    payload = {"sub": str(user_id), "exp": expire, "type": TOKEN_TYPE_ACCESS}
+    payload = {
+        "sub": str(user_id), "exp": expire,
+        "type": TOKEN_TYPE_ACCESS, "jti": uuid.uuid4().hex,
+    }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 
 def create_refresh_token(user_id: str, expires_days: Optional[int] = None) -> str:
     """
     장기 유효 리프레시 토큰. /auth/refresh에서만 받아들임.
-    access 토큰과 같은 비밀키로 서명하되 type 클레임으로 용도 구분.
+    access 토큰과 같은 비밀키로 서명하되 type 클레임으로 용도 구분. jti 로 회전 시 폐기.
     """
     expire = datetime.now(timezone.utc) + timedelta(
         days=expires_days or settings.JWT_REFRESH_EXPIRE_DAYS
     )
-    payload = {"sub": str(user_id), "exp": expire, "type": TOKEN_TYPE_REFRESH}
+    payload = {
+        "sub": str(user_id), "exp": expire,
+        "type": TOKEN_TYPE_REFRESH, "jti": uuid.uuid4().hex,
+    }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
+
+
+def decode_token_claims(token: str, expected_type: str) -> Optional[dict]:
+    """서명·만료·type 검증 후 전체 payload(dict) 반환. 폐기(denylist) 검사용 jti/exp 포함.
+
+    type 규칙은 _decode 와 동일(레거시 access 호환). 실패 시 None.
+    """
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+    ttype = payload.get("type")
+    if expected_type == TOKEN_TYPE_ACCESS:
+        # 레거시 토큰(type 없음)은 access 로 허용, 그 외 type 은 거절
+        if ttype not in (None, TOKEN_TYPE_ACCESS):
+            return None
+    else:
+        if ttype != expected_type:
+            return None
+    return payload
 
 
 def _decode(token: str, expected_type: str) -> Optional[str]:

@@ -16,13 +16,18 @@ import uuid as uuid_mod
 from typing import Optional
 
 import aiofiles
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
-from app.core.jwt import create_access_token, create_refresh_token, decode_refresh_token
+from app.core.jwt import (
+    create_access_token, create_refresh_token, decode_token_claims,
+    TOKEN_TYPE_ACCESS, TOKEN_TYPE_REFRESH,
+)
+from app.core.token_denylist import revoke_jti, is_revoked
 from app.services.email_service import send_found_username_email, send_temp_password_email
 from app.dependencies import get_db, get_current_user_with_org
 from app.models.user import User
@@ -50,6 +55,9 @@ MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 router = APIRouter()
 
+# 로그아웃 시 Authorization 헤더의 액세스 토큰을 선택적으로 읽기 위한 스킴 (없어도 통과)
+_bearer_scheme = HTTPBearer(auto_error=False)
+
 
 # ── 내부 헬퍼: 사용자 조직 목록 조회 ─────────
 async def _get_user_orgs(db, user_id):
@@ -76,8 +84,16 @@ async def _get_user_orgs(db, user_id):
 
 
 # ── 내부 헬퍼 ────────────────────────────────
+def _normalize_email(email: str) -> str:
+    """이메일 정규화 — 대소문자 무시 유일성을 위해 trim + lowercase."""
+    return (email or "").strip().lower()
+
+
 async def _email_exists(db: AsyncSession, email: str) -> bool:
-    result = await db.execute(select(User.id).where(User.email == email))
+    # 대소문자 무시 비교 (lower(email) 유니크 인덱스와 정합)
+    result = await db.execute(
+        select(User.id).where(func.lower(User.email) == _normalize_email(email))
+    )
     return result.scalar_one_or_none() is not None
 
 
@@ -154,9 +170,10 @@ async def signup(
     # ── 3) User 레코드 생성 ──────────────────
     user = User(
         account_type=payload.account_type,
-        email=payload.email,
+        email=_normalize_email(payload.email),  # 저장은 항상 lowercase (대소문자 무시 유일성)
         username=payload.username,
-        password_hash=hash_password(payload.password),
+        # bcrypt(rounds=12) 해싱은 ~250ms 동기 CPU 작업 → 스레드로 오프로드해 이벤트 루프 블로킹 제거.
+        password_hash=await asyncio.to_thread(hash_password, payload.password),
         name=payload.name,
         phone=payload.phone,
     )
@@ -275,13 +292,21 @@ async def refresh_access_token(
     탈취된 refresh로 무제한 access 갱신을 차단 (P0 보안).
     클라이언트는 응답의 refresh_token으로 localStorage 덮어써야 함.
     """
-    user_id = decode_refresh_token(payload.refresh_token)
-    if user_id is None:
+    claims = decode_token_claims(payload.refresh_token, TOKEN_TYPE_REFRESH)
+    if claims is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="유효하지 않거나 만료된 리프레시 토큰입니다.",
         )
 
+    # 이미 폐기된 리프레시(로그아웃/재사용)면 거절 — 회전 후 옛 토큰 재사용 차단
+    if await is_revoked(claims.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="이미 사용되었거나 폐기된 리프레시 토큰입니다.",
+        )
+
+    user_id = claims["sub"]
     # 사용자 존재·활성 여부 재확인 (refresh 발급 이후 계정 삭제된 케이스 대비)
     user = await db.scalar(select(User).where(User.id == uuid_mod.UUID(user_id)))
     if user is None:
@@ -290,9 +315,36 @@ async def refresh_access_token(
             detail="사용자를 찾을 수 없습니다.",
         )
 
+    # 회전: 옛 리프레시 토큰을 즉시 폐기 → 탈취·재사용 무력화
+    await revoke_jti(claims.get("jti"), claims.get("exp"))
+
     new_access = create_access_token(user.id)
     new_refresh = create_refresh_token(user.id)  # 회전: 새 refresh도 발급
     return RefreshTokenResponse(access_token=new_access, refresh_token=new_refresh)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    payload: RefreshTokenRequest,
+    cred: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+):
+    """로그아웃 — 액세스(Authorization 헤더)와 리프레시(body) 토큰을 폐기 목록에 등록.
+
+    폐기는 Redis denylist 기반(TOKEN_DENYLIST_ENABLED). Redis 미가용이면 no-op이며,
+    클라이언트는 항상 로컬 토큰을 삭제해야 한다(서버 폐기는 즉시 무효화 보강책).
+    """
+    # 리프레시 토큰 폐기
+    refresh_claims = decode_token_claims(payload.refresh_token, TOKEN_TYPE_REFRESH)
+    if refresh_claims is not None:
+        await revoke_jti(refresh_claims.get("jti"), refresh_claims.get("exp"))
+
+    # 액세스 토큰 폐기 (헤더로 전달된 경우)
+    if cred is not None:
+        access_claims = decode_token_claims(cred.credentials, TOKEN_TYPE_ACCESS)
+        if access_claims is not None:
+            await revoke_jti(access_claims.get("jti"), access_claims.get("exp"))
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ── 현재 사용자 조회 ────────────────────────
@@ -484,7 +536,9 @@ async def find_id(
     보안: 사용자 존재 여부와 무관하게 동일한 응답을 반환하여 계정 열거 방지.
     """
     # 이�� + 이메일로 사용자 검색
-    query = select(User).where(User.email == payload.email, User.name == payload.name)
+    query = select(User).where(
+        func.lower(User.email) == _normalize_email(payload.email), User.name == payload.name
+    )
     result = await db.execute(query)
     user = result.scalar_one_or_none()
 
@@ -501,7 +555,7 @@ async def find_id(
 
     # 사용자를 찾았으면 이메일 발송
     if user:
-        send_found_username_email(to=user.email, name=user.name, username=user.username)
+        await send_found_username_email(to=user.email, name=user.name, username=user.username)
 
     # 보안: 결과와 무관하게 동일한 성공 메시지 반환 (계정 ���거 방지)
     return AccountRecoveryResponse(
@@ -534,7 +588,9 @@ async def find_password(
     DB 비밀번호를 임시 비밀번��� 해시로 교체.
     """
     # 아이�� + 이메일로 사용자 검색
-    query = select(User).where(User.username == payload.userId, User.email == payload.email)
+    query = select(User).where(
+        User.username == payload.userId, func.lower(User.email) == _normalize_email(payload.email)
+    )
     result = await db.execute(query)
     user = result.scalar_one_or_none()
 
@@ -552,9 +608,17 @@ async def find_password(
     # 사용자를 찾았으면 임시 비밀번호 발급
     if user:
         temp_pw = _generate_temp_password()
-        user.password_hash = hash_password(temp_pw)
+        # bcrypt(rounds=12) 해싱은 ~250ms 동기 CPU 작업 → 스레드로 오프로드.
+        user.password_hash = await asyncio.to_thread(hash_password, temp_pw)
         await db.flush()
-        send_temp_password_email(to=user.email, name=user.name, temp_password=temp_pw)
+        # 이메일 발송 실패 시 사용자에게 전달되지 않은 임시 비밀번호로 계정이 잠기는 것을 막는다.
+        # 발송 실패하면 예외를 던져 get_db 의존성의 rollback으로 비밀번호 회전을 되돌린다.
+        sent = await send_temp_password_email(to=user.email, name=user.name, temp_password=temp_pw)
+        if not sent:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="임시 비밀번호 발송에 실패했습니다. 잠시 후 다시 시도해주세요.",
+            )
 
     return AccountRecoveryResponse(
         success=True,

@@ -11,13 +11,18 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
+import aiofiles
+
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class ImageStorage:
@@ -35,15 +40,17 @@ class ImageStorage:
         os.makedirs(os.path.join(self.UPLOAD_ROOT, self.DEFECT_SUBDIR), exist_ok=True)
 
     def _today_dir(self) -> str:
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         path = os.path.join(self.UPLOAD_ROOT, self.DEFECT_SUBDIR, today)
         os.makedirs(path, exist_ok=True)
         return path
 
-    def save_base64_jpeg(self, b64: Optional[str]) -> Optional[str]:
+    async def save_base64_jpeg(self, b64: Optional[str]) -> Optional[str]:
         """
         Base64 JPEG 문자열을 파일로 저장하고 상대 경로 반환.
         `data:image/jpeg;base64,...` prefix 있어도 처리.
+        디스크 쓰기는 aiofiles 로 비동기 처리하여 이벤트 루프를 차단하지 않음
+        (웹훅 배치 루프에서 다건 저장 시 중요).
 
         Returns:
             예: "defects/2026-04-21/3f4a...uuid.jpg" (UPLOAD_ROOT 기준 상대 경로)
@@ -56,15 +63,15 @@ class ImageStorage:
         try:
             data = base64.b64decode(clean, validate=True)
         except (base64.binascii.Error, ValueError) as e:
-            print(f"[ImageStorage] Base64 디코드 실패: {e}")
+            logger.warning("[ImageStorage] Base64 디코드 실패: %s", e)
             return None
 
         today_dir = self._today_dir()
         filename = f"{uuid.uuid4().hex}.jpg"
         abs_path = os.path.join(today_dir, filename)
 
-        with open(abs_path, "wb") as f:
-            f.write(data)
+        async with aiofiles.open(abs_path, "wb") as f:
+            await f.write(data)
 
         # DB에는 UPLOAD_ROOT 기준 상대 경로만 저장 (예: "defects/2026-04-21/xxx.jpg")
         rel_path = os.path.relpath(abs_path, self.UPLOAD_ROOT).replace(os.sep, "/")

@@ -6,6 +6,7 @@
 #       SMTP 미설정 시 콘솔 로그로 fallback (개발 편의)
 # =============================================
 
+import asyncio
 import logging
 import smtplib
 from email.mime.text import MIMEText
@@ -15,6 +16,11 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# SMTP 미설정으로 발송을 건너뛴 경우를 "성공"과 구분하기 위한 센티넬.
+# bool 컨텍스트에서는 truthy → 임시 비밀번호 회전 롤백을 유발하지 않으면서도,
+# 호출자가 `is EMAIL_SKIPPED` 로 "조용히 건너뜀" 을 식별할 수 있다.
+EMAIL_SKIPPED = "skipped"
+
 
 def _smtp_configured() -> bool:
     """SMTP 자격 증명이 설정되었는지 확인."""
@@ -22,18 +28,8 @@ def _smtp_configured() -> bool:
                 and settings.SMTP_USER != "your-email@gmail.com")
 
 
-def _send_email(to: str, subject: str, html_body: str) -> bool:
-    """
-    SMTP로 HTML 이메일을 전송한다.
-    SMTP 미설정 시 콘솔 출력으로 대체하여 개발 중에도 플로우를 확인 가능.
-    """
-    if not _smtp_configured():
-        logger.warning(
-            "[EMAIL-DEV] SMTP 미설정 — 콘솔 출력으로 대체\n"
-            f"  To: {to}\n  Subject: {subject}\n  Body:\n{html_body}"
-        )
-        return True  # 개발 모드에서는 성공으로 간주
-
+def _send_email_sync(to: str, subject: str, html_body: str) -> bool:
+    """블로킹 SMTP 발송 본체 — asyncio.to_thread 로 워커 스레드에서 실행된다."""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM}>"
@@ -52,7 +48,28 @@ def _send_email(to: str, subject: str, html_body: str) -> bool:
         return False
 
 
-def send_found_username_email(to: str, name: str, username: str) -> bool:
+async def _send_email(to: str, subject: str, html_body: str):
+    """
+    SMTP로 HTML 이메일을 전송한다 (블로킹 SMTP 는 스레드로 오프로드 → 이벤트 루프 비차단).
+    SMTP 미설정 시 콘솔 출력으로 대체하고 EMAIL_SKIPPED 를 반환하여
+    "발송됨" 과 "조용히 건너뜀" 을 호출자가 구분할 수 있게 한다.
+
+    Returns:
+        True  — 실제 발송 성공
+        False — 발송 시도 실패
+        EMAIL_SKIPPED — SMTP 미설정으로 발송 건너뜀 (truthy)
+    """
+    if not _smtp_configured():
+        logger.warning(
+            "[EMAIL-DEV] SMTP 미설정 — 콘솔 출력으로 대체\n"
+            f"  To: {to}\n  Subject: {subject}\n  Body:\n{html_body}"
+        )
+        return EMAIL_SKIPPED  # 발송 안 됨 — 성공과 구분되는 센티넬(truthy)
+
+    return await asyncio.to_thread(_send_email_sync, to, subject, html_body)
+
+
+async def send_found_username_email(to: str, name: str, username: str):
     """아이디 찾기 결과 이메일 발송."""
     subject = "[DRONE INSPECT] 아이디 찾기 결과 안내"
     html = f"""
@@ -64,14 +81,14 @@ def send_found_username_email(to: str, name: str, username: str) -> bool:
         <p style="margin:4px 0 0;font-size:20px;font-weight:bold;color:#1e40af;">{username}</p>
       </div>
       <p style="font-size:13px;color:#94a3b8;">
-        본 메일은 발신전용이며, 로그인은 <a href="http://localhost:5173/login">여기</a>에서 가능합니다.
+        본 메일은 발신전용이며, 로그인은 <a href="{settings.FRONTEND_BASE_URL}/login">여기</a>에서 가능합니다.
       </p>
     </div>
     """
-    return _send_email(to, subject, html)
+    return await _send_email(to, subject, html)
 
 
-def send_temp_password_email(to: str, name: str, temp_password: str) -> bool:
+async def send_temp_password_email(to: str, name: str, temp_password: str):
     """임시 비밀번호 이메일 발송."""
     subject = "[DRONE INSPECT] 임시 비밀번호 발급 안내"
     html = f"""
@@ -86,8 +103,8 @@ def send_temp_password_email(to: str, name: str, temp_password: str) -> bool:
         보안을 위해 로그인 후 반드시 비밀번호를 변경해주세요.
       </p>
       <p style="font-size:13px;color:#94a3b8;">
-        본 메일은 발신전용이며, 로그인은 <a href="http://localhost:5173/login">여기</a>에서 가능합니다.
+        본 메일은 발신전용이며, 로그인은 <a href="{settings.FRONTEND_BASE_URL}/login">여기</a>에서 가능합니다.
       </p>
     </div>
     """
-    return _send_email(to, subject, html)
+    return await _send_email(to, subject, html)

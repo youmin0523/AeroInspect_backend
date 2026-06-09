@@ -85,7 +85,7 @@ async def receive_detection(
         })
     """
     # Base64 이미지 → 파일 저장 (실패하면 None 저장, 하자 기록은 계속)
-    image_crop_path = image_storage.save_base64_jpeg(payload.image_crop)
+    image_crop_path = await image_storage.save_base64_jpeg(payload.image_crop)
 
     defect = DefectLog(
         area=payload.area.upper() if payload.area else None,
@@ -160,7 +160,7 @@ async def receive_batch_detections(
     """
     saved = []
     for det in payload.detections:
-        image_crop_path = image_storage.save_base64_jpeg(det.image_crop)
+        image_crop_path = await image_storage.save_base64_jpeg(det.image_crop)
         defect = DefectLog(
             area=det.area.upper(),
             category_code=det.category_code,

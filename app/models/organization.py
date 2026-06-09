@@ -156,6 +156,9 @@ class OrganizationMember(Base):
         UniqueConstraint("organization_id", "user_id", name="uq_org_member"),
         Index("idx_org_member_org", "organization_id"),
         Index("idx_org_member_user", "user_id"),
+        # get_current_org_member 가 거의 모든 인증 요청에서 user_id+status='active' 로
+        # 조회 → 복합 인덱스로 핫패스 단축.
+        Index("idx_org_member_user_status", "user_id", "status"),
     )
 
     def __repr__(self):

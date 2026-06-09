@@ -35,7 +35,16 @@ async def mjpeg_generator(
 
     try:
         while True:
-            frame = await subscriber_queue.get()
+            # 블로킹 get() 대신 타임아웃 — 카메라가 프레임을 안 주면 영원히 블로킹되어
+            # 클라이언트 연결 종료를 감지 못 하고 구독자 큐가 누수됨. 타임아웃 시 yield를
+            # 거치며 제어권을 양보하므로, 끊긴 클라이언트는 다음 yield에서 예외가 발생해
+            # finally 정리(unsubscribe)가 트리거된다.
+            try:
+                frame = await asyncio.wait_for(subscriber_queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                # keepalive: 끊긴 클라이언트 감지를 위해 빈 경계 프레임 yield.
+                yield b"--frame\r\n\r\n"
+                continue
             if frame is None:
                 await asyncio.sleep(0.033)  # 30fps 대기
                 continue
@@ -87,8 +96,15 @@ async def mjpeg_blend_generator(
 
     try:
         while True:
-            # 두 카메라에서 동시에 최신 프레임 획득
-            rgb_frame = await rgb_queue.get()
+            # 두 카메라에서 동시에 최신 프레임 획득.
+            # 블로킹 get() 대신 타임아웃 — 카메라가 프레임을 안 주면 영원히 블로킹되어
+            # 클라이언트 종료 감지 실패 + 구독자 큐 누수. 타임아웃 시 keepalive를 yield하여
+            # 끊긴 클라이언트가 finally 정리(unsubscribe)를 트리거하도록 한다.
+            try:
+                rgb_frame = await asyncio.wait_for(rgb_queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                yield b"--frame\r\n\r\n"
+                continue
             # 열화상은 최신 프레임만 사용 (비어있으면 스킵)
             thermal_frame = None
             try:

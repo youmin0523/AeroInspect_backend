@@ -68,8 +68,14 @@ def test_severity_mapper_unknown():
 
 
 def test_defect_class_names_count():
-    """YOLOv8 클래스 ID 매핑 수가 20인지 검증"""
-    assert len(DEFECT_CLASS_NAMES) == 20
+    """하자 클래스 ID 매핑 수 회귀 가드.
+
+    2026-06-08 외벽/옥상 점검 항목 2종 추가로 20 → 22 로 확장됨
+    (severity_mapper.DEFECT_CATALOG 와 1:1). 우발적 드리프트 방지를 위해
+    DEFECT_CATALOG 기준 일치 + 현재 기대치 22 를 함께 검증한다.
+    """
+    from app.utils.severity_mapper import DEFECT_CATALOG
+    assert len(DEFECT_CLASS_NAMES) == len(DEFECT_CATALOG) == 22
 
 
 def test_service_is_loaded_false_without_weights(service):

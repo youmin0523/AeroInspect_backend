@@ -41,8 +41,36 @@ from app.services.telemetry_cache import telemetry_cache
 
 router = APIRouter()
 
-# 현재 활성 카메라 모드 상태 (모듈 레벨 상태 — 단일 워커 보장)
+# 현재 활성 카메라 모드. Redis 가용 시 공유(멀티워커 정합), 아니면 이 메모리 폴백 사용.
 _active_mode: str = "rgb"
+_MODE_REDIS_KEY = "stream:active_mode"
+
+
+async def _get_active_mode() -> str:
+    """활성 모드 조회 — Redis 우선(멀티워커 공유), 미가용 시 메모리 폴백."""
+    from app.core.redis_client import get_redis
+    r = await get_redis()
+    if r is not None:
+        try:
+            val = await r.get(_MODE_REDIS_KEY)
+            if val:
+                return val
+        except Exception:
+            pass
+    return _active_mode
+
+
+async def _set_active_mode(mode: str) -> None:
+    """활성 모드 저장 — 메모리 + (가용 시) Redis 양쪽 갱신."""
+    global _active_mode
+    _active_mode = mode
+    from app.core.redis_client import get_redis
+    r = await get_redis()
+    if r is not None:
+        try:
+            await r.set(_MODE_REDIS_KEY, mode)
+        except Exception:
+            pass
 
 # MJPEG multipart 미디어 타입
 MJPEG_CONTENT_TYPE = "multipart/x-mixed-replace; boundary=frame"
@@ -106,22 +134,21 @@ async def set_stream_mode(
     변경 후 WebSocket "camera" 채널로 mode_changed 이벤트 브로드캐스트.
     프론트엔드에서 이 이벤트를 수신하여 다중 클라이언트 동기화.
     """
-    global _active_mode
-    _active_mode = request.mode
+    await _set_active_mode(request.mode)
 
-    # 모든 연결된 클라이언트에게 모드 변경 알림
+    # 모든 연결된 클라이언트에게 모드 변경 알림 (Redis WS 백엔드면 전 워커에 전파)
     await manager.broadcast("camera", {
         "type": "camera.mode_changed",
-        "data": {"mode": _active_mode},
+        "data": {"mode": request.mode},
     })
 
-    return {"mode": _active_mode, "message": f"카메라 모드가 '{_active_mode}'로 변경되었습니다."}
+    return {"mode": request.mode, "message": f"카메라 모드가 '{request.mode}'로 변경되었습니다."}
 
 
 @router.get("/mode")
 async def get_stream_mode():
-    """현재 활성 카메라 모드 조회"""
-    return {"mode": _active_mode}
+    """현재 활성 카메라 모드 조회 (Redis 공유 상태 우선)"""
+    return {"mode": await _get_active_mode()}
 
 
 @router.get("/stats", response_model=StreamStatsResponse)

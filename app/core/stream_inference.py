@@ -71,6 +71,7 @@ class StreamInferenceWorker:
         # ── VLM 키프레임 오버레이 (근실시간 비전 LLM 검출) ──
         # 30fps ONNX 경로와 별개로, N초마다 최신 프레임 1장만 VLM에 비동기 제출.
         self._last_frame_bgr: Optional[np.ndarray] = None
+        self._last_frame_id: int = 0  # _last_frame_bgr 에 대응하는 frame_id (VLM 이벤트 정합)
         self._vlm_task: Optional[asyncio.Task] = None
         self._vlm_count: int = 0            # VLM 키프레임 처리 횟수
         self._vlm_errors: int = 0           # VLM 실패 횟수
@@ -175,6 +176,16 @@ class StreamInferenceWorker:
             print(f"[StreamInfer] Hard example {saved}건 디스크 저장 완료")
         print("[StreamInfer] 워커 종료")
 
+    # ── 프레임 게이트 (디코드 이전) ─────────────────
+    def will_enqueue(self) -> bool:
+        """JPEG 디코드 *이전*에 호출 — 이 프레임을 추론 큐에 넣을지 판단.
+
+        프레임 카운터를 증가시키고 FRAME_SKIP 게이트만 적용한다(프레임 데이터 불필요).
+        False면 호출자는 디코드 자체를 건너뛰어 CPU 를 절약한다(스킵 프레임의 디코드 비용 제거).
+        """
+        self._submitted_count += 1
+        return self._submitted_count % self._frame_skip == 0
+
     # ── 프레임 제출 ─────────────────────────────
     def submit(
         self,
@@ -184,7 +195,7 @@ class StreamInferenceWorker:
         thermal_frame_bgr: Optional[np.ndarray] = None,
     ) -> bool:
         """
-        수신자(ws_stream.py)가 호출. 프레임 스킵 적용 + 드롭 큐에 put.
+        수신자(ws_stream.py)가 will_enqueue()==True 인 프레임만 디코드해 호출. 드롭 큐에 put.
 
         Args:
             frame_bgr: RGB 프레임
@@ -196,15 +207,14 @@ class StreamInferenceWorker:
             True: 큐에 enqueue됨 (추론 예정)
             False: 스킵됐거나 드롭됨
         """
-        self._submitted_count += 1
+        # 주의: 프레임 카운트 증가 + FRAME_SKIP 게이트는 will_enqueue()에서 디코드 *이전*에
+        # 이미 적용됐다(버릴 프레임을 디코드하지 않기 위함). 여기서는 카운트하지 않는다.
 
-        # VLM 키프레임 태스크가 가져갈 최신 프레임 보관 (스킵 여부와 무관하게 갱신)
+        # VLM 키프레임 태스크가 가져갈 최신 프레임 보관.
+        # (enqueue 되는 프레임에서만 갱신 — 키프레임 주기가 초 단위라 충분히 신선)
         if settings.VLM_DETECTION_ENABLED:
             self._last_frame_bgr = frame_bgr
-
-        # 프레임 스킵 — N프레임 중 1프레임만 추론
-        if self._submitted_count % self._frame_skip != 0:
-            return False
+            self._last_frame_id = self._submitted_count  # 이 프레임의 정확한 id 캡처
 
         item = QueuedFrame(
             frame_bgr=frame_bgr,
@@ -454,6 +464,7 @@ class StreamInferenceWorker:
                 break
 
             frame = self._last_frame_bgr
+            frame_id = self._last_frame_id  # 캡처 당시 id 고정 (이후 submit 으로 드리프트 방지)
             if frame is None:
                 continue
 
@@ -478,7 +489,7 @@ class StreamInferenceWorker:
                     await ws_manager.broadcast("stream", {
                         "type": "hybrid_detection",
                         "timestamp": now,
-                        "frame_id": self._submitted_count,
+                        "frame_id": frame_id,
                         "result": json.loads(hr.model_dump_json()),
                         "lidar_position": lidar_pos,
                     })
@@ -490,7 +501,7 @@ class StreamInferenceWorker:
                     await ws_manager.broadcast("stream", {
                         "type": "vlm_detection",
                         "timestamp": now,
-                        "frame_id": self._submitted_count,
+                        "frame_id": frame_id,
                         "result": json.loads(vr.model_dump_json()),
                         "lidar_position": lidar_pos,
                     })
@@ -511,7 +522,7 @@ class StreamInferenceWorker:
                             "defect_source": d.get("defect_source"),
                             "defect_class": d.get("class"),
                             "defect_class_display_ko": d.get("class_display_ko"),
-                            "frame_id": self._submitted_count,
+                            "frame_id": frame_id,
                             "localization": d.get("localization"),
                         },
                     })

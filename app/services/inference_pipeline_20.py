@@ -47,7 +47,7 @@ from app.services.onnx_inference import (
     ONNXPatchCoreDetector,
     ONNXResNetClassifier,
     ONNXYoloDetector,
-    crop_roi,
+    crop_roi_xyxy,
 )
 from app.services.geometric_gate import GeometricGate, load_geometric_gate_from_config
 from app.services.furniture_gate import FurnitureGate, load_furniture_gate_from_config
@@ -421,28 +421,32 @@ class InferencePipeline20:
                 except Exception as e:
                     print(f"[ThermalAnomaly] 추론 실패: {e}")
 
-        # ── 환경 컨텍스트 추론 (M4 Context: wall/ceiling/floor/window/door) ──
-        context_detections: List[dict] = []
-        if self._m4_context is not None:
-            try:
-                context_detections = self._m4_context.predict(
-                    frame_bgr, conf=settings.M4_CONF_THRESHOLD if hasattr(settings, "M4_CONF_THRESHOLD") else 0.25,
-                )
-            except Exception as e:
-                print(f"[M4-Context] 추론 실패: {e}")
-
-        # ── 가구 인식 (furniture_aware: 빌트인 가구 차단) ──
-        furniture_detections: List[dict] = []
-        if self._furniture_aware is not None:
-            try:
-                furniture_detections = self._furniture_aware.predict(
-                    frame_bgr, conf=settings.FURNITURE_AWARE_CONF_THRESHOLD,
-                )
-            except Exception as e:
-                print(f"[FurnitureAware] 추론 실패: {e}")
-
         # 진단용 단계별 카운트 (0-detection 시 손실 지점 추적).
         raw_count = len(all_dets)
+
+        # ── 환경 컨텍스트 / 가구 추론 (게이트 입력 전용) ──
+        # 두 모델(M4-Context 640 + furniture_aware 768)의 출력은 아래 게이트에서만
+        # 소비된다. 후보(all_dets)가 없으면 게이트가 필터할 대상도 없으므로, 두 번의
+        # ONNX forward 를 통째로 건너뛴다(깨끗한 프레임 = 흔한 경우의 큰 지연 절감).
+        context_detections: List[dict] = []
+        furniture_detections: List[dict] = []
+        if raw_count > 0:
+            if self._m4_context is not None:
+                try:
+                    context_detections = self._m4_context.predict(
+                        frame_bgr,
+                        conf=settings.M4_CONF_THRESHOLD if hasattr(settings, "M4_CONF_THRESHOLD") else 0.25,
+                    )
+                except Exception as e:
+                    print(f"[M4-Context] 추론 실패: {e}")
+
+            if self._furniture_aware is not None:
+                try:
+                    furniture_detections = self._furniture_aware.predict(
+                        frame_bgr, conf=settings.FURNITURE_AWARE_CONF_THRESHOLD,
+                    )
+                except Exception as e:
+                    print(f"[FurnitureAware] 추론 실패: {e}")
 
         # ── Geometric Gate: wall/ceiling/floor/window/door 위 검출만 통과 ──
         if self._geometric_gate is not None:
@@ -572,7 +576,7 @@ class InferencePipeline20:
         for det in dets:
             det["defect_source"] = "yolo_structural"
             if det["class"] == "crack" and self._m1_resnet:
-                roi = crop_roi(frame_bgr, det["bbox_xyxy"])
+                roi = crop_roi_xyxy(frame_bgr, det["bbox_xyxy"])
                 crack_type, crack_conf, _ = self._m1_resnet.classify(roi)
                 det["class"] = crack_type
                 det["conf"] = compute_combined_confidence(det["conf"], crack_conf)
@@ -602,7 +606,7 @@ class InferencePipeline20:
         for det in dets:
             det["defect_source"] = "yolo_surface"
             if det["class"] == "surface_defect_wall" and self._m2_resnet:
-                roi = crop_roi(frame_bgr, det["bbox_xyxy"])
+                roi = crop_roi_xyxy(frame_bgr, det["bbox_xyxy"])
                 surface_type, surface_conf, _ = self._m2_resnet.classify(roi)
                 det["class"] = surface_type
                 det["conf"] = compute_combined_confidence(det["conf"], surface_conf)
@@ -635,7 +639,7 @@ class InferencePipeline20:
         for det in dets:
             det["defect_source"] = "yolo_floor_window"
             if self._m3_resnet and det["class"] in ("floor_defect", "glass_defect", "frame_defect"):
-                roi = crop_roi(frame_bgr, det["bbox_xyxy"])
+                roi = crop_roi_xyxy(frame_bgr, det["bbox_xyxy"])
                 sub_type, sub_conf, _ = self._m3_resnet.classify(roi)
                 # 표면(floor/glass/frame) 권위는 M4 Context(geometric_gate context_relabel)로 이관.
                 # crop-ResNet 은 컨텍스트가 잘려 floor↔glass 를 뒤집는 사고(2026-06-08)를 내므로
@@ -671,28 +675,28 @@ class InferencePipeline20:
 
         h, w = frame_bgr.shape[:2]
         boxes_list, scores_list, labels_list = [], [], []
-        # 각 ckpt × 각 imgsz 조합으로 추론
-        for ckpt, imgsz_list in zip(ckpts, imgsz_per_ckpt):
-            for _imgsz in imgsz_list:
-                # ONNXYoloDetector.predict은 imgsz 인자를 받지 않음 (내부 기본값 사용).
-                # 여기서는 단순화 — 실제 inference는 ckpt 자체 imgsz로 진행.
-                # multi-imgsz는 ONNXYoloDetector 확장 시 활용.
-                try:
-                    raw = ckpt.predict(frame_bgr, conf=conf)
-                    if not raw:
-                        continue
-                    # top-K 필터 (noise 보호)
-                    raw_sorted = sorted(raw, key=lambda d: -d["conf"])[:top_k]
-                    bs, ss, ls = [], [], []
-                    for d in raw_sorted:
-                        x1, y1, x2, y2 = d["bbox_xyxy"]
-                        bs.append([x1/w, y1/h, x2/w, y2/h])
-                        ss.append(d["conf"])
-                        ls.append(d.get("class_id", 0))
-                    if bs:
-                        boxes_list.append(bs); scores_list.append(ss); labels_list.append(ls)
-                except Exception as e:
-                    print(f"[Pipeline20] WBF predict fail: {e}")
+        # ckpt 당 1회 추론 후 WBF 융합 (multi-checkpoint fusion).
+        # 주의(R-fix): 과거에는 imgsz_list 를 순회하며 동일 추론을 N회 반복했는데,
+        # ONNXYoloDetector.predict 가 imgsz 인자를 무시하므로 *완전히 동일한* 결과를
+        # N벌 만들어 WBF 에 넣을 뿐이었다(= imgsz_list 길이만큼 추론 낭비, 멀티스케일 효과 0).
+        # 진짜 멀티스케일은 ONNXYoloDetector.predict(imgsz=) 지원 후 활성화할 것.
+        for ckpt in ckpts:
+            try:
+                raw = ckpt.predict(frame_bgr, conf=conf)
+                if not raw:
+                    continue
+                # top-K 필터 (noise 보호)
+                raw_sorted = sorted(raw, key=lambda d: -d["conf"])[:top_k]
+                bs, ss, ls = [], [], []
+                for d in raw_sorted:
+                    x1, y1, x2, y2 = d["bbox_xyxy"]
+                    bs.append([x1/w, y1/h, x2/w, y2/h])
+                    ss.append(d["conf"])
+                    ls.append(d.get("class_id", 0))
+                if bs:
+                    boxes_list.append(bs); scores_list.append(ss); labels_list.append(ls)
+            except Exception as e:
+                print(f"[Pipeline20] WBF predict fail: {e}")
 
         if not boxes_list:
             return []

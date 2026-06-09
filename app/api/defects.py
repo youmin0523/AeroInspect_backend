@@ -194,7 +194,7 @@ async def create_defect(
     AI 파이프라인(defect_processor.py)에서 탐지 시 호출.
     """
     # Base64 이미지 → 파일 저장 (실패 시 None)
-    image_crop_path = image_storage.save_base64_jpeg(payload.image_crop)
+    image_crop_path = await image_storage.save_base64_jpeg(payload.image_crop)
 
     defect = DefectLog(
         area=payload.area.upper() if payload.area else None,
