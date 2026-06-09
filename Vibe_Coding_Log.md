@@ -3369,3 +3369,18 @@ uploads/gazebo_worlds_real/
 ### ⚠️ 검증 한계
 - FCM/APNs 는 실제 자격증명 없이는 end-to-end 전송 검증 불가(코드 correct-by-construction). 운영 키 주입 후 실측 필요.
 - Redis 기능은 dev 에 redis 미설치 → 메모리 폴백 경로로 동작 검증(274 passed). Redis 경로는 운영에서 실측 권장.
+
+## 🧹 기존 실패 테스트 9건 정리 (2026-06-09)
+
+> 감사와 무관하게 이전부터 깨져 있던 9건. 근본원인 진단 후 정리 → 282 passed, 1 xfailed, 0 failed.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| F.1 | 06-09 | ezdxf 미선언 의존성 → requirements 추가(설치). DXF 파싱 테스트 2건 복구 | requirements.txt |
+| F.2 | 06-09 | **운영 회귀**: autonomous_flight_simulator/gazebo_world_generator 가 MS에서 stale(통합repo 동기화 누락) → missions/floorplan API 가 TypeError/ImportError. main 의 완전판으로 복원(서명: furniture/altitude_layers/lane_spacing/telemetry_hz/lidar_hz). 자율스캔·world생성 테스트 4건 복구 | app/services/autonomous_flight_simulator.py, app/services/gazebo_world_generator.py |
+| F.3 | 06-09 | 클래스 수 테스트 20→22 갱신(2026-06-08 외벽/옥상 확장 반영, DEFECT_CATALOG 기준) | tests/test_yolo_inference.py |
+| F.4 | 06-09 | M5_SEG: 배포 onnx 가 nc=36 placeholder(설계 4클래스와 불일치) — 모델 자산 이슈라 self-healing xfail 처리(올바른 모델 배치 시 자동 통과) | tests/test_onnx_class_mapping.py |
+
+### 📌 핵심 발견
+- F.2 는 단순 stale 테스트가 아니라 **실제 운영 버그**였음: MS 의 missions.py/floorplan.py 는 신규 시뮬레이터 API 를 호출하는데 시뮬레이터 파일만 옛 버전 → 해당 엔드포인트 500. main 복원으로 해소.
+- M5_SEG 만 코드로 해결 불가(올바른 4클래스 frames ONNX 재export 필요).

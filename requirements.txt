@@ -43,6 +43,10 @@ ensemble-boxes==1.0.9  # multi-checkpoint WBF (M3/M2 0.85 mAP 도달 핵심)
 pyserial==3.5
 pymavlink==2.4.49
 
+# ── Floorplan / CAD ────────────────────────
+# DXF 도면 파싱(dxf_parser) — 없으면 /floorplan DXF 업로드·파싱 경로가 ImportError.
+ezdxf==1.4.4
+
 # ── LLM ────────────────────────────────────
 anthropic==0.107.1
 google-generativeai==0.8.6
