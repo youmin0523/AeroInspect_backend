@@ -74,6 +74,11 @@ async def websocket_stream(websocket: WebSocket) -> None:
             if data is None or len(data) == 0:
                 continue
 
+            # FRAME_SKIP 게이트를 디코드 *이전*에 적용 — 버릴 프레임은 디코드하지 않는다.
+            # (skip=3 기준 JPEG 디코드 CPU 약 1/3로 절감)
+            if not stream_inference_worker.will_enqueue():
+                continue
+
             # JPEG 디코딩도 블로킹이라 스레드로
             frame = await asyncio.to_thread(_decode_jpeg, data)
             if frame is None:
@@ -83,7 +88,7 @@ async def websocket_stream(websocket: WebSocket) -> None:
                 })
                 continue
 
-            # 드롭 큐에 submit — 스킵/드롭되면 무시
+            # 드롭 큐에 submit (will_enqueue 가 통과한 프레임만)
             stream_inference_worker.submit(frame)
 
     except WebSocketDisconnect:

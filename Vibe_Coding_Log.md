@@ -3294,3 +3294,14 @@ uploads/gazebo_worlds_real/
 | S.2 | 06-09 | placeholder 시크릿 검증 fail-closed: APP_ENV 가 명시적 dev/test 아니면 기동 차단 | app/config.py, .env.example |
 | S.3 | 06-09 | SSE/보고서 스트리밍이 전용 DB 세션을 직접 열고 commit (라우트 반환 후 닫힌 세션 재사용 해소) | app/api/ai_chat.py, app/services/llm_report.py |
 | S.4 | 06-09 | Alembic 신규 DB 프로비저닝 스크립트(create_all+stamp) + init_db 문서 정정 | scripts/provision_db.py, app/db/init_db.py |
+
+## ⚡ 전체 점검 2/5 — 지연/실시간 (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| L.1 | 06-09 | 외부 LLM/HTTP 클라이언트 싱글톤화 + 공통 타임아웃: 호출당 새 TLS 생성 제거 | app/services/vlm_detector.py, app/services/gcp_compute.py, app/services/openai_chat.py |
+| L.2 | 06-09 | VLM 일일캡 원자적 reserve + 실패 환불, Gemini configure 1회 | app/services/vlm_detector.py |
+| L.3 | 06-09 | Redis WS 핫패스 부활: ws_manager 를 활성매니저 위임 프록시로(set_active_manager) | app/core/ws_manager.py, app/main.py, app/dependencies.py |
+| L.4 | 06-09 | 프레임 디코드를 FRAME_SKIP 이후로(will_enqueue) → JPEG 디코드 CPU ~1/3 | app/api/ws_stream.py, app/core/stream_inference.py |
+| L.5 | 06-09 | M4·가구 모델을 후보 있을 때만 실행, WBF imgsz no-op 제거(Tier3 추론 4~7배 낭비) | app/services/inference_pipeline_20.py |
+| L.6 | 06-09 | WS 브로드캐스트 전송별 타임아웃·return_exceptions·빈채널 정리 + LLM 메트릭 | app/core/ws_manager.py, app/core/metrics.py |

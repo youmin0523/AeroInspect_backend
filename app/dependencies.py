@@ -259,7 +259,7 @@ def get_ws_manager():
     캡처하면 교체 후에도 옛 인스턴스를 가리킨다.
     """
     from app.core import ws_manager as wsmod
-    return wsmod.ws_manager
+    return wsmod.get_active_manager()
 
 
 def get_rgb_camera():

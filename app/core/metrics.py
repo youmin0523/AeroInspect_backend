@@ -82,6 +82,64 @@ defect_detected_total = Counter(
 )
 
 
+# ── LLM 호출 (외부 의존성 중 가장 비싸고 실패 잦음) ──
+llm_calls_total = Counter(
+    "aeroinspect_llm_calls_total",
+    "외부 LLM 호출 누적 (provider/operation/status 별)",
+    labelnames=("provider", "operation", "status"),  # status: success | error
+    registry=registry,
+)
+
+llm_call_duration_seconds = Histogram(
+    "aeroinspect_llm_call_duration_seconds",
+    "외부 LLM 호출 지연 (초)",
+    labelnames=("provider", "operation"),
+    registry=registry,
+    buckets=(0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 20.0, 40.0, 60.0),
+)
+
+llm_tokens_total = Counter(
+    "aeroinspect_llm_tokens_total",
+    "외부 LLM 토큰 사용 누적 (provider/operation/kind 별)",
+    labelnames=("provider", "operation", "kind"),  # kind: prompt | completion
+    registry=registry,
+)
+
+
+class track_llm_call:
+    """LLM 호출 지연/성공·실패를 기록하는 async 컨텍스트 매니저.
+
+    사용:
+        async with track_llm_call("openai", "chat"):
+            ... await client.create(...) ...
+    예외가 발생하면 status=error 로, 정상 종료면 success 로 카운트한다.
+    """
+
+    def __init__(self, provider: str, operation: str) -> None:
+        self.provider = provider
+        self.operation = operation
+        self._start = 0.0
+
+    async def __aenter__(self):
+        self._start = time.perf_counter()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        duration = time.perf_counter() - self._start
+        llm_call_duration_seconds.labels(self.provider, self.operation).observe(duration)
+        status = "success" if exc_type is None else "error"
+        llm_calls_total.labels(self.provider, self.operation, status).inc()
+        return False  # 예외 전파
+
+
+def record_llm_tokens(provider: str, operation: str, *, prompt: int = 0, completion: int = 0) -> None:
+    """LLM 토큰 사용량 기록 (응답 usage 가 있을 때 호출)."""
+    if prompt:
+        llm_tokens_total.labels(provider, operation, "prompt").inc(prompt)
+    if completion:
+        llm_tokens_total.labels(provider, operation, "completion").inc(completion)
+
+
 # ── 센서 헬스 (Gauge: 현재값) ───────────────────────
 lidar_distance_meters = Gauge(
     "aeroinspect_lidar_distance_meters",

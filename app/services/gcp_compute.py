@@ -45,6 +45,19 @@ class GcpComputeClient:
         self._token_cache: Optional[_CachedToken] = None
         self._token_lock = asyncio.Lock()
         self._sa_cache: Optional[dict] = None
+        # 호출마다 새 TLS 커넥션을 맺지 않도록 httpx 클라이언트를 재사용 (커넥션 풀 유지).
+        self._http: Optional[httpx.AsyncClient] = None
+
+    def _get_http(self) -> httpx.AsyncClient:
+        if self._http is None or self._http.is_closed:
+            self._http = httpx.AsyncClient(timeout=20.0)
+        return self._http
+
+    async def aclose(self) -> None:
+        """앱 종료 시 호출 — 커넥션 정리."""
+        if self._http is not None and not self._http.is_closed:
+            await self._http.aclose()
+            self._http = None
 
     # ── 서비스 계정 키 파싱 ──────────────────
     def _load_service_account(self) -> dict:
@@ -103,14 +116,14 @@ class GcpComputeClient:
                 algorithm="RS256",
             )
 
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(
-                    GCP_TOKEN_URL,
-                    data={
-                        "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-                        "assertion": assertion,
-                    },
-                )
+            resp = await self._get_http().post(
+                GCP_TOKEN_URL,
+                data={
+                    "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                    "assertion": assertion,
+                },
+                timeout=15.0,
+            )
             if resp.status_code != 200:
                 raise GcpComputeError(
                     f"GCP 토큰 발급 실패 ({resp.status_code}): {resp.text}"
@@ -133,12 +146,11 @@ class GcpComputeClient:
     async def _call(self, method: str, path_suffix: str = "") -> dict:
         token = await self._get_access_token()
         url = self._instance_url() + path_suffix
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.request(
-                method,
-                url,
-                headers={"Authorization": f"Bearer {token}"},
-            )
+        resp = await self._get_http().request(
+            method,
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+        )
         if resp.status_code >= 400:
             raise GcpComputeError(
                 f"GCP API 실패 ({resp.status_code}): {resp.text}"
