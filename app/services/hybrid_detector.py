@@ -167,7 +167,7 @@ class HybridDetector:
         try:
             from app.services.inference_pipeline import pipeline
             if pipeline.is_loaded:
-                result = await __import__("asyncio").to_thread(
+                result = await asyncio.to_thread(
                     pipeline.detect, frame, None, False
                 )
                 cands = []

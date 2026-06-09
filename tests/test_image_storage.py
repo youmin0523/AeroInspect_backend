@@ -39,9 +39,9 @@ def storage(tmp_path, monkeypatch):
 
 
 class TestImageStorage:
-    def test_save_base64_creates_file(self, storage, tmp_path):
+    async def test_save_base64_creates_file(self, storage, tmp_path):
         b64 = _make_jpeg_b64()
-        rel_path = storage.save_base64_jpeg(b64)
+        rel_path = await storage.save_base64_jpeg(b64)
         assert rel_path is not None
         assert rel_path.startswith("defects/")
         assert rel_path.endswith(".jpg")
@@ -49,26 +49,26 @@ class TestImageStorage:
         assert os.path.exists(abs_path)
         assert os.path.getsize(abs_path) > 0
 
-    def test_save_base64_with_data_url_prefix(self, storage):
+    async def test_save_base64_with_data_url_prefix(self, storage):
         b64 = _make_jpeg_b64()
         data_url = f"data:image/jpeg;base64,{b64}"
-        rel_path = storage.save_base64_jpeg(data_url)
+        rel_path = await storage.save_base64_jpeg(data_url)
         assert rel_path is not None
         assert rel_path.endswith(".jpg")
 
-    def test_save_none_returns_none(self, storage):
-        assert storage.save_base64_jpeg(None) is None
-        assert storage.save_base64_jpeg("") is None
+    async def test_save_none_returns_none(self, storage):
+        assert await storage.save_base64_jpeg(None) is None
+        assert await storage.save_base64_jpeg("") is None
 
-    def test_save_invalid_base64_returns_none(self, storage):
-        assert storage.save_base64_jpeg("not_valid_base64!!!") is None
+    async def test_save_invalid_base64_returns_none(self, storage):
+        assert await storage.save_base64_jpeg("not_valid_base64!!!") is None
 
     def test_get_url_builds_uploads_path(self, storage):
         assert storage.get_url("defects/2026-04-21/abc.jpg") == "/uploads/defects/2026-04-21/abc.jpg"
         assert storage.get_url(None) is None
 
-    def test_delete_removes_file(self, storage, tmp_path):
-        rel_path = storage.save_base64_jpeg(_make_jpeg_b64())
+    async def test_delete_removes_file(self, storage, tmp_path):
+        rel_path = await storage.save_base64_jpeg(_make_jpeg_b64())
         abs_path = os.path.join(str(tmp_path), rel_path)
         assert os.path.exists(abs_path)
         assert storage.delete(rel_path) is True
@@ -78,9 +78,9 @@ class TestImageStorage:
         assert storage.delete("defects/2020-01-01/nonexistent.jpg") is False
         assert storage.delete(None) is False
 
-    def test_multiple_saves_unique_paths(self, storage):
+    async def test_multiple_saves_unique_paths(self, storage):
         """같은 base64를 여러 번 저장해도 서로 다른 파일명."""
         b64 = _make_jpeg_b64()
-        p1 = storage.save_base64_jpeg(b64)
-        p2 = storage.save_base64_jpeg(b64)
+        p1 = await storage.save_base64_jpeg(b64)
+        p2 = await storage.save_base64_jpeg(b64)
         assert p1 != p2

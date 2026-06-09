@@ -156,7 +156,8 @@ async def signup(
         account_type=payload.account_type,
         email=payload.email,
         username=payload.username,
-        password_hash=hash_password(payload.password),
+        # bcrypt(rounds=12) 해싱은 ~250ms 동기 CPU 작업 → 스레드로 오프로드해 이벤트 루프 블로킹 제거.
+        password_hash=await asyncio.to_thread(hash_password, payload.password),
         name=payload.name,
         phone=payload.phone,
     )
@@ -501,7 +502,7 @@ async def find_id(
 
     # 사용자를 찾았으면 이메일 발송
     if user:
-        send_found_username_email(to=user.email, name=user.name, username=user.username)
+        await send_found_username_email(to=user.email, name=user.name, username=user.username)
 
     # 보안: 결과와 무관하게 동일한 성공 메시지 반환 (계정 ���거 방지)
     return AccountRecoveryResponse(
@@ -552,9 +553,17 @@ async def find_password(
     # 사용자를 찾았으면 임시 비밀번호 발급
     if user:
         temp_pw = _generate_temp_password()
-        user.password_hash = hash_password(temp_pw)
+        # bcrypt(rounds=12) 해싱은 ~250ms 동기 CPU 작업 → 스레드로 오프로드.
+        user.password_hash = await asyncio.to_thread(hash_password, temp_pw)
         await db.flush()
-        send_temp_password_email(to=user.email, name=user.name, temp_password=temp_pw)
+        # 이메일 발송 실패 시 사용자에게 전달되지 않은 임시 비밀번호로 계정이 잠기는 것을 막는다.
+        # 발송 실패하면 예외를 던져 get_db 의존성의 rollback으로 비밀번호 회전을 되돌린다.
+        sent = await send_temp_password_email(to=user.email, name=user.name, temp_password=temp_pw)
+        if not sent:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="임시 비밀번호 발송에 실패했습니다. 잠시 후 다시 시도해주세요.",
+            )
 
     return AccountRecoveryResponse(
         success=True,

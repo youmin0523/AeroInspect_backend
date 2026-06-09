@@ -3313,3 +3313,15 @@ uploads/gazebo_worlds_real/
 | D.1 | 06-09 | 핫패스 인덱스 3종: defect_logs(site_id,ts)·org_members(user_id,status)·conversations(org) | app/models/defect.py, app/models/organization.py, app/models/conversation.py, alembic/versions/p8c9d0e1f2a3_add_hotpath_indexes.py |
 | D.2 | 06-09 | 커넥션 풀 튜닝(5→10, pool_timeout 10s, recycle 1800) 설정화 | app/db/base.py, app/config.py |
 | D.3 | 06-09 | unread-counts N+1 → 단일 GROUP BY JOIN 쿼리 | app/api/chat.py |
+
+## 🧰 전체 점검 4/5 — 품질·안정성 보완 (2026-06-09)
+
+> 2차: 중·저위험 버그/지연 일괄 보완 (서브시스템 병렬 작업).
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| Q.1 | 06-09 | 검출: ensemble in-place 변형 제거(복사), per-class NMS, /detect/batch 병렬, __import__ 정리 | app/services/ensemble.py, app/services/onnx_inference.py, app/api/detect.py, app/services/hybrid_detector.py |
+| Q.2 | 06-09 | 스트리밍: temporal_filter deque(maxlen)+시간창, MJPEG 끊김감지, 녹화 release_all, telemetry flush후 broadcast | app/services/temporal_filter.py, app/core/streaming.py, app/services/recording.py, app/api/telemetry.py |
+| Q.3 | 06-09 | 인증/DB: bcrypt to_thread(signup/find-pw), find-pw 이메일실패 롤백, 레이트리밋 키 정리, XFF 안전화, oauth logger | app/api/auth.py, app/core/rate_limit.py, app/core/security.py, app/api/oauth.py |
+| Q.4 | 06-09 | 외부: SMTP 비동기+정직한 상태, image_storage aiofiles, 알림 팬아웃 동시화, RAG 라운드트립 축소(GROUP BY), gcp aclose·녹화정리 셧다운 배선 | app/services/email_service.py, app/services/image_storage.py, app/services/notification_service.py, app/services/openai_chat.py, app/main.py |
+| Q.5 | 06-09 | 비동기化 호출부 await 갱신 + 테스트 갱신 | app/api/ai_webhook.py, app/api/defects.py, tests/test_image_storage.py |

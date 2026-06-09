@@ -111,18 +111,28 @@ async def detect_batch(
             detail=f"배치 크기 초과: {len(images)} > {MAX_BATCH_SIZE}",
         )
 
-    results: List[DetectionResult] = []
+    # 1) 모든 업로드를 먼저 읽고 검증 (순차 I/O — UploadFile.read는 stream)
+    raws: List[bytes] = []
     for upload in images:
         _validate_content_type(upload)
         raw = await upload.read()
         if not raw:
             raise HTTPException(status_code=400, detail=f"빈 파일: {upload.filename}")
+        raws.append(raw)
+
+    # 2) 이미지별 추론을 동시 실행 (입력 순서 보존). per-image 오류는 태스크 단위로
+    #    잡아 한 장 실패가 배치 전체를 죽이지 않도록 유지.
+    async def _detect_one(upload: UploadFile, raw: bytes) -> DetectionResult:
         try:
-            result = await detect_defects_async(raw)
+            return await detect_defects_async(raw)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"{upload.filename}: {e}")
-        results.append(result)
-    return results
+
+    return list(
+        await asyncio.gather(
+            *(_detect_one(upload, raw) for upload, raw in zip(images, raws))
+        )
+    )
 
 
 # =============================================

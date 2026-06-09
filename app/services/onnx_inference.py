@@ -175,7 +175,14 @@ class ONNXYoloDetector:
         y2 = np.clip((y2 - pad_h) / scale, 0, orig_h)
 
         xyxy = np.stack([x1, y1, x2, y2], axis=1)
-        keep = _nms_numpy(xyxy, max_scores, iou_threshold)
+
+        # 클래스별 NMS: 서로 다른 클래스의 겹치는 박스가 상호 억제되지 않도록
+        # 클래스 id마다 큰 좌표 오프셋을 더해 단일 NMS로 처리(표준 YOLO 트릭).
+        # 단일 클래스(nc==1)면 오프셋이 모두 0 → 기존 동작과 동일.
+        max_coord = float(max(orig_w, orig_h)) + 1.0
+        offset = class_ids.astype(np.float32) * max_coord
+        xyxy_offset = xyxy + offset[:, None]
+        keep = _nms_numpy(xyxy_offset, max_scores, iou_threshold)
 
         results = []
         for i in keep:

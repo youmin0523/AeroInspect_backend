@@ -6,6 +6,7 @@
 #       - 다수 사용자 대상 일괄 알림 지원
 # =============================================
 
+import asyncio
 from uuid import UUID
 from typing import Optional
 
@@ -67,12 +68,40 @@ class NotificationService:
         message: Optional[str] = None,
         metadata: Optional[dict] = None,
     ) -> list[Notification]:
-        """동일 알림을 다수 사용자에게 전송"""
-        results = []
-        for uid in user_ids:
-            n = await self.create(db, uid, category, title, message, metadata)
-            results.append(n)
-        return results
+        """동일 알림을 다수 사용자에게 전송.
+
+        - DB INSERT 는 한 번의 flush 로 일괄 처리 (사용자 수만큼 round-trip 하지 않음).
+        - WebSocket 푸시는 asyncio.gather 로 동시 fan-out (순차 await 제거).
+        반환되는 Notification 목록과 브로드캐스트 payload 는 create() 와 동일하다.
+        """
+        if not user_ids:
+            return []
+
+        # 1) 모든 Notification 을 추가한 뒤 단일 flush — id/created_at 등 DB 기본값 채움
+        notifs = [
+            Notification(
+                user_id=uid,
+                category=category,
+                title=title,
+                message=message,
+                metadata_=metadata,
+            )
+            for uid in user_ids
+        ]
+        db.add_all(notifs)
+        await db.flush()
+
+        # 2) WebSocket 실시간 푸시 — 동시 fan-out
+        async def _broadcast(notif: Notification) -> None:
+            response = NotificationResponse.model_validate(notif)
+            await self._ws.broadcast(f"notifications:{notif.user_id}", {
+                "type": "notification.new",
+                "data": response.model_dump(mode="json"),
+            })
+
+        await asyncio.gather(*(_broadcast(n) for n in notifs))
+
+        return notifs
 
 
 # ── 모듈 레벨 싱글톤 ─────────────────────────
