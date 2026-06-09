@@ -3279,3 +3279,7 @@ uploads/gazebo_worlds_real/
 
 - gpt-4o grounding 박스 품질 실측 — 약하면 openai는 검증역할로, gemini를 주 검출로 조정
 - 노션 일괄 동기화
+
+## 🔧 node_modules/ gitignore (MS 브랜치 catch-up) (2026-06-09)
+
+> MS 는 R-v1.1.19 기반이라 develop/main 의 node_modules gitignore 커밋(ff9fb5b) 이전 → node_modules(583파일)가 untracked 로 노출(VSCode 579 changes). develop/main 과 동일하게 .gitignore 에 추가(파일 보존, 추적만 제외).

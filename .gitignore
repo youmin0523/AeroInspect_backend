@@ -73,3 +73,6 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Node 의존성 (실수 커밋 방지 — develop/main 과 동일)
+node_modules/
