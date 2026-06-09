@@ -187,6 +187,32 @@ class Settings(BaseSettings):
     OPENAI_MAX_OUTPUT_TOKENS: int = 1200
     OPENAI_SUMMARY_MODEL: str = "gpt-4o-mini"
 
+    # ── VLM 하자 검출 (비전 LLM, 기존 ONNX와 병행 비교 PoC) ──
+    # 학습 모델 검출률이 낮아(M4 mAP 0.503), Gemini/Claude/GPT-4o 비전 모델로
+    # 이미지/키프레임을 직접 판정. 기존 ONNX 경로는 그대로 두고 병렬 오버레이로 추가.
+    #   VLM_PROVIDER: gemini(기본·저비용) | claude | openai
+    #   VLM_MODE: classify(이미지 단위 판정, bbox 없음) | grounding(Gemini bbox 0~1000)
+    #   VLM_KEYFRAME_INTERVAL_SEC: 근실시간 스트림 샘플 주기 (프레임마다 호출 불가)
+    #   VLM_DAILY_CALL_CAP: 일일 호출 상한 (비용 가드)
+    VLM_DETECTION_ENABLED: bool = False
+    VLM_PROVIDER: str = "gemini"
+    VLM_MODEL: str = "gemini-2.5-flash"
+    VLM_MODE: str = "classify"
+    VLM_KEYFRAME_INTERVAL_SEC: float = 4.0
+    VLM_MAX_CONCURRENCY: int = 2
+    VLM_DAILY_CALL_CAP: int = 2000
+
+    # ── 하이브리드 판정 (ONNX 제안 + VLM 판정, 상업용 기본 경로) ──
+    #   VLM_HYBRID_ENABLED: 스트림 키프레임을 하이브리드로 처리 (False면 VLM 단독)
+    #   VLM_ADJUDICATE_CONFLICTS: 고conf 충돌 시 1회 한정 재판정(토론-lite). 비용 ↑ 소폭.
+    #   VLM_CONFLICT_ONNX_CONF: 재판정 발동 ONNX 신뢰도 하한
+    VLM_HYBRID_ENABLED: bool = True
+    VLM_ADJUDICATE_CONFLICTS: bool = True
+    VLM_CONFLICT_ONNX_CONF: float = 0.70
+    # VLM이 추가한(거친) 박스를 고전 CV로 실제 하자 픽셀에 스냅 보정
+    # (균열=선형, 녹물=색, 박리=텍스처). 실패 시 원본 박스 유지(안전).
+    VLM_BOX_REFINE: bool = True
+
     # ── JWT ──────────────────────────────────
     JWT_SECRET: str = "change-me-in-production"
     JWT_EXPIRE_MINUTES: int = 120

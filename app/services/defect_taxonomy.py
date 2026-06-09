@@ -212,6 +212,10 @@ DEFECT_20_MAP: Dict[str, Tuple[str, str, str, str]] = {
     # Thermal Anomaly (PatchCore) — Moisture/delam YOLO 대체
     # 비지도 학습이라 sub 분류 X — 점검자가 현장에서 B-02(단열)/B-04(누수) 판단
     "thermal_anomaly_area": ("B-04", "열화상 이상영역 (단열·누수 의심)", "HIGH", "B"),
+
+    # ── 확장 항목 (2026-06-08, 외벽/옥상 점검) — severity_mapper.DEFECT_CATALOG와 1:1 ──
+    "rebar_corrosion":      ("A-05", "철근 노출·부식 (녹물)", "HIGH", "A"),
+    "finish_delamination":  ("C-06", "도장·마감 박리·탈락",   "MED",  "C"),
 }
 
 

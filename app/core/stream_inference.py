@@ -35,6 +35,8 @@ from app.services.lidar import lidar_service
 from app.services.object_tracker import defect_tracker
 from app.services.telemetry_cache import telemetry_cache
 from app.services.temporal_filter import TemporalFilter
+from app.services.hybrid_detector import detect_hybrid_async
+from app.services.vlm_detector import VLMQuotaExceeded, detect_vlm_async
 
 
 @dataclass
@@ -66,6 +68,12 @@ class StreamInferenceWorker:
         self._frame_skip: int = 3
         self._error_count: int = 0          # 연속 추론 실패 카운터
         self._total_errors: int = 0         # 총 추론 실패 횟수
+        # ── VLM 키프레임 오버레이 (근실시간 비전 LLM 검출) ──
+        # 30fps ONNX 경로와 별개로, N초마다 최신 프레임 1장만 VLM에 비동기 제출.
+        self._last_frame_bgr: Optional[np.ndarray] = None
+        self._vlm_task: Optional[asyncio.Task] = None
+        self._vlm_count: int = 0            # VLM 키프레임 처리 횟수
+        self._vlm_errors: int = 0           # VLM 실패 횟수
         # 시간 일관성 필터 (IoU 기반 공간 매칭 + Noisy-OR 누적)
         self._temporal_filter = TemporalFilter(
             window_size=settings.TEMPORAL_FILTER_WINDOW,
@@ -112,6 +120,13 @@ class StreamInferenceWorker:
             },
             "hard_examples": hard_example_miner.stats,
             "db_persistence": defect_persistence.stats,
+            "vlm_keyframe": {
+                "enabled": settings.VLM_DETECTION_ENABLED,
+                "running": self._vlm_task is not None and not self._vlm_task.done(),
+                "processed": self._vlm_count,
+                "errors": self._vlm_errors,
+                "interval_sec": settings.VLM_KEYFRAME_INTERVAL_SEC,
+            },
         }
 
     # ── 생명주기 ─────────────────────────────────
@@ -126,6 +141,11 @@ class StreamInferenceWorker:
         self._temporal_filter.reset()
         hard_example_miner.reset()
         self._worker_task = asyncio.create_task(self._worker_loop(), name="stream_inference_worker")
+        # VLM 키프레임 오버레이 태스크 (활성화 시에만)
+        if settings.VLM_DETECTION_ENABLED:
+            self._vlm_task = asyncio.create_task(self._vlm_keyframe_loop(), name="vlm_keyframe_loop")
+            print(f"[StreamInfer] VLM 키프레임 오버레이 ON "
+                  f"(provider={settings.VLM_PROVIDER}, every {settings.VLM_KEYFRAME_INTERVAL_SEC}s)")
         print(f"[StreamInfer] 워커 시작 (frame_skip={self._frame_skip}, tracker={'ON' if defect_tracker.is_available else 'OFF'})")
 
     async def stop(self) -> None:
@@ -138,6 +158,13 @@ class StreamInferenceWorker:
             except (asyncio.CancelledError, Exception):
                 pass
             self._worker_task = None
+        if self._vlm_task is not None:
+            self._vlm_task.cancel()
+            try:
+                await self._vlm_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._vlm_task = None
         # 세션 종료 시 DB 재시도 버퍼 flush
         retried = await defect_persistence.flush_retry_buffer()
         if retried:
@@ -170,6 +197,10 @@ class StreamInferenceWorker:
             False: 스킵됐거나 드롭됨
         """
         self._submitted_count += 1
+
+        # VLM 키프레임 태스크가 가져갈 최신 프레임 보관 (스킵 여부와 무관하게 갱신)
+        if settings.VLM_DETECTION_ENABLED:
+            self._last_frame_bgr = frame_bgr
 
         # 프레임 스킵 — N프레임 중 1프레임만 추론
         if self._submitted_count % self._frame_skip != 0:
@@ -405,6 +436,145 @@ class StreamInferenceWorker:
                 tier=tier,
                 lidar_pos=lidar_pos,
             )
+
+    # ── VLM 키프레임 오버레이 루프 ───────────────
+    async def _vlm_keyframe_loop(self) -> None:
+        """
+        30fps ONNX 경로와 독립적으로, VLM_KEYFRAME_INTERVAL_SEC 주기마다
+        최신 프레임 1장만 비전 LLM에 제출 → "stream" 채널에 vlm_detection 브로드캐스트 + DB 저장.
+        VLM 호출은 vlm_detector 내부 세마포어/일일 상한으로 비용 통제.
+        어떤 예외도 메인 추론 흐름을 막지 않도록 격리.
+        """
+        interval = max(1.0, float(settings.VLM_KEYFRAME_INTERVAL_SEC))
+        print("[StreamInfer][VLM] 키프레임 루프 시작")
+        while self._running:
+            try:
+                await asyncio.sleep(interval)
+            except asyncio.CancelledError:
+                break
+
+            frame = self._last_frame_bgr
+            if frame is None:
+                continue
+
+            try:
+                # JPEG 인코딩은 블로킹 → 스레드 풀
+                ok, buf = await asyncio.to_thread(cv2.imencode, ".jpg", frame)
+                if not ok:
+                    continue
+                image_bytes = buf.tobytes()
+
+                lidar_xyz = self._compute_lidar_xyz()
+                lidar_pos = (
+                    {"x": lidar_xyz[0], "y": lidar_xyz[1], "z": lidar_xyz[2]}
+                    if lidar_xyz is not None else None
+                )
+                now = time.time()
+
+                if settings.VLM_HYBRID_ENABLED:
+                    # ── 상업용 경로: ONNX 제안 + VLM 판정 캐스케이드 ──
+                    hr = await detect_hybrid_async(image_bytes)
+                    self._vlm_count += 1
+                    await ws_manager.broadcast("stream", {
+                        "type": "hybrid_detection",
+                        "timestamp": now,
+                        "frame_id": self._submitted_count,
+                        "result": json.loads(hr.model_dump_json()),
+                        "lidar_position": lidar_pos,
+                    })
+                    det_dicts = self._hybrid_to_dicts(hr)
+                else:
+                    # ── VLM 단독 경로 ──
+                    vr = await detect_vlm_async(image_bytes)
+                    self._vlm_count += 1
+                    await ws_manager.broadcast("stream", {
+                        "type": "vlm_detection",
+                        "timestamp": now,
+                        "frame_id": self._submitted_count,
+                        "result": json.loads(vr.model_dump_json()),
+                        "lidar_position": lidar_pos,
+                    })
+                    det_dicts = self._vlm_to_dicts(vr)
+
+                # defects 채널 호환 이벤트 + DB 저장
+                for d in det_dicts:
+                    await ws_manager.broadcast("defects", {
+                        "type": "defect.new",
+                        "data": {
+                            "area": d.get("area"),
+                            "category_code": d.get("code"),
+                            "defect_type": d.get("class_display_ko"),
+                            "severity": d.get("severity"),
+                            "confidence": round(d.get("conf", 0), 3),
+                            "grade": d.get("grade"),
+                            "bbox": None,
+                            "defect_source": d.get("defect_source"),
+                            "defect_class": d.get("class"),
+                            "defect_class_display_ko": d.get("class_display_ko"),
+                            "frame_id": self._submitted_count,
+                            "localization": d.get("localization"),
+                        },
+                    })
+                if det_dicts:
+                    await defect_persistence.save_batch(
+                        detections=det_dicts,
+                        frame_id=self._submitted_count,
+                        tier=0,  # VLM/하이브리드 경로 마커 (ONNX Tier 1~3과 구분)
+                        lidar_pos=lidar_pos,
+                    )
+            except VLMQuotaExceeded as e:
+                self._vlm_errors += 1
+                print(f"[StreamInfer][VLM] 일일 상한 — 루프 대기: {e}")
+                # 상한 도달 시 다음 날까지 굳이 매 주기 시도하지 않도록 길게 대기
+                try:
+                    await asyncio.sleep(300)
+                except asyncio.CancelledError:
+                    break
+            except Exception as e:
+                self._vlm_errors += 1
+                print(f"[StreamInfer][VLM] 키프레임 처리 오류: {e}")
+
+    @staticmethod
+    def _vlm_to_dicts(result) -> list:
+        """VLMDetectionResult → defect_persistence.save_batch 용 dict 리스트."""
+        out = []
+        for d in result.detections:
+            out.append({
+                "class": d.class_,
+                "code": d.code,
+                "area": d.area,
+                "class_display_en": "",
+                "class_display_ko": d.class_display_ko,
+                "conf": d.conf,
+                "severity": d.severity or "LOW",
+                "bbox_xyxy": list(d.bbox_xyxy) if d.localization == "bbox" else [],
+                "defect_source": "vlm",
+                "localization": d.localization,
+            })
+        return out
+
+    @staticmethod
+    def _hybrid_to_dicts(result) -> list:
+        """HybridDetectionResult → save_batch 용 dict. 기각(rejected)은 DB 미저장."""
+        out = []
+        for d in result.detections:
+            if d.status == "rejected":
+                continue  # VLM이 기각한 ONNX 오탐은 DB에 남기지 않음 (감사 응답엔 포함)
+            out.append({
+                "class": d.class_,
+                "code": d.code,
+                "area": d.area,
+                "class_display_en": "",
+                "class_display_ko": d.class_display_ko,
+                "conf": d.conf,
+                "severity": d.severity or "LOW",
+                "bbox_xyxy": list(d.bbox_xyxy) if d.localization == "bbox" else [],
+                "defect_source": d.source,
+                "grade": d.grade,
+                "localization": d.localization,
+                "cross_model_boosted": d.agreement,
+            })
+        return out
 
     @staticmethod
     def _compute_lidar_xyz() -> Optional[tuple]:

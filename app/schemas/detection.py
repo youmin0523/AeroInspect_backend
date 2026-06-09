@@ -217,6 +217,117 @@ class DetectionResult20(BaseModel):
     tier_executed: int = Field(1, description="실행된 최고 Tier (1/2/3)")
 
 
+# =============================================
+# VLM (비전 LLM) 하자 검출 스키마 — 기존 ONNX와 병행 비교 PoC
+#   - 기존 YoloDetection/DefectDetection과 필드 정렬해 나란히 비교 용이
+#   - classify 모드: bbox 없음(localization="image_level", 전체 프레임 사용)
+#   - grounding 모드: Gemini normalized bbox(0~1000) → 픽셀 xyxy 변환
+# =============================================
+
+VLMLocalization = Literal["image_level", "bbox"]
+
+
+class VLMDetection(BaseModel):
+    """비전 LLM 검출 단건."""
+    class_: str = Field(..., alias="class", description="severity_mapper class_name")
+    class_display_ko: str = ""
+    code: str = Field("", description="A-01 ~ E-02 카테고리 코드")
+    area: str = Field("", description="영역 A-E")
+    conf: float = Field(..., ge=0.0, le=1.0, description="VLM 자가 보고 신뢰도")
+    severity: Optional[Severity] = None
+    bbox_xyxy: List[float] = Field(
+        default_factory=list,
+        description="[x1,y1,x2,y2] 픽셀. classify 모드면 전체 프레임",
+    )
+    localization: VLMLocalization = "image_level"
+    reasoning: str = Field("", description="VLM 판정 근거 (짧은 설명)")
+
+    model_config = {"populate_by_name": True}
+
+
+class VLMDetectionResult(BaseModel):
+    """비전 LLM 통합 검출 응답."""
+    detections: List[VLMDetection] = Field(default_factory=list)
+    has_defect: bool = False
+    defect_count: int = 0
+    provider: str = ""
+    model: str = ""
+    mode: str = ""
+    latency_ms: float = 0.0
+    cached: bool = False
+    image_shape: ImageShape
+
+
+class CompareResult(BaseModel):
+    """
+    동일 이미지에 ONNX(기존 3-모델)와 VLM을 동시 실행한 병행 비교 결과.
+    PoC 평가용 — 두 방식의 검출을 나란히 확인.
+    """
+    onnx: DetectionResult
+    vlm: VLMDetectionResult
+    onnx_defect_count: int = 0
+    vlm_defect_count: int = 0
+    image_shape: ImageShape
+
+
+# =============================================
+# 하이브리드 검출 스키마 — ONNX 제안 + VLM 판정 (캐스케이드 판정)
+#   상업용 원칙: 단일 엔진 단독 CONFIRMED 금지.
+#     - ONNX+VLM 합의/종류교정 → CONFIRMED 가능 (위치=ONNX 정밀, 종류=VLM 권위)
+#     - ONNX 단독 / VLM 단독 추가 → REVIEW 상한 (점검자 확인)
+#     - VLM 기각 → REFERENCE (감사 로그)
+#   모든 검출에 provenance(onnx_conf/vlm_conf/agreement/reasoning) 기록.
+# =============================================
+
+HybridStatus = Literal[
+    "confirmed_by_both",  # ONNX 검출 + VLM 동의
+    "reclassified",       # ONNX 위치 + VLM 종류 교정
+    "onnx_only",          # ONNX 검출, VLM 미언급 (미검증)
+    "vlm_only",           # ONNX 놓침, VLM 추가 (위치 미검증)
+    "rejected",           # ONNX 검출, VLM 기각 (오탐)
+]
+
+
+class HybridDetection(BaseModel):
+    """ONNX+VLM 캐스케이드 판정 단건 (provenance 포함)."""
+    class_: str = Field(..., alias="class", description="최종 확정 class_name")
+    class_display_ko: str = ""
+    code: str = ""
+    area: str = ""
+    conf: float = Field(..., ge=0.0, le=1.0, description="등급 산정에 사용된 최종 신뢰도")
+    severity: Optional[Severity] = None
+    bbox_xyxy: List[float] = Field(default_factory=list, description="[x1,y1,x2,y2] 픽셀")
+    localization: VLMLocalization = "image_level"
+    status: HybridStatus
+    grade: Grade = "REVIEW"
+    grade_display_ko: str = ""
+    listable: bool = Field(False, description="보고서 하자목록 등재 여부 (CONFIRMED만 True)")
+    # ── provenance (감사 추적) ──
+    onnx_conf: Optional[float] = Field(None, description="ONNX 원본 신뢰도 (없으면 VLM 단독)")
+    vlm_conf: Optional[float] = Field(None, description="VLM 판정 신뢰도")
+    agreement: bool = Field(False, description="ONNX·VLM 합의 여부 (위치+종류)")
+    source: str = Field("", description="onnx+vlm | onnx | vlm")
+    reasoning: str = Field("", description="VLM 판정 근거")
+
+    model_config = {"populate_by_name": True}
+
+
+class HybridDetectionResult(BaseModel):
+    """ONNX 제안 → VLM 판정 → 결정론적 병합 통합 응답."""
+    detections: List[HybridDetection] = Field(default_factory=list)
+    has_defect: bool = False
+    defect_count: int = 0
+    confirmed_count: int = Field(0, description="CONFIRMED — 보고서 등재 대상")
+    review_count: int = Field(0, description="REVIEW — 점검자 추가 확인")
+    rejected_count: int = Field(0, description="VLM이 기각한 ONNX 오탐 수")
+    onnx_engine: str = Field("", description="pipeline20 | pipeline3 | none")
+    vlm_provider: str = ""
+    vlm_model: str = ""
+    vlm_calls: int = Field(0, description="VLM 호출 수 (충돌 재판정 시 2)")
+    latency_ms: float = 0.0
+    image_shape: ImageShape
+
+
 class ModelsLoadedStatus20(BaseModel):
     """20종 파이프라인 모델 상태."""
     m1_yolo: bool = False
