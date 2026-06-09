@@ -136,6 +136,13 @@ class TestStreamService:
         self._playing: bool = False
         self._paused: bool = False
 
+        # ── 이미지 detection 백그라운드 태스크 동시성 제어 ──
+        # 이미지 프레임 detection(ONNX+VLM 하이브리드)을 MJPEG yield 경로에서 분리해
+        # 백그라운드로 돌린다(영상 경로와 동일 패턴). 1 vCPU 보호: 직전 detection 이 아직
+        # 돌고 있으면 새 프레임은 표시만 하고 detection 은 스킵 — 태스크 누적 방지.
+        self._image_detect_inflight: int = 0
+        self._MAX_INFLIGHT_DETECT: int = 1
+
     # ── 재생 제어 ────────────────────────────
     @property
     def play_state(self) -> str:
@@ -664,20 +671,17 @@ class TestStreamService:
     async def rgb_mjpeg_generator(self):
         """RGB MJPEG 스트림.
 
-        ⚠ multipart/x-mixed-replace의 commit 타이밍:
-        Chromium 계열 브라우저는 frame N의 JPEG 바이트를 받아도 *다음* boundary가
-        도착해야 frame N을 화면에 paint한다. 따라서 frame N의 detection을 frame N
-        yield 직후에 broadcast하면 카드가 영상보다 먼저 보임. → 매 사이클마다
-        prev_detection을 1프레임 미뤄서 broadcast: "다음 yield" 직후에 이전 프레임의
-        카드를 보내야 영상이 먼저 보이고 그 다음 카드가 등장한다.
+        설계 원칙: 프레임 표시는 detection 과 절대 결합하지 않는다.
+        과거에는 프레임마다 _detect(ONNX+VLM 하이브리드)를 await 한 뒤에야 yield 해서,
+        VLM 응답(수 초~수십 초, 쿼터/네트워크 장애 시 사실상 무한)까지 이미지가 화면에
+        안 뜨고 스트림이 얼어붙는 사고가 있었다. 이제 raw 프레임을 즉시 yield 하고
+        detection 은 _detect_and_broadcast_image 백그라운드 태스크로 분리한다.
+        라이브 박스는 프론트가 WS defect.new → DetectionOverlay(SVG) 로 직접 그린다.
         """
-        prev_detection: Optional[dict] = None
-
         while True:
             if not self._playing:
                 frame = self._stopped_frame("RGB", "Press START to begin")
                 yield self._mjpeg_boundary(self._encode_jpeg(frame))
-                prev_detection = None
                 await asyncio.sleep(1.0)
                 continue
 
@@ -687,7 +691,6 @@ class TestStreamService:
                 else:
                     frame = self._stopped_frame("RGB", "PAUSED")
                     yield self._mjpeg_boundary(self._encode_jpeg(frame))
-                prev_detection = None
                 await asyncio.sleep(0.5)
                 continue
 
@@ -708,10 +711,8 @@ class TestStreamService:
                 activated = self.activate_video_mode(filepath)
                 if not activated:
                     # 메타 peek 실패 — 손상 파일. 다음 프레임으로 넘김.
-                    prev_detection = None
                     await asyncio.sleep(0.5)
                     continue
-                prev_detection = None
                 # active video가 끝날 때까지 placeholder만 흘림.
                 # (영상이 끝나면 _video_inference_task가 done. 그래도 사용자가 STOP하기 전까지는
                 #  같은 영상이 active로 유지 — 프론트가 seek/replay 할 수 있어야 하므로.)
@@ -731,43 +732,41 @@ class TestStreamService:
 
             self._frame_counter += 1
 
-            # 1) 추론 (브로드캐스트 없이 결과만 반환)
-            detection = await self._detect(frame, filepath)
-
-            # 1.5) detection이 있으면 RAW RGB 스냅샷을 detection에 첨부.
-            #      broadcast(prev_detection)는 0.4s 후 호출되는데 그 사이 _current_rgb_jpeg가
-            #      다음 프레임(다음 image 파일)으로 갱신되어, bbox는 N의 좌표인데 JPEG는 N+1이
-            #      되는 프레임 드리프트가 발생. 이 시점에 raw frame을 굳혀두어 짝을 보존.
-            if detection is not None:
-                detection["_rgb_snapshot"] = self._encode_jpeg(frame)
-
-            # 2) RGB 프레임에 오버레이 그리기
-            annotated = self._apply_live_overlay(frame, detection)
-            rgb_jpeg = self._encode_jpeg(annotated)
+            # 1) 이미지를 *즉시* 표시한다. detection(ONNX+VLM 하이브리드 네트워크 왕복)을
+            #    여기서 await 하지 않는다.
+            #    과거: _detect 를 await 한 뒤에야 yield → 업로드 이미지가 VLM 응답
+            #    (수 초~수십 초, 쿼터/네트워크 장애 시 사실상 무한)까지 화면에 안 뜨고
+            #    "No test images" 가 그대로 남는 freeze 사고. 라이브 박스는 프론트가
+            #    WS defect.new → DetectionOverlay(SVG) 로 그리므로 burned-in 오버레이 불필요.
+            rgb_jpeg = self._encode_jpeg(frame)
             self._current_rgb_jpeg = rgb_jpeg
 
-            # 3) Thermal 프레임 준비 + 오버레이 (raw thermal jpeg 반환)
-            raw_thermal_jpeg = await self._prepare_thermal_frame(test_frame, detection)
-            if detection is not None and raw_thermal_jpeg is not None:
-                detection["_thermal_snapshot"] = raw_thermal_jpeg
+            # Thermal 프레임 준비(raw — 오버레이는 프론트 SVG 담당). 드리프트 방지용으로
+            # 이 raw thermal 스냅샷을 백그라운드 detection 에 넘겨 짝을 굳혀둔다.
+            raw_thermal_jpeg = await self._prepare_thermal_frame(test_frame, None)
             self._frame_version += 1
 
-            # 4) 새 boundary yield → 이 신호로 브라우저가 *직전* 프레임을 commit/paint한다.
+            # 2) 즉시 yield → 사용자는 detection 과 무관하게 바로 이미지를 본다.
             yield self._mjpeg_boundary(rgb_jpeg)
 
-            # 5) 방금 보낸 boundary가 이전 프레임의 commit 신호. paint/decode 여유
-            #    0.4초만 두고 이전 프레임의 detection을 broadcast → 영상 먼저, 카드 다음.
-            waited = 0.0
-            if prev_detection is not None:
-                await asyncio.sleep(0.4)
-                waited = 0.4
-                await self._broadcast_detection(prev_detection)
+            # 3) detection 은 백그라운드 태스크로 분리(영상 경로와 동일 패턴) — 스트림 흐름을
+            #    절대 막지 않는다. 1 vCPU 보호: 직전 detection 이 아직 돌고 있으면 이번
+            #    프레임은 표시만 하고 스킵. 모델 미로드면 _detect 가 어차피 None → 스킵.
+            if (self._models_loaded
+                    and self._image_detect_inflight < self._MAX_INFLIGHT_DETECT):
+                self._image_detect_inflight += 1
+                rgb_snapshot = rgb_jpeg
+                thermal_snapshot = (
+                    raw_thermal_jpeg if test_frame.thermal_path is not None else None
+                )
+                asyncio.create_task(
+                    self._detect_and_broadcast_image(
+                        frame, filepath, rgb_snapshot, thermal_snapshot
+                    )
+                )
 
-            # 6) 이번 detection은 다음 yield(= 다음 프레임 commit) 직후에 broadcast
-            prev_detection = detection
-
-            # 7) 다음 프레임까지 잔여 시간 대기
-            await asyncio.sleep(max(0.5, settings.TEST_IMAGE_INTERVAL - waited))
+            # 4) 다음 프레임까지 대기
+            await asyncio.sleep(settings.TEST_IMAGE_INTERVAL)
 
     async def thermal_mjpeg_generator(self):
         """Thermal MJPEG 스트림. RGB 제너레이터와 프레임 버전으로 동기화."""
@@ -935,6 +934,45 @@ class TestStreamService:
             cap.release()
             print(f"[TestStream] 영상 inference 종료: {os.path.basename(filepath)} "
                   f"(샘플 {frame_idx // sample_interval}회)")
+
+    # ── 이미지 detection 백그라운드 실행 + 브로드캐스트 ────────
+    async def _detect_and_broadcast_image(
+        self,
+        frame: np.ndarray,
+        filepath: str,
+        rgb_snapshot: bytes,
+        thermal_snapshot: Optional[bytes],
+    ) -> None:
+        """이미지 프레임 detection 을 MJPEG yield 경로 밖에서(백그라운드 태스크) 실행하고
+        결과 카드를 WS 로 broadcast 한다. VLM 하이브리드가 느리거나 멈춰도 라이브 스트림은
+        계속 흐르게 하는 핵심 분리점. timeout 으로 좀비 태스크를 방지한다.
+
+        rgb_snapshot/thermal_snapshot: detection 발생 프레임의 raw JPEG 를 미리 굳혀둔 값.
+        broadcast 가 지연되는 사이 _current_*_jpeg 가 다음 프레임으로 갱신되어 bbox/JPEG 짝이
+        어긋나는 드리프트를 방지(store_defect_frame 으로 클릭 뷰가 정확한 프레임을 보여주도록)."""
+        try:
+            try:
+                detection = await asyncio.wait_for(
+                    self._detect(frame, filepath),
+                    timeout=settings.TEST_DETECT_TIMEOUT_SEC,
+                )
+            except asyncio.TimeoutError:
+                print(f"[TestStream] 이미지 detection 타임아웃"
+                      f"({settings.TEST_DETECT_TIMEOUT_SEC}s) — 스킵: {os.path.basename(filepath)}")
+                return
+            if detection is None:
+                return
+            detection["_rgb_snapshot"] = rgb_snapshot
+            if thermal_snapshot is not None:
+                detection["_thermal_snapshot"] = thermal_snapshot
+            # 이미지는 이미 화면에 떠 있으므로(영상 먼저, 카드 다음) 바로 broadcast.
+            await self._broadcast_detection(detection)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[TestStream] 이미지 detection 백그라운드 오류: {e}")
+        finally:
+            self._image_detect_inflight = max(0, self._image_detect_inflight - 1)
 
     # ── 추론 (결과만 반환, 브로드캐스트 하지 않음) ────────
     async def _detect(
