@@ -3268,3 +3268,25 @@ uploads/gazebo_worlds_real/
 ### ➡️ 후속
 
 - 노션 일괄 동기화
+
+## 🔧 R-v1.1.23 — TEST MODE 하이브리드(VLM) 검출 연결 (2026-06-09)
+
+> TEST MODE(이미지/영상 업로드)도 항상 ONNX→VLM 하이브리드로 검출. 기존엔 pipeline20(ONNX) 단독이었음.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| .23.1 | 06-09 | test_stream._detect 가 항상 _detect_hybrid 우선 — VLM 인프라 실패(키/쿼터/네트워크) 시에만 ONNX 단독 폴백 | app/services/test_stream.py |
+| .23.2 | 06-09 | _detect_hybrid: detect_hybrid_async 호출 → listable·bbox 최고신뢰 1건을 기존 broadcast 스키마로 매핑 | app/services/test_stream.py |
+| .23.3 | 06-09 | 영상 경로 VLM 비용 통제 — 샘플 주기를 VLM_KEYFRAME_INTERVAL_SEC 로(과거 fps/3=초당3회) | app/services/test_stream.py |
+| .23.4 | 06-09 | hybrid _run_onnx: USE_20DEFECT_PIPELINE 플래그 꺼져 있어도 pipeline20 로드돼 있으면 사용(TEST MODE lazy-load 활용) | app/services/hybrid_detector.py |
+
+### 📐 설계 결정
+
+- **항상 하이브리드 + 안전 폴백**: VLM 정상 0건(기각)은 존중(None). 인프라 실패만 ONNX 단독 폴백 — 화면이 빈 채 멎지 않게.
+- **영상 비용**: 프레임 폭주 방지 위해 keyframe 주기 샘플(Live _vlm_keyframe_loop 동일 정책). 쿼터 소진 시 자동 ONNX 폴백.
+- **운영 전제**: VLM_PROVIDER(gemini 기본) API 키가 배포 env 에 있어야 실제 VLM 판정. 없으면 ONNX 단독으로 동작.
+- **검증**: app.main import OK(154 routes), test_geometric_gate.py 23 passed.
+
+### ➡️ 후속
+
+- 노션 일괄 동기화
