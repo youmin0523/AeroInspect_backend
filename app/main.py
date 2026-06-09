@@ -202,6 +202,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[AeroInspect] 녹화 자원 정리 중 오류: {e}")
 
+    # 공유 Redis 클라이언트 정리 (레이트리밋/토큰 폐기/스트림모드)
+    try:
+        from app.core.redis_client import close_redis
+        await close_redis()
+    except Exception as e:
+        print(f"[AeroInspect] Redis 클라이언트 종료 중 오류: {e}")
+
     # Redis WS 백엔드 정리
     if settings.WS_BACKEND.lower() == "redis":
         try:

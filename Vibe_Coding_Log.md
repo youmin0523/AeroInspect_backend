@@ -3337,3 +3337,14 @@ uploads/gazebo_worlds_real/
 
 ### ⏭️ 보류(결정·자격증명 필요)
 - FCM/APNs 실제 푸시(자격증명), 이메일 citext 유니크(데이터 마이그레이션), 토큰 폐기/블랙리스트(설계), 레이트리밋/스트림모드 Redis 통일, /detect/batch 부분실패 응답 스키마, tiled inference 실배치화
+
+## 🧩 보류 항목 보완 1/4 — Redis 인프라/멀티워커 정합 (2026-06-09)
+
+> 공유 Redis 클라이언트 추가(lazy + graceful fallback). redis 미설치/미가용이면 전부 메모리 폴백.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| R.1 | 06-09 | 공유 Redis asyncio 클라이언트(lazy 연결, 실패 쿨다운, close) | app/core/redis_client.py |
+| R.2 | 06-09 | 레이트리밋 Redis 고정윈도우 백엔드(RATE_LIMIT_BACKEND) + 메모리 폴백 | app/core/rate_limit.py |
+| R.3 | 06-09 | 스트림 카메라 모드 Redis 공유(멀티워커 GET 정합) + 메모리 폴백 | app/api/stream.py |
+| R.4 | 06-09 | 설정 추가(RATE_LIMIT_BACKEND/TOKEN_DENYLIST/FCM·APNS/TILED_IMGSZ), 셧다운 close_redis, redis 의존성 | app/config.py, app/main.py, requirements.txt |

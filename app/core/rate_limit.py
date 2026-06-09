@@ -18,6 +18,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from app.config import settings
+from app.core.redis_client import get_redis
+
 
 # 엔드포인트 prefix → 분당 허용 횟수
 # 가장 긴 prefix 가 우선 적용되도록 길이 정렬로 평가한다.
@@ -64,6 +67,17 @@ class RateLimiter:
 
     async def check(self, ip: str, path: str) -> tuple[bool, int, int]:
         bucket, limit = _resolve_limit(path)
+
+        # 멀티워커 정합이 필요하면 Redis 고정 윈도우 카운터 사용.
+        # Redis 미설정/미가용이면 _check_redis 가 None → 메모리 폴백.
+        if settings.RATE_LIMIT_BACKEND.lower() == "redis":
+            redis_result = await self._check_redis(ip, bucket, limit)
+            if redis_result is not None:
+                return redis_result
+
+        return await self._check_memory(ip, bucket, limit)
+
+    async def _check_memory(self, ip: str, bucket: str, limit: int) -> tuple[bool, int, int]:
         key = f"{ip}|{bucket}"
         now = time.monotonic()
         cutoff = now - WINDOW_SEC
@@ -77,6 +91,25 @@ class RateLimiter:
                 return False, len(q), limit
             q.append(now)
             return True, len(q), limit
+
+    async def _check_redis(self, ip: str, bucket: str, limit: int):
+        """Redis 고정 윈도우(분 단위) 카운터. 미가용이면 None 반환(→ 메모리 폴백)."""
+        r = await get_redis()
+        if r is None:
+            return None
+        try:
+            window = int(time.time() // WINDOW_SEC)
+            key = f"rl:{ip}:{bucket}:{window}"
+            count = await r.incr(key)
+            if count == 1:
+                # 윈도우 첫 요청에만 TTL 설정 (자동 만료)
+                await r.expire(key, WINDOW_SEC)
+            if count > limit:
+                return False, count, limit
+            return True, count, limit
+        except Exception:
+            # Redis 일시 오류 → 메모리 폴백
+            return None
 
     async def sweep(self) -> None:
         """

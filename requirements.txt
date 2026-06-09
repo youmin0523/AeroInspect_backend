@@ -54,6 +54,9 @@ pillow==12.2.0
 httpx==0.28.1
 websockets==16.0
 aiofiles==25.1.0
+# WS_BACKEND=redis / RATE_LIMIT_BACKEND=redis / 토큰 폐기 denylist / 스트림모드 공유에 필요.
+# 미설치 시 위 기능은 자동으로 메모리 폴백(단일 워커 동작). 운영 멀티워커면 설치 필수.
+redis>=5.0,<6.0
 
 # ── Monitoring / Logging ───────────────────
 prometheus_client==0.25.0

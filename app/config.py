@@ -257,13 +257,34 @@ class Settings(BaseSettings):
     AI_WEBHOOK_SECRET: str = ""
 
     # 푸시 알림 프로바이더: "noop" | "fcm" | "apns"
-    # 운영 배포 시 firebase-admin 설치 후 "fcm" 으로 전환.
+    # 운영 배포 시 자격증명 설정 후 "fcm" 또는 "apns" 로 전환.
     PUSH_PROVIDER: str = "noop"
+    # FCM HTTP v1 — 서비스 계정 JSON(원문 또는 base64) + 프로젝트 ID.
+    #   GCP Compute 용(GCP_SERVICE_ACCOUNT_JSON)과 별개의 Firebase 서비스 계정 권장.
+    FCM_CREDENTIALS_JSON: str = ""
+    FCM_PROJECT_ID: str = ""
+    # APNs (token-based, .p8) — 키/팀/토픽. APNS_USE_SANDBOX=True 면 개발 게이트웨이.
+    APNS_AUTH_KEY: str = ""       # .p8 키 원문(또는 base64)
+    APNS_KEY_ID: str = ""
+    APNS_TEAM_ID: str = ""
+    APNS_TOPIC: str = ""         # 앱 번들 ID
+    APNS_USE_SANDBOX: bool = True
 
     # WebSocket 브로드캐스트 백엔드: "memory" (단일 워커) | "redis" (수평 확장)
     # redis 선택 시 REDIS_URL 필수.
     WS_BACKEND: str = "memory"
     REDIS_URL: str = "redis://localhost:6379/0"
+
+    # 레이트리밋 백엔드: "memory" (단일 워커) | "redis" (멀티워커 정합).
+    # redis 선택 시 REDIS_URL 사용, 연결 실패하면 자동으로 memory 폴백.
+    RATE_LIMIT_BACKEND: str = "memory"
+
+    # 토큰 폐기(denylist): 로그아웃/리프레시 회전 시 jti 를 Redis 에 등록해 즉시 무효화.
+    # Redis 미가용/미설정이면 자동 비활성(폐기 없이 만료까지 유효 — 기존 동작).
+    TOKEN_DENYLIST_ENABLED: bool = True
+
+    # 타일드 추론 멀티스케일 imgsz 후보 (실배치 추론용).
+    TILED_INFERENCE_IMGSZ: list[int] = [640, 1024]
 
     # ── GCP GPU VM 원격 제어 (관리자 콘솔) ────
     # Fly.io 백엔드(항상 켜진 상태)에서 GCP Compute Engine REST API 를 호출해
