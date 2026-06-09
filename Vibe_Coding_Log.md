@@ -3213,3 +3213,24 @@ uploads/gazebo_worlds_real/
 
 - thermal/M4/furniture는 데이터 부족이 근본 — 추가 데이터 확보 시 재학습
 - 노션 일괄 동기화
+
+## 🔧 R-v1.1.22 — VLM 하이브리드 검출 파이프라인 (2026-06-09)
+
+> ONNX 1차 검출을 VLM(Gemini/Claude/GPT-4o)으로 2차 검증·정밀화하는 하이브리드 경로 추가. 기존 /detect(3·20모델) 경로는 그대로 두고 별도 엔드포인트로 옵트인.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| .22.1 | 06-09 | VLM 검출기(classify/grounding) — Gemini/Claude/GPT-4o 백엔드 추상화 | app/services/vlm_detector.py |
+| .22.2 | 06-09 | 하이브리드 캐스케이드(ONNX→VLM 검증) + bbox 정밀화 + 오버레이 | app/services/hybrid_detector.py, app/services/box_refiner.py, app/services/detection_overlay.py |
+| .22.3 | 06-09 | 엔드포인트 신설: /detect/vlm·/detect/compare·/detect/hybrid | app/api/detect.py, app/schemas/detection.py |
+| .22.4 | 06-09 | 기하 게이트 확장 + 심각도/분류 보강 + 후처리 설정 | app/services/geometric_gate.py, app/utils/severity_mapper.py, app/services/defect_taxonomy.py, app/services/postprocess_config.yaml, app/services/inference_pipeline_20.py |
+| .22.5 | 06-09 | 평가 스크립트(VLM↔ONNX 비교, 테스트폴더 일괄 주석) | training/eval/compare_vlm_vs_onnx.py, training/eval/annotate_test_folder.py |
+
+### 📐 설계 결정
+
+- **옵트인·비파괴**: 기존 /detect 경로 불변. VLM은 별도 엔드포인트라 키 미설정/장애 시에도 코어 검출 영향 없음.
+- **검증**: app.main import OK(154 routes), tests/test_geometric_gate.py 23 passed.
+
+### ➡️ 후속
+
+- 노션 일괄 동기화

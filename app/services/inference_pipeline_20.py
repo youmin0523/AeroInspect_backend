@@ -637,8 +637,11 @@ class InferencePipeline20:
             if self._m3_resnet and det["class"] in ("floor_defect", "glass_defect", "frame_defect"):
                 roi = crop_roi(frame_bgr, det["bbox_xyxy"])
                 sub_type, sub_conf, _ = self._m3_resnet.classify(roi)
-                det["class"] = sub_type
-                det["conf"] = compute_combined_confidence(det["conf"], sub_conf)
+                # 표면(floor/glass/frame) 권위는 M4 Context(geometric_gate context_relabel)로 이관.
+                # crop-ResNet 은 컨텍스트가 잘려 floor↔glass 를 뒤집는 사고(2026-06-08)를 내므로
+                # 표면 class 를 덮어쓰지 않는다. YOLO 와 동일 표면일 때만 confidence 보강.
+                if sub_type == det["class"]:
+                    det["conf"] = compute_combined_confidence(det["conf"], sub_conf)
         return dets
 
     @staticmethod

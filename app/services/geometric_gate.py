@@ -60,6 +60,18 @@ class GeometricGate:
         containment_threshold: 검출의 N% 이상이 컨텍스트 위에 있어야 통과 (기본 0.4)
         fallback: M4 Context 미사용 시 동작 — "pass" | "block"
         weak_mode: True면 부적합 시 conf 감소만, False면 차단
+        strict_classes: weak_mode 여부와 무관하게 맥락 불일치 시 hard block 하는
+                        클래스 집합. 물리적으로 불가능한 조합(유리=바닥 등)용.
+                        매핑은 있으나 context 결과가 비어 판단 불가일 때는 차단하지 않음
+                        (M4 미검출을 불일치로 오인하면 정상 하자를 놓침).
+        relabel_group: 표면이 유일한 구분자라 상호 혼동되는 클래스 집합
+                       (예: {floor_defect, glass_defect, frame_defect}). 이 집합의 검출은
+                       gate filter 전에 surface_to_class 로 표면 기반 재라벨 후보가 된다.
+        surface_to_class: {context_surface: 정답 class}. 모호하지 않은 표면만 등록한다.
+                          (floor 는 바닥 결함만 → 안전. window 는 유리·창틀 공존 → 제외.)
+                          relabel_group 검출이 이 표면 위(containment>=threshold)에 있고
+                          그 표면의 정답 class 가 현재 class 와 다르면 재라벨 → 차단(미탐)이
+                          아니라 올바른 코드로 교정한다. (2026-06-08 바닥균열→E-01 사고 대응)
     """
 
     def __init__(
@@ -69,12 +81,49 @@ class GeometricGate:
         fallback: str = "pass",
         weak_mode: bool = False,
         weak_conf_penalty: float = 0.5,
+        strict_classes: Optional[List[str]] = None,
+        relabel_group: Optional[List[str]] = None,
+        surface_to_class: Optional[Dict[str, str]] = None,
     ):
         self.valid_context_map = valid_context_map or {}
         self.containment_threshold = containment_threshold
         self.fallback = fallback
         self.weak_mode = weak_mode
         self.weak_conf_penalty = weak_conf_penalty
+        self.strict_classes = frozenset(strict_classes or ())
+        self.relabel_group = frozenset(relabel_group or ())
+        self.surface_to_class = surface_to_class or {}
+
+    def _maybe_relabel(
+        self,
+        det: dict,
+        contexts_by_class: Dict[str, List[List[float]]],
+    ) -> dict:
+        """표면이 유일한 구분자인 혼동 클래스를 M4 표면 기반으로 교정.
+
+        det['class'] 가 relabel_group 에 속하고, 검출이 surface_to_class 에 등록된
+        표면 위(containment>=threshold)에 충분히 올라가 있으며, 그 표면의 정답 class 가
+        현재와 다르면 class 를 교정한다. 그 외에는 원본 그대로 반환.
+        """
+        det_class = det.get("class")
+        det_bbox = det.get("bbox_xyxy")
+        if det_class not in self.relabel_group or not det_bbox or not self.surface_to_class:
+            return det
+        best_c = 0.0
+        best_target = None
+        for surface, target_class in self.surface_to_class.items():
+            for ctx_bbox in contexts_by_class.get(surface, []):
+                c = _containment(det_bbox, ctx_bbox)
+                if c > best_c:
+                    best_c = c
+                    best_target = target_class
+        if best_target and best_target != det_class and best_c >= self.containment_threshold:
+            print(
+                f"[GeometricGate] context relabel: {det_class} -> {best_target} "
+                f"(containment={best_c:.2f})"
+            )
+            return {**det, "class": best_target, "context_relabeled_from": det_class}
+        return det
 
     def filter(
         self,
@@ -112,6 +161,9 @@ class GeometricGate:
 
         kept: List[dict] = []
         for det in detections:
+            # 표면 기반 재라벨(혼동 클래스) — 차단 전에 먼저 교정 시도.
+            # 교정되면 아래 valid_context 검사를 새 class 로 통과한다.
+            det = self._maybe_relabel(det, contexts_by_class)
             det_class = det.get("class")
             det_bbox = det.get("bbox_xyxy")
             if not det_class or not det_bbox:
@@ -142,7 +194,34 @@ class GeometricGate:
                     "context_class": best_ctx_class,
                     "context_containment": round(best_containment, 4),
                 })
-            elif self.weak_mode:
+                continue
+
+            # ── strict hard block 판정 ──
+            # 유효 표면 위에 없을 때, "다른(부적합) 표면 위에 확실히 올라가 있는가"를
+            # 따로 본다. 부적합 표면에 충분히 포함되면 물리적 불일치(유리=바닥)로 확정 →
+            # weak_mode 라도 차단. M4가 유효 표면을 단순히 못 잡은 경우(부적합 표면도 없음)는
+            # 차단하지 않아 정상 하자를 놓치지 않는다.
+            if det_class in self.strict_classes:
+                wrong_containment = 0.0
+                wrong_ctx_class = None
+                for ctx_class, boxes in contexts_by_class.items():
+                    if ctx_class in valid_ctx_classes:
+                        continue
+                    for ctx_bbox in boxes:
+                        c = _containment(det_bbox, ctx_bbox)
+                        if c > wrong_containment:
+                            wrong_containment = c
+                            wrong_ctx_class = ctx_class
+                if wrong_containment >= self.containment_threshold:
+                    # 차단 — kept에 추가 안 함. (진단용으로 흔적만 남기지 않음: 노출 차단)
+                    print(
+                        f"[GeometricGate] strict block: {det_class} on "
+                        f"{wrong_ctx_class}(containment={wrong_containment:.2f}) "
+                        f"valid={valid_ctx_classes}"
+                    )
+                    continue
+
+            if self.weak_mode:
                 # 약한 모드: conf 감소시켜 통과
                 kept.append({
                     **det,
@@ -174,6 +253,10 @@ def load_geometric_gate_from_config(config: dict) -> GeometricGate:
     valid_context = config.get("valid_context", {})
     threshold = config.get("context_iou_threshold", 0.4)  # yaml 키명은 IoU지만 containment로 사용
     fallback = config.get("fallback_when_unavailable", "pass")
+    strict_classes = config.get("strict_classes", [])
+    relabel_cfg = config.get("context_relabel", {}) or {}
+    relabel_group = relabel_cfg.get("group", [])
+    surface_to_class = relabel_cfg.get("surface_to_class", {})
 
     if not enabled:
         # 비활성화 — 모든 검출 그대로 통과
@@ -190,6 +273,9 @@ def load_geometric_gate_from_config(config: dict) -> GeometricGate:
         fallback=fallback,
         weak_mode=True,                # M4 Context mAP 0.55 — strict 차단 위험, weak로 conf 감소만
         weak_conf_penalty=0.6,         # 기본 0.5보다 약하게 (recall 보존)
+        strict_classes=strict_classes, # 물리적 불일치(유리=바닥 등)는 weak 대신 hard block
+        relabel_group=relabel_group,   # 표면이 유일한 구분자인 혼동 클래스(floor/glass/frame)
+        surface_to_class=surface_to_class,  # 모호하지 않은 표면→정답 class (floor→floor_defect)
     )
 
 
