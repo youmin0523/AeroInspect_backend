@@ -147,6 +147,9 @@ class DefectLog(Base):
         Index("idx_defect_frame", "frame_id"),
         Index("idx_defect_review_status", "review_status", timestamp.desc()),
         Index("idx_defect_reviewer", "reviewed_by_user_id", "reviewed_at"),
+        # 조직 스코프 조회(site_id IN (...)) + 최신순 정렬을 한 번에 커버.
+        # defect_logs 는 최대 볼륨 테이블이라 site_id 무인덱스 시 seq-scan 비용이 큼.
+        Index("idx_defect_site_ts", "site_id", timestamp.desc()),
     )
 
     def __repr__(self):

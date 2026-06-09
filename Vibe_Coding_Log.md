@@ -3305,3 +3305,11 @@ uploads/gazebo_worlds_real/
 | L.4 | 06-09 | 프레임 디코드를 FRAME_SKIP 이후로(will_enqueue) → JPEG 디코드 CPU ~1/3 | app/api/ws_stream.py, app/core/stream_inference.py |
 | L.5 | 06-09 | M4·가구 모델을 후보 있을 때만 실행, WBF imgsz no-op 제거(Tier3 추론 4~7배 낭비) | app/services/inference_pipeline_20.py |
 | L.6 | 06-09 | WS 브로드캐스트 전송별 타임아웃·return_exceptions·빈채널 정리 + LLM 메트릭 | app/core/ws_manager.py, app/core/metrics.py |
+
+## 🗄️ 전체 점검 3/5 — DB (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| D.1 | 06-09 | 핫패스 인덱스 3종: defect_logs(site_id,ts)·org_members(user_id,status)·conversations(org) | app/models/defect.py, app/models/organization.py, app/models/conversation.py, alembic/versions/p8c9d0e1f2a3_add_hotpath_indexes.py |
+| D.2 | 06-09 | 커넥션 풀 튜닝(5→10, pool_timeout 10s, recycle 1800) 설정화 | app/db/base.py, app/config.py |
+| D.3 | 06-09 | unread-counts N+1 → 단일 GROUP BY JOIN 쿼리 | app/api/chat.py |
