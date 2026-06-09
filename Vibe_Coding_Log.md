@@ -3446,3 +3446,12 @@ uploads/gazebo_worlds_real/
 | ID | 시각 | 작업 | 파일 |
 |---|---|---|---|
 | DEP.1 | 06-09 | ML 라이브러리 exact-pin 해제(빌드 휠 부재 위험 제거), 나머지 핀 유지 | requirements.txt |
+
+## ⚡ 업로드 후 표시 지연/freeze 수정 (2026-06-09 18:3x)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| PF.1 | 06-09 | 테스트모드 업로드 이미지 표시를 VLM detection 에서 분리 — raw 프레임 즉시 yield + detection 백그라운드 태스크(_detect_and_broadcast_image). 과거: 프레임마다 _detect(ONNX+VLM 왕복) await 후 yield → VLM 지연/멈춤 시 이미지 안 뜨고 'No test images' freeze | app/services/test_stream.py |
+| PF.2 | 06-09 | TEST_DETECT_TIMEOUT_SEC(12s) 신설 — 느린/멈춘 VLM 좀비 태스크 방지. 동시 detection 1건 cap(1 vCPU 보호) | app/config.py, app/services/test_stream.py |
+
+- 라이브 박스는 프론트가 WS defect.new → DetectionOverlay(SVG) 로 직접 그리므로 backend burned-in 오버레이 불필요 → 분리 안전. 하자 클릭 뷰는 저장된 스냅샷 사용 → 회귀 없음.

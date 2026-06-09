@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     # ── Test Mode (드론 미연결 시 로컬 이미지/영상으로 하자 검출 프로토타입 테스트) ──
     TEST_MODE_ENABLED: bool = True
     TEST_IMAGE_INTERVAL: float = 3.0      # 이미지 전환 주기 (초)
+    # 이미지 프레임 detection(ONNX+VLM 하이브리드) 백그라운드 태스크 타임아웃(초).
+    # 이 시간을 넘으면 해당 프레임 detection 을 포기 — 느린/멈춘 VLM 이 좀비 태스크로
+    # 쌓여 1 vCPU 를 잠식하는 것을 방지. 이미지 표시 자체는 detection 과 무관하게 즉시.
+    TEST_DETECT_TIMEOUT_SEC: float = 12.0
     TEST_IMAGES_DIR: str = "./training/test_external"
     TEST_THERMAL_DIR: str = "./training/gdrive_raw/B01_B02_D01_crack900_thermal_rgb_seg/Crack900/data/Images/2_IR/train"
     TEST_UPLOAD_DIR: str = "./uploads/test_files"
@@ -248,8 +252,10 @@ class Settings(BaseSettings):
     # ── JWT ──────────────────────────────────
     JWT_SECRET: str = "change-me-in-production"
     JWT_EXPIRE_MINUTES: int = 120
-    # Refresh token: 장기 유효 (기본 14일). /auth/refresh 엔드포인트로 access token 재발급용.
-    JWT_REFRESH_EXPIRE_DAYS: int = 14
+    # Refresh token = "재접속 유휴 윈도우". /auth/refresh 로 access 재발급 + 회전(rotation)으로
+    # 사용할 때마다 수명이 갱신됨 → 이 시간 안에 다시 접속하면 로그인 유지, 넘기면 자동 로그아웃.
+    # 영구 로그인이 아니라 "실수로 브라우저 닫고 다시 열기 / 일정 시간 내 재접속" UX 용. 기본 24시간.
+    JWT_REFRESH_EXPIRE_HOURS: int = 24
 
     # ── AI Webhook 인증 ──────────────────────
     # AI 추론 서버 → 백엔드 콜백(/api/v1/ai/*) 보호용 사전 공유 시크릿.
