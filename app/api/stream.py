@@ -281,6 +281,22 @@ async def init_test_mode(_user=Depends(get_current_user)):
     }
 
 
+@router.post("/test/warmup")
+async def warmup_test_mode(_user=Depends(get_current_user)):
+    """모델 사전 로드(비차단). 테스트 모드 진입/업로드 모드 전환 시 프론트가 호출해
+    11개 ONNX 콜드 스타트(10~20초)를 사용자가 파일 고르고 업로드하는 시간과 겹쳐 숨긴다.
+    이미 로드됐거나 로딩 중이면 멱등 — 중복 호출해도 안전."""
+    if not settings.TEST_MODE_ENABLED:
+        raise HTTPException(status_code=404, detail="Test mode is disabled")
+
+    from app.services.test_stream import test_stream_service
+    if not test_stream_service._scanned:
+        test_stream_service.scan_images()
+    if not test_stream_service._models_loaded and not test_stream_service._models_loading:
+        asyncio.create_task(test_stream_service.load_models())
+    return test_stream_service.models_status
+
+
 @router.post("/test/start")
 async def start_test_mode(_user=Depends(get_current_user)):
     """테스트 모드 초기화 + 재생 시작.
@@ -297,8 +313,9 @@ async def start_test_mode(_user=Depends(get_current_user)):
     if not test_stream_service._scanned:
         test_stream_service.scan_images()
     # 모델 로드를 백그라운드로 비동기 실행 — 응답 블로킹 회피.
-    # 이미 로드 완료/진행 중이면 load_models 가 멱등(`already_loaded` 반환)하므로 중복 호출 안전.
-    if not test_stream_service._models_loaded:
+    # 이미 로드 완료/진행 중이면 load_models 가 멱등(`already_loaded`/`loading` 반환)하므로 중복 안전.
+    # (사전 warmup 으로 이미 로딩 중이면 _models_loading 가드로 to_thread 중복 로드도 방지.)
+    if not test_stream_service._models_loaded and not test_stream_service._models_loading:
         asyncio.create_task(test_stream_service.load_models())
     test_stream_service.start_playback()
     return {
@@ -348,7 +365,11 @@ async def get_test_state():
         raise HTTPException(status_code=404, detail="Test mode is disabled")
 
     from app.services.test_stream import test_stream_service
-    return {"play_state": test_stream_service.play_state, "source": test_stream_service.source}
+    return {
+        "play_state": test_stream_service.play_state,
+        "source": test_stream_service.source,
+        **test_stream_service.models_status,
+    }
 
 
 @router.get("/test/rgb")
@@ -430,6 +451,42 @@ async def list_test_uploads():
 
     from app.services.test_stream import test_stream_service
     return {"files": test_stream_service.list_uploaded_files()}
+
+
+@router.get("/test/active")
+async def get_test_active_media():
+    """현재 재생 대상이 영상인지 이미지인지 메타 반환.
+    프론트 useTestActiveMedia 가 폴링 → 영상이면 <video src=/test/upload/file/{name}>
+    직접 재생, 이미지면 기존 MJPEG <img src=/test/rgb>. 인증 불요(GET 스트림 계열과 동일).
+    """
+    if not settings.TEST_MODE_ENABLED:
+        raise HTTPException(status_code=404, detail="Test mode is disabled")
+
+    from app.services.test_stream import test_stream_service
+    # active_media(kind/filename/…) 에 모델 로딩 상태를 합쳐 한 번의 폴링으로 프론트가
+    # '영상 vs 이미지' + 'AI 모델 로딩 중 여부' 를 동시에 알게 한다(별도 poller 불필요).
+    return {**test_stream_service.active_media, **test_stream_service.models_status}
+
+
+@router.get("/test/upload/file/{filename}")
+async def serve_test_upload_file(filename: str):
+    """업로드된 원본 파일(주로 영상)을 <video>/<img> src 로 직접 서빙.
+    인증 불요 — <video> 태그는 Authorization 헤더를 못 붙임(스트림 계열과 동일 정책).
+    경로 traversal 방어: basename 만 취하고 실제 경로가 업로드 디렉터리 내부인지 재확인.
+    """
+    if not settings.TEST_MODE_ENABLED:
+        raise HTTPException(status_code=404, detail="Test mode is disabled")
+
+    upload_dir = os.path.abspath(settings.TEST_UPLOAD_DIR)
+    safe_name = os.path.basename(filename)  # ../ 류 제거
+    full_path = os.path.abspath(os.path.join(upload_dir, safe_name))
+    # 정규화 후에도 업로드 디렉터리 밖이면 거부
+    if os.path.commonpath([upload_dir, full_path]) != upload_dir:
+        raise HTTPException(status_code=400, detail="잘못된 파일 경로입니다.")
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+    # FileResponse 는 Range 요청(영상 탐색)을 자동 처리.
+    return FileResponse(full_path)
 
 
 @router.get("/test/defect/{defect_id}/{channel}")

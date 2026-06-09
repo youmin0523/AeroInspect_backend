@@ -3213,3 +3213,37 @@ uploads/gazebo_worlds_real/
 
 - thermal/M4/furniture는 데이터 부족이 근본 — 추가 데이터 확보 시 재학습
 - 노션 일괄 동기화
+
+## 🔧 R-v1.1.20 — 테스트모드 영상 라우트 누락 복구 (2026-06-08)
+
+> 사용자 보고("배포·로컬에서 업로드 후 START 무반응, 영상 안 뜸"). 프론트 인증누락(401)이 주원인이나, 동영상 직접재생에 필요한 백엔드 라우트 2개가 통째로 누락된 것도 확인.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| .20.5a | 06-08 16:4x | `GET /test/active` 신설 — test_stream_service.active_media 반환. 프론트 useTestActiveMedia 폴링 대상이었으나 라우트 부재로 404 → 영상/이미지 분기 실패 | app/api/stream.py |
+| .20.5b | 06-08 16:4x | `GET /test/upload/file/{filename}` 신설 — 업로드 원본을 <video> src 로 직접 서빙. basename + commonpath 로 path-traversal 방어, FileResponse(Range 자동) | app/api/stream.py |
+
+### 📐 설계 결정
+
+- **인증 정책**: 두 라우트 모두 GET 스트림 계열(public). `<video>`/`<img>` 는 Authorization 헤더를 못 붙이므로 제어용 POST(start/source/upload)만 인증, 미디어 GET 은 미인증 유지.
+- **프론트 짝**: TestModeBar 제어호출 토큰 첨부(frontend R-v1.1.20.4)와 동시 수정해야 end-to-end 동작.
+
+## 🔧 R-v1.1.21 — 테스트모드 모델 사전로드 + 로딩/오류 상태 노출 (2026-06-09)
+
+> 사용자 보고("TEST MODE 영상/이미지 첨부 후 로딩이 너무 길고, 로딩 중인지 오류인지 분간 안 됨"). 콜드 스타트 시 20종 ONNX 로드(10~20초)가 첫 검출을 지연시키고, 영상은 모델 미로드 시 검출이 영영 안 뜨던 잠재버그 확인.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| .21.1 | 06-09 | `POST /test/warmup` 신설 — 비차단 모델 사전 로드. 테스트모드 진입 시 호출해 콜드스타트를 파일 첨부 시간과 겹쳐 은닉 | app/api/stream.py |
+| .21.2 | 06-09 | `_models_loading` 플래그 + `models_status` property. load_models 로딩중 가드(warmup↔start 중복 to_thread 로드 방지) | app/services/test_stream.py |
+| .21.3 | 06-09 | `/test/active`·`/test/state` 응답에 models_loaded/models_loading 합류 — 프론트가 '로딩 중 vs 오류' 구분 | app/api/stream.py |
+| .21.4 | 06-09 | **영상 검출 미발화 버그**: `_video_inference_loop` 가 모델 미로드 시 즉시 return → 콜드스타트 때 영상은 재생되나 카드 영영 안 뜸. 로드 완료까지 대기(최대 30s)로 수정 | app/services/test_stream.py |
+
+### 📐 설계 결정
+
+- **모델 로드 1회·멱등**: warmup/start/init 어디서 불려도 `_models_loaded`/`_models_loading` 가드로 to_thread 중복 로드 차단(동시호출 안전).
+- **상태는 기존 폴링에 합승**: 별도 poller 없이 `/test/active`(useTestActiveMedia 2s→1s) 응답에 모델상태 합쳐 1회 폴링으로 미디어종류+로딩여부 동시 취득.
+
+### ➡️ 후속
+
+- 모델 로드 '실패'(가중치 누락 등) 명시 상태는 미구현 — 현재 무검출 폴백(조용). 필요 시 추가.
