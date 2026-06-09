@@ -20,6 +20,26 @@ import numpy as np
 from app.config import settings
 from app.services.camera import CameraService
 
+# 진행 중인 레코더 레지스트리. start() 시 등록, stop() 시 제거.
+# 앱이 stop() 없이 종료될 때 release_all()로 남은 VideoWriter를 안전하게 release
+# (mp4 truncate 방지). main.py 연동은 범위 밖 — 함수/등록만 제공.
+_active_recorders: set = set()
+
+
+async def release_all() -> None:
+    """
+    아직 진행 중인 모든 레코더의 stop()/writer release를 호출.
+    앱 셧다운 시 stop()이 호출되지 않아 VideoWriter가 release되지 않는(파일 손상)
+    상황을 방지. 등록 집합 사본을 순회하여 stop() 중 discard로 인한 변경에 안전.
+    """
+    for recorder in list(_active_recorders):
+        try:
+            await recorder.stop()
+        except Exception as e:
+            print(f"[Recording] release_all stop 오류: {e}")
+        finally:
+            _active_recorders.discard(recorder)
+
 
 class _CameraRecorder:
     """
@@ -271,6 +291,8 @@ class RecordingService:
             self._thermal_recorder = _TestStreamRecorder("Thermal", thermal_file, "thermal")
             self._start_time = datetime.now()
             self._is_recording = True
+            _active_recorders.add(self._rgb_recorder)
+            _active_recorders.add(self._thermal_recorder)
             await self._rgb_recorder.start()
             await self._thermal_recorder.start()
             print(
@@ -282,6 +304,8 @@ class RecordingService:
             self._thermal_recorder = _CameraRecorder("Thermal", thermal_file)
             self._start_time = datetime.now()
             self._is_recording = True
+            _active_recorders.add(self._rgb_recorder)
+            _active_recorders.add(self._thermal_recorder)
             await self._rgb_recorder.start(rgb_camera)
             await self._thermal_recorder.start(thermal_camera)
             print(
@@ -310,11 +334,13 @@ class RecordingService:
 
         self._is_recording = False
 
-        # 두 레코더 동시 중지
+        # 두 레코더 동시 중지 (레지스트리에서도 제거)
         if self._rgb_recorder:
             await self._rgb_recorder.stop()
+            _active_recorders.discard(self._rgb_recorder)
         if self._thermal_recorder:
             await self._thermal_recorder.stop()
+            _active_recorders.discard(self._thermal_recorder)
 
         duration = (
             round((datetime.now() - self._start_time).total_seconds(), 1)

@@ -3313,3 +3313,136 @@ uploads/gazebo_worlds_real/
 
 - gpt-4o grounding 박스 품질 실측 — 약하면 openai는 검증역할로, gemini를 주 검출로 조정
 - 노션 일괄 동기화
+
+## 🔧 node_modules/ gitignore (MS 브랜치 catch-up) (2026-06-09)
+
+> MS 는 R-v1.1.19 기반이라 develop/main 의 node_modules gitignore 커밋(ff9fb5b) 이전 → node_modules(583파일)가 untracked 로 노출(VSCode 579 changes). develop/main 과 동일하게 .gitignore 에 추가(파일 보존, 추적만 제외).
+
+## 🔒 전체 점검 1/5 — 보안 (2026-06-09)
+
+> 전체 기능 버그·지연 감사 후 일괄 보완. 1차: 보안 critical 4건.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| S.1 | 06-09 | 보고서 API 인증·테넌트 격리: generate/preview 에 get_current_org_member, _fetch_defects 를 소속 조직 현장으로 스코프 | app/api/report.py, app/services/llm_report.py |
+| S.2 | 06-09 | placeholder 시크릿 검증 fail-closed: APP_ENV 가 명시적 dev/test 아니면 기동 차단 | app/config.py, .env.example |
+| S.3 | 06-09 | SSE/보고서 스트리밍이 전용 DB 세션을 직접 열고 commit (라우트 반환 후 닫힌 세션 재사용 해소) | app/api/ai_chat.py, app/services/llm_report.py |
+| S.4 | 06-09 | Alembic 신규 DB 프로비저닝 스크립트(create_all+stamp) + init_db 문서 정정 | scripts/provision_db.py, app/db/init_db.py |
+
+## ⚡ 전체 점검 2/5 — 지연/실시간 (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| L.1 | 06-09 | 외부 LLM/HTTP 클라이언트 싱글톤화 + 공통 타임아웃: 호출당 새 TLS 생성 제거 | app/services/vlm_detector.py, app/services/gcp_compute.py, app/services/openai_chat.py |
+| L.2 | 06-09 | VLM 일일캡 원자적 reserve + 실패 환불, Gemini configure 1회 | app/services/vlm_detector.py |
+| L.3 | 06-09 | Redis WS 핫패스 부활: ws_manager 를 활성매니저 위임 프록시로(set_active_manager) | app/core/ws_manager.py, app/main.py, app/dependencies.py |
+| L.4 | 06-09 | 프레임 디코드를 FRAME_SKIP 이후로(will_enqueue) → JPEG 디코드 CPU ~1/3 | app/api/ws_stream.py, app/core/stream_inference.py |
+| L.5 | 06-09 | M4·가구 모델을 후보 있을 때만 실행, WBF imgsz no-op 제거(Tier3 추론 4~7배 낭비) | app/services/inference_pipeline_20.py |
+| L.6 | 06-09 | WS 브로드캐스트 전송별 타임아웃·return_exceptions·빈채널 정리 + LLM 메트릭 | app/core/ws_manager.py, app/core/metrics.py |
+
+## 🗄️ 전체 점검 3/5 — DB (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| D.1 | 06-09 | 핫패스 인덱스 3종: defect_logs(site_id,ts)·org_members(user_id,status)·conversations(org) | app/models/defect.py, app/models/organization.py, app/models/conversation.py, alembic/versions/p8c9d0e1f2a3_add_hotpath_indexes.py |
+| D.2 | 06-09 | 커넥션 풀 튜닝(5→10, pool_timeout 10s, recycle 1800) 설정화 | app/db/base.py, app/config.py |
+| D.3 | 06-09 | unread-counts N+1 → 단일 GROUP BY JOIN 쿼리 | app/api/chat.py |
+
+## 🧰 전체 점검 4/5 — 품질·안정성 보완 (2026-06-09)
+
+> 2차: 중·저위험 버그/지연 일괄 보완 (서브시스템 병렬 작업).
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| Q.1 | 06-09 | 검출: ensemble in-place 변형 제거(복사), per-class NMS, /detect/batch 병렬, __import__ 정리 | app/services/ensemble.py, app/services/onnx_inference.py, app/api/detect.py, app/services/hybrid_detector.py |
+| Q.2 | 06-09 | 스트리밍: temporal_filter deque(maxlen)+시간창, MJPEG 끊김감지, 녹화 release_all, telemetry flush후 broadcast | app/services/temporal_filter.py, app/core/streaming.py, app/services/recording.py, app/api/telemetry.py |
+| Q.3 | 06-09 | 인증/DB: bcrypt to_thread(signup/find-pw), find-pw 이메일실패 롤백, 레이트리밋 키 정리, XFF 안전화, oauth logger | app/api/auth.py, app/core/rate_limit.py, app/core/security.py, app/api/oauth.py |
+| Q.4 | 06-09 | 외부: SMTP 비동기+정직한 상태, image_storage aiofiles, 알림 팬아웃 동시화, RAG 라운드트립 축소(GROUP BY), gcp aclose·녹화정리 셧다운 배선 | app/services/email_service.py, app/services/image_storage.py, app/services/notification_service.py, app/services/openai_chat.py, app/main.py |
+| Q.5 | 06-09 | 비동기化 호출부 await 갱신 + 테스트 갱신 | app/api/ai_webhook.py, app/api/defects.py, tests/test_image_storage.py |
+
+## 📦 전체 점검 5/5 — 의존성 고정 (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| P.1 | 06-09 | requirements 전체 == 고정(검증된 설치 버전). LLM SDK(anthropic 0.107.1/openai 2.41.0/google-generativeai 0.8.6) 포함, bcrypt 명시 | requirements.txt |
+
+### ✅ 검증
+- 전체 테스트 274 passed (회귀 0). 실패 9건은 기존 결함(클래스 수 20→22 드리프트, ONNX M5_SEG, floorplan 시그니처)으로 이번 작업과 무관(stash 대조 확인).
+
+### ⏭️ 보류(결정·자격증명 필요)
+- FCM/APNs 실제 푸시(자격증명), 이메일 citext 유니크(데이터 마이그레이션), 토큰 폐기/블랙리스트(설계), 레이트리밋/스트림모드 Redis 통일, /detect/batch 부분실패 응답 스키마, tiled inference 실배치화
+
+## 🧩 보류 항목 보완 1/4 — Redis 인프라/멀티워커 정합 (2026-06-09)
+
+> 공유 Redis 클라이언트 추가(lazy + graceful fallback). redis 미설치/미가용이면 전부 메모리 폴백.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| R.1 | 06-09 | 공유 Redis asyncio 클라이언트(lazy 연결, 실패 쿨다운, close) | app/core/redis_client.py |
+| R.2 | 06-09 | 레이트리밋 Redis 고정윈도우 백엔드(RATE_LIMIT_BACKEND) + 메모리 폴백 | app/core/rate_limit.py |
+| R.3 | 06-09 | 스트림 카메라 모드 Redis 공유(멀티워커 GET 정합) + 메모리 폴백 | app/api/stream.py |
+| R.4 | 06-09 | 설정 추가(RATE_LIMIT_BACKEND/TOKEN_DENYLIST/FCM·APNS/TILED_IMGSZ), 셧다운 close_redis, redis 의존성 | app/config.py, app/main.py, requirements.txt |
+
+## 🧩 보류 항목 보완 2/4 — 토큰 폐기 + 이메일 대소문자 유일성 (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| T.1 | 06-09 | JWT 에 jti 추가 + decode_token_claims(전체 payload 반환) | app/core/jwt.py |
+| T.2 | 06-09 | Redis denylist(revoke_jti/is_revoked, fail-open) | app/core/token_denylist.py |
+| T.3 | 06-09 | get_current_user 에 폐기 검사, /auth/logout 신규, refresh 회전 시 옛 토큰 폐기 | app/dependencies.py, app/api/auth.py |
+| T.4 | 06-09 | 이메일 대소문자 무시 유일성: 저장/조회 normalize + lower(email) UNIQUE 인덱스(+무손실 마이그레이션) | app/api/auth.py, app/models/user.py, alembic/versions/q9d0e1f2a3b4_email_case_insensitive_unique.py |
+
+## 🧩 보류 항목 보완 3/4 — 검출 타일 배치 + /batch 스키마 / 4/4 — FCM·APNs (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| B.1 | 06-09 | ONNXYoloDetector.predict_batch(동적 배치축 확인 후 단일 배치 추론), generate_tiles 중복 타일 제거 | app/services/onnx_inference.py, app/services/tiled_inference.py |
+| B.2 | 06-09 | /detect/batch 부분실패 격리: BatchDetectionItem/Response(per-item success/error) | app/api/detect.py, app/schemas/detection.py |
+| B.3 | 06-09 | FCM HTTP v1(서비스계정 JWT→토큰, 재사용 httpx) + APNs(ES256 JWT, http2) 실제 전송, 자격증명 없으면 noop | app/services/push_notifications.py |
+
+### ⚠️ 검증 한계
+- FCM/APNs 는 실제 자격증명 없이는 end-to-end 전송 검증 불가(코드 correct-by-construction). 운영 키 주입 후 실측 필요.
+- Redis 기능은 dev 에 redis 미설치 → 메모리 폴백 경로로 동작 검증(274 passed). Redis 경로는 운영에서 실측 권장.
+
+## 🧹 기존 실패 테스트 9건 정리 (2026-06-09)
+
+> 감사와 무관하게 이전부터 깨져 있던 9건. 근본원인 진단 후 정리 → 282 passed, 1 xfailed, 0 failed.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| F.1 | 06-09 | ezdxf 미선언 의존성 → requirements 추가(설치). DXF 파싱 테스트 2건 복구 | requirements.txt |
+| F.2 | 06-09 | **운영 회귀**: autonomous_flight_simulator/gazebo_world_generator 가 MS에서 stale(통합repo 동기화 누락) → missions/floorplan API 가 TypeError/ImportError. main 의 완전판으로 복원(서명: furniture/altitude_layers/lane_spacing/telemetry_hz/lidar_hz). 자율스캔·world생성 테스트 4건 복구 | app/services/autonomous_flight_simulator.py, app/services/gazebo_world_generator.py |
+| F.3 | 06-09 | 클래스 수 테스트 20→22 갱신(2026-06-08 외벽/옥상 확장 반영, DEFECT_CATALOG 기준) | tests/test_yolo_inference.py |
+| F.4 | 06-09 | M5_SEG: 배포 onnx 가 nc=36 placeholder(설계 4클래스와 불일치) — 모델 자산 이슈라 self-healing xfail 처리(올바른 모델 배치 시 자동 통과) | tests/test_onnx_class_mapping.py |
+
+### 📌 핵심 발견
+- F.2 는 단순 stale 테스트가 아니라 **실제 운영 버그**였음: MS 의 missions.py/floorplan.py 는 신규 시뮬레이터 API 를 호출하는데 시뮬레이터 파일만 옛 버전 → 해당 엔드포인트 500. main 복원으로 해소.
+- M5_SEG 만 코드로 해결 불가(올바른 4클래스 frames ONNX 재export 필요).
+
+## 🧽 저위험 잔여 항목(B) 정리 (2026-06-09)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| C.1 | 06-09 | PatchCore score [0,1] 클램프 — raw/비정규화 점수가 conf>=CONFIRMED_STRONG 로 오토CONFIRM 되는 것 방지 | app/services/onnx_inference.py |
+| C.2 | 06-09 | crop_roi → crop_roi_xyxy 개명(픽셀-xyxy) — image_utils.crop_roi(xywhn)와 동명 혼동 제거 | app/services/onnx_inference.py, app/services/inference_pipeline_20.py |
+| C.3 | 06-09 | 이메일 로그인 링크 하드코딩 → settings.FRONTEND_BASE_URL | app/services/email_service.py, app/config.py |
+| C.4 | 06-09 | image_storage datetime.utcnow() → timezone-aware now(utc) | app/services/image_storage.py |
+| C.5 | 06-09 | VLM 키프레임 frame_id 드리프트 수정 — 캡처 당시 id 고정(이후 submit 으로 어긋나던 DB/이벤트 frame_id 정합) | app/core/stream_inference.py |
+
+### ⏭️ 의도적 보류(위험/저가치)
+- _box2d_to_xyxy 축-스왑 은폐(VLM grounding 깨질 위험), JWT 레거시 토큰 허용(기존 발급 토큰 호환), get_messages O(n×readers)/list_conversations over-fetch(동작 정상·성능만), _process_20 인라인 import(순환참조 방어).
+
+### ✅ 최종: 282 passed, 3 skipped, 1 xfailed, 0 failed
+
+## 🚀 배포 전 점검 (2026-06-09)
+
+| 점검 | 결과 |
+|---|---|
+| JWT fail-closed | SAFE — prod 시크릿(JWT/webhook/DB/OAuth 3종) 전부 설정 확인(flyctl secrets), APP_ENV=production 이나 placeholder 없음 → 부팅 정상 |
+| /detect/batch 스키마 변경 | SAFE — 프론트는 WS(defects)+/defects 로 검출 수신, /detect/batch 미사용 |
+| 마이그레이션 | 자동실행 아님(release_command 없음)·앱은 미적용 상태로도 부팅 → 배포와 분리된 후속 작업. SQL offline 렌더 정상, 단일 head |
+| Docker 빌드 리스크 | **수정**: Dockerfile=python:3.11 인데 핀은 3.12 기준 → 무거운 ML 라이브러리(torch/numpy 등) 유연 specifier 로 복원(빌드 안전), 경량/LLM/프레임워크 핀은 유지 |
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| DEP.1 | 06-09 | ML 라이브러리 exact-pin 해제(빌드 휠 부재 위험 제거), 나머지 핀 유지 | requirements.txt |

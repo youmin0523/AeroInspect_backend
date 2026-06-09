@@ -106,6 +106,37 @@ class DetectionResult(BaseModel):
     )
 
 
+# =============================================
+# 배치 검출 per-item 결과 스키마 (POST /detect/batch)
+#   ⚠️ 응답 스키마 변경(승인됨): 과거에는 List[DetectionResult] 를 그대로
+#   반환했고 한 장이라도 실패하면 배치 전체가 4xx/5xx 로 죽었다. 이제는
+#   per-item 격리 — 각 이미지의 성공/실패를 독립적으로 담는다.
+#   프론트엔드는 result(성공) / error(실패) 분기 처리 필요.
+# =============================================
+
+class BatchDetectionItem(BaseModel):
+    """배치 내 단일 이미지의 검출 결과 (성공/실패 격리)."""
+    index: int = Field(..., description="요청 내 이미지 순번 (입력 순서 보존)")
+    filename: Optional[str] = Field(None, description="업로드 파일명 (없으면 null)")
+    success: bool = Field(..., description="해당 이미지 추론 성공 여부")
+    result: Optional[DetectionResult] = Field(
+        None, description="success=true 일 때 검출 결과, 실패 시 null"
+    )
+    error: Optional[str] = Field(
+        None, description="success=false 일 때 사람이 읽을 오류 메시지, 성공 시 null"
+    )
+
+
+class BatchDetectionResponse(BaseModel):
+    """POST /detect/batch 통합 응답 (per-item 격리 래퍼)."""
+    items: List[BatchDetectionItem] = Field(
+        default_factory=list, description="입력 순서대로 정렬된 per-item 결과"
+    )
+    total: int = Field(0, description="요청 이미지 총 수")
+    success_count: int = Field(0, description="성공한 이미지 수")
+    failure_count: int = Field(0, description="실패한 이미지 수")
+
+
 class WSStreamMessage(BaseModel):
     """WebSocket /ws/stream 송신 메시지."""
     type: Literal["detection", "pong", "error"]

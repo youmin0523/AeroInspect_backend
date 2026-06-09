@@ -108,7 +108,9 @@ async def lifespan(app: FastAPI):
                 redis_url=settings.REDIS_URL,
             )
             await redis_mgr.start()
-            wsmod.ws_manager = redis_mgr
+            # 모듈 어트리뷰트 재바인딩 금지 — 핫패스가 캡처한 프록시가 못 따라온다.
+            # 반드시 set_active_manager 로 활성 매니저를 교체한다.
+            wsmod.set_active_manager(redis_mgr)
             print(f"[AeroInspect] WS 백엔드: Redis ({settings.REDIS_URL})")
         except Exception as e:
             print(f"[AeroInspect] Redis WS 백엔드 시작 실패 — 메모리 백엔드로 폴백: {e}")
@@ -186,12 +188,34 @@ async def lifespan(app: FastAPI):
 
     telemetry_cache.clear()
 
+    # GCP Compute 클라이언트 정리 — 공유 httpx 커넥션 풀 종료
+    try:
+        from app.services.gcp_compute import gcp_compute
+        await gcp_compute.aclose()
+    except Exception as e:
+        print(f"[AeroInspect] GCP Compute 클라이언트 종료 중 오류: {e}")
+
+    # 진행 중 녹화 정리 — VideoWriter 미해제로 mp4 가 잘리는 것 방지
+    try:
+        from app.services.recording import release_all as release_all_recordings
+        await release_all_recordings()
+    except Exception as e:
+        print(f"[AeroInspect] 녹화 자원 정리 중 오류: {e}")
+
+    # 공유 Redis 클라이언트 정리 (레이트리밋/토큰 폐기/스트림모드)
+    try:
+        from app.core.redis_client import close_redis
+        await close_redis()
+    except Exception as e:
+        print(f"[AeroInspect] Redis 클라이언트 종료 중 오류: {e}")
+
     # Redis WS 백엔드 정리
     if settings.WS_BACKEND.lower() == "redis":
         try:
             from app.core import ws_manager as wsmod
             from app.core.ws_manager_redis import RedisConnectionManager
-            mgr = wsmod.ws_manager
+            # 주의: wsmod.ws_manager 는 프록시이므로 get_active_manager() 로 실제 매니저를 얻는다.
+            mgr = wsmod.get_active_manager()
             if isinstance(mgr, RedisConnectionManager):
                 await mgr.stop()
         except Exception as e:

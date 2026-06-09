@@ -63,6 +63,8 @@ class Conversation(Base):
     __table_args__ = (
         Index("idx_conversations_type", "type"),
         Index("idx_conversations_updated_at", updated_at.desc()),
+        # 조직 스코프 대화방 조회(organization_id 필터)용 인덱스.
+        Index("idx_conversations_org", "organization_id"),
     )
 
     def __repr__(self):

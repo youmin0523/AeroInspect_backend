@@ -47,10 +47,46 @@ class VLMDetector:
         # 일일 호출 상한 카운터 (UTC 날짜 기준 리셋)
         self._call_count = 0
         self._call_day = self._today()
+        # 카운터/캐시 동시 접근 보호 (check-then-act, day-rollover race 방지)
+        self._counter_lock = asyncio.Lock()
         # 프레임 해시 캐시 (동일 프레임 중복 호출 차단). LRU 흉내 — 단순 dict + 상한.
         self._cache: Dict[str, VLMDetectionResult] = {}
         self._cache_order: List[str] = []
         self._cache_max = 256
+        # ── 외부 LLM 클라이언트 캐시 (호출마다 새 httpx/SDK 생성 방지) ──
+        self._anthropic_client = None
+        self._openai_client = None
+        self._gemini_configured = False
+
+    # ── 외부 클라이언트 캐시 헬퍼 ─────────────────
+    def _get_anthropic(self):
+        if self._anthropic_client is None:
+            import anthropic
+
+            self._anthropic_client = anthropic.AsyncAnthropic(
+                api_key=settings.ANTHROPIC_API_KEY,
+                timeout=settings.LLM_REQUEST_TIMEOUT,
+            )
+        return self._anthropic_client
+
+    def _get_openai(self):
+        if self._openai_client is None:
+            from openai import AsyncOpenAI
+
+            self._openai_client = AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY,
+                timeout=settings.LLM_REQUEST_TIMEOUT,
+            )
+        return self._openai_client
+
+    def _get_gemini_model(self, model: str):
+        """genai.configure 는 프로세스 전역 상태 — 1회만 호출(동시 race 방지)."""
+        import google.generativeai as genai
+
+        if not self._gemini_configured:
+            genai.configure(api_key=settings.GOOGLE_API_KEY)
+            self._gemini_configured = True
+        return genai.GenerativeModel(model)
 
     # ── 공개 API ──────────────────────────────
     async def detect(
@@ -82,7 +118,7 @@ class VLMDetector:
         if cached is not None:
             return cached.model_copy(update={"cached": True})
 
-        self._check_daily_cap()
+        await self._reserve_call_slot()
 
         prompt = self._build_prompt(mode)
         t0 = time.perf_counter()
@@ -96,8 +132,9 @@ class VLMDetector:
                     raw = await self._call_openai(prompt, image_bytes, model)
                 else:
                     raise ValueError(f"알 수 없는 VLM_PROVIDER: {provider}")
-            finally:
-                self._call_count += 1
+            except BaseException:
+                await self._refund_call_slot()  # 실패는 쿼터 환불
+                raise
         latency_ms = (time.perf_counter() - t0) * 1000.0
 
         items = self._parse_items(raw)
@@ -140,7 +177,7 @@ class VLMDetector:
         provider = (provider or settings.VLM_PROVIDER).lower()
         model = model or settings.VLM_MODEL
 
-        self._check_daily_cap()
+        await self._reserve_call_slot()
         prompt = self._build_adjudication_prompt(candidates, conflict_ids)
 
         async with self._sem:
@@ -153,8 +190,9 @@ class VLMDetector:
                     raw = await self._call_openai(prompt, image_bytes, model)
                 else:
                     raise ValueError(f"알 수 없는 VLM_PROVIDER: {provider}")
-            finally:
-                self._call_count += 1
+            except BaseException:
+                await self._refund_call_slot()  # 실패는 쿼터 환불
+                raise
 
         return self._parse_adjudication(raw)
 
@@ -277,10 +315,7 @@ class VLMDetector:
 
     # ── 프로바이더 호출 ───────────────────────
     async def _call_gemini(self, prompt: str, image_bytes: bytes, model: str) -> str:
-        import google.generativeai as genai
-
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
-        gm = genai.GenerativeModel(model)
+        gm = self._get_gemini_model(model)
         parts = [
             prompt,
             {"mime_type": "image/jpeg", "data": image_bytes},
@@ -289,13 +324,12 @@ class VLMDetector:
             gm.generate_content,
             parts,
             generation_config={"response_mime_type": "application/json"},
+            request_options={"timeout": settings.LLM_REQUEST_TIMEOUT},
         )
         return resp.text or "{}"
 
     async def _call_claude(self, prompt: str, image_bytes: bytes, model: str) -> str:
-        import anthropic
-
-        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        client = self._get_anthropic()
         b64 = base64.standard_b64encode(image_bytes).decode("ascii")
         msg = await client.messages.create(
             model=model,
@@ -322,9 +356,7 @@ class VLMDetector:
         ) or "{}"
 
     async def _call_openai(self, prompt: str, image_bytes: bytes, model: str) -> str:
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        client = self._get_openai()
         b64 = base64.standard_b64encode(image_bytes).decode("ascii")
         resp = await client.chat.completions.create(
             model=model,
@@ -458,16 +490,29 @@ class VLMDetector:
     def _today() -> str:
         return time.strftime("%Y-%m-%d", time.gmtime())
 
-    def _check_daily_cap(self) -> None:
-        today = self._today()
-        if today != self._call_day:
-            self._call_day = today
-            self._call_count = 0
-        if self._call_count >= settings.VLM_DAILY_CALL_CAP:
-            raise VLMQuotaExceeded(
-                f"VLM 일일 호출 상한 초과 ({settings.VLM_DAILY_CALL_CAP}). "
-                "VLM_DAILY_CALL_CAP 조정 또는 내일 재시도."
-            )
+    async def _reserve_call_slot(self) -> None:
+        """일일 상한 체크 + 카운터 증가를 원자적으로 수행 (check-then-act race 방지).
+
+        호출 직전 슬롯을 선점(increment)하므로 동시성 하에서도 상한을 정확히 강제한다.
+        실패 시에는 _refund_call_slot 으로 환불 — 실패한 호출이 쿼터를 소모하지 않게.
+        """
+        async with self._counter_lock:
+            today = self._today()
+            if today != self._call_day:
+                self._call_day = today
+                self._call_count = 0
+            if self._call_count >= settings.VLM_DAILY_CALL_CAP:
+                raise VLMQuotaExceeded(
+                    f"VLM 일일 호출 상한 초과 ({settings.VLM_DAILY_CALL_CAP}). "
+                    "VLM_DAILY_CALL_CAP 조정 또는 내일 재시도."
+                )
+            self._call_count += 1
+
+    async def _refund_call_slot(self) -> None:
+        """프로바이더 호출 실패 시 선점한 슬롯을 환불."""
+        async with self._counter_lock:
+            if self._call_count > 0:
+                self._call_count -= 1
 
     # ── 상태 조회 (관측/디버깅용) ─────────────
     def stats(self) -> Dict[str, Any]:

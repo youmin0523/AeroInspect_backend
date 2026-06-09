@@ -56,10 +56,11 @@ def _extract_assigned_user_ids(assigned_members) -> set[UUID]:
 @router.post("/generate")
 async def generate_report_stream(
     request: ReportRequest,
+    org_tuple=Depends(get_current_org_member),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    LLM 기반 하자 점검 보고서 스트리밍 생성.
+    LLM 기반 하자 점검 보고서 스트리밍 생성 (소속 조직의 하자 로그 한정).
     텍스트 청크를 순차적으로 전송하여 프론트엔드에서 실시간 표시.
 
     프론트엔드 수신 방법:
@@ -71,8 +72,11 @@ async def generate_report_stream(
             // value를 텍스트로 디코딩하여 화면에 추가
         }
     """
+    _user, _member, org = org_tuple
     try:
-        generator = report_service.generate_stream(request, db)
+        # StreamingResponse 제너레이터는 라우트 반환 후 실행되므로
+        # org.id(스칼라)만 캡처해 서비스가 자체 세션으로 조회하도록 위임한다.
+        generator = report_service.generate_stream(request, org_id=org.id)
         return StreamingResponse(
             generator,
             media_type="text/plain; charset=utf-8",
@@ -85,14 +89,16 @@ async def generate_report_stream(
 @router.post("/preview", response_model=ReportResponse)
 async def preview_report(
     request: ReportRequest,
+    org_tuple=Depends(get_current_org_member),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    LLM 기반 하자 점검 보고서 비스트리밍 생성.
+    LLM 기반 하자 점검 보고서 비스트리밍 생성 (소속 조직의 하자 로그 한정).
     전체 내용을 한 번에 반환 (소규모 탐지 결과 또는 테스트용).
     """
+    _user, _member, org = org_tuple
     try:
-        report = await report_service.generate_full(request, db)
+        report = await report_service.generate_full(request, db, org_id=org.id)
         return report
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"보고서 생성 실패: {str(e)}")

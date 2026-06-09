@@ -4,10 +4,16 @@
 #       - Base.metadata.create_all로 존재하지 않는 테이블을 생성
 #       - 약관 시드 데이터 삽입 (idempotent)
 #
-# ⚠️ 운영(APP_ENV=production)에서는 create_all 을 자동 스킵.
-#   운영 스키마는 반드시 `alembic upgrade head` 로 적용해야 한다.
-#   이유: create_all 은 ALTER 를 못 해서 alembic 과 상태가 어긋나면 silent 실수가 누적되고,
-#         alembic 마이그레이션이 "이미 존재함" 에러로 실패할 수 있음.
+# ⚠️ 운영(APP_ENV=production)에서는 create_all 을 자동 스킵(시드만 실행).
+#
+#   신규(빈) 운영 DB 프로비저닝:
+#     `python -m scripts.provision_db`  (create_all + alembic stamp head)
+#   ※ `alembic upgrade head` 를 빈 DB 에 직접 돌리지 말 것.
+#     현재 마이그레이션 히스토리에는 핵심 테이블(users/sites/defect_logs 등)을 create 하는
+#     베이스라인이 없고 초기 리비전이 곧장 ALTER 부터 수행한다(down_revision=None 루트 2개).
+#     따라서 빈 DB 업그레이드는 "존재하지 않는 테이블 ALTER" 로 실패한다.
+#   이후 신규 컬럼/인덱스 추가는 정상적으로 `alembic upgrade head` 로 적용한다
+#     (기존 운영 DB 는 이미 head 로 stamp 되어 있으므로 그대로 동작).
 #
 # 호출: main.py lifespan 핸들러에서 await init_db()
 # =============================================

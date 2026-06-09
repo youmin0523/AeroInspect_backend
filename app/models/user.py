@@ -108,6 +108,9 @@ class User(Base):
     # account_type 은 범주형이나 추후 필터 조회 대비
     __table_args__ = (
         Index("idx_users_account_type", "account_type"),
+        # 대소문자 무시 이메일 유일성 — 기존 case-sensitive UNIQUE(email)에 더해
+        # lower(email) 유니크로 'Bob@x.com'/'bob@x.com' 중복 가입 차단.
+        Index("uq_users_email_lower", func.lower(email), unique=True),
     )
 
     def __repr__(self) -> str:

@@ -83,7 +83,10 @@ def ensemble_with_patchcore(
 
     h, w = anomaly_mask.shape[:2]
 
-    for det in detections:
+    # 호출자 원본 dict 변형 방지 — 각 dict는 shallow copy로 작업.
+    result = [dict(det) for det in detections]
+
+    for det in result:
         if det["conf"] >= low_conf_threshold:
             continue
 
@@ -101,7 +104,7 @@ def ensemble_with_patchcore(
             det["conf"] = min(1.0, combined)
             det["ensemble_boosted"] = True
 
-    return detections
+    return result
 
 
 def compute_combined_confidence(conf1: float, conf2: float) -> float:
@@ -133,39 +136,42 @@ def cross_model_spatial_boost(
     if len(detections) <= 1:
         return detections
 
+    # 호출자 원본 dict 변형 방지 — 각 dict는 shallow copy로 작업.
+    result = [dict(det) for det in detections]
+
     boosted = set()
 
-    for i in range(len(detections)):
-        for j in range(i + 1, len(detections)):
-            src_i = detections[i].get("defect_source", "")
-            src_j = detections[j].get("defect_source", "")
+    for i in range(len(result)):
+        for j in range(i + 1, len(result)):
+            src_i = result[i].get("defect_source", "")
+            src_j = result[j].get("defect_source", "")
 
             if src_i == src_j:
                 continue
 
-            bbox_i = detections[i].get("bbox_xyxy")
-            bbox_j = detections[j].get("bbox_xyxy")
+            bbox_i = result[i].get("bbox_xyxy")
+            bbox_j = result[j].get("bbox_xyxy")
             if bbox_i is None or bbox_j is None:
                 continue
 
             # noise FP 보호: 둘 중 하나라도 baseline conf 미달 시 boost X
-            conf_i = detections[i].get("conf", 0.0)
-            conf_j = detections[j].get("conf", 0.0)
+            conf_i = result[i].get("conf", 0.0)
+            conf_j = result[j].get("conf", 0.0)
             if conf_i < min_conf or conf_j < min_conf:
                 continue
 
             if _iou(bbox_i, bbox_j) >= iou_threshold:
                 if i not in boosted:
-                    detections[i]["conf"] = min(
-                        1.0, detections[i]["conf"] + boost_factor,
+                    result[i]["conf"] = min(
+                        1.0, result[i]["conf"] + boost_factor,
                     )
-                    detections[i]["cross_model_boosted"] = True
+                    result[i]["cross_model_boosted"] = True
                     boosted.add(i)
                 if j not in boosted:
-                    detections[j]["conf"] = min(
-                        1.0, detections[j]["conf"] + boost_factor,
+                    result[j]["conf"] = min(
+                        1.0, result[j]["conf"] + boost_factor,
                     )
-                    detections[j]["cross_model_boosted"] = True
+                    result[j]["cross_model_boosted"] = True
                     boosted.add(j)
 
-    return detections
+    return result

@@ -2,28 +2,38 @@
 # requirements.txt
 # 역할: 백엔드 Python 의존성 패키지 목록
 # 설치: pip install -r requirements.txt
+#
+# ⚠️ 버전 고정(pin) 정책: 현재 동작 검증된 버전으로 == 고정 — 재현 가능한 빌드 보장.
+#   특히 LLM SDK(anthropic/openai/google-generativeai)는 마이너 업데이트에서
+#   인터페이스가 깨지는 경우가 있어 반드시 고정한다.
+#   업그레이드 시 한 패키지씩 올리고 테스트(pytest) 통과를 확인할 것.
 # =============================================
 
 # ── Web Framework ──────────────────────────
-fastapi
-uvicorn[standard]
-python-multipart
+fastapi==0.136.3
+uvicorn[standard]==0.49.0
+python-multipart==0.0.32
 
 # ── Database ───────────────────────────────
-sqlalchemy[asyncio]
-asyncpg
-alembic
-psycopg2-binary
+sqlalchemy[asyncio]==2.0.50
+asyncpg==0.31.0
+alembic==1.18.4
+psycopg2-binary==2.9.12
 
 # ── Validation ─────────────────────────────
-pydantic[email]
-pydantic-settings
+pydantic[email]==2.13.4
+pydantic-settings==2.14.1
 
 # ── Auth / Security ────────────────────────
-passlib[bcrypt]
-python-jose[cryptography]
+passlib[bcrypt]==1.7.4
+bcrypt==5.0.0
+python-jose[cryptography]==3.5.0
 
 # ── Computer Vision / AI ───────────────────
+# 주의: 무거운 ML 라이브러리는 exact-pin 하지 않는다.
+#   - Docker 빌드는 python:3.11-slim 인데 로컬 검증 env 는 3.12 → 3.12 기준 exact 핀이
+#     3.11 휠 부재로 빌드 실패할 수 있음(특히 torch/torchvision/numpy).
+#   - 빌드 환경에서 호환 버전을 해석하도록 원래의 유연한 specifier 유지(기존 검증된 동작).
 opencv-python
 numpy
 torch>=2.1
@@ -34,26 +44,33 @@ onnxruntime
 ensemble-boxes  # multi-checkpoint WBF (M3/M2 0.85 mAP 도달 핵심)
 
 # ── Hardware ───────────────────────────────
-pyserial
-pymavlink
+pyserial==3.5
+pymavlink==2.4.49
+
+# ── Floorplan / CAD ────────────────────────
+# DXF 도면 파싱(dxf_parser) — 없으면 /floorplan DXF 업로드·파싱 경로가 ImportError.
+ezdxf==1.4.4
 
 # ── LLM ────────────────────────────────────
-anthropic
-google-generativeai
-openai>=1.40.0  # AsyncOpenAI + chat.completions stream — 도메인 챗봇용
+anthropic==0.107.1
+google-generativeai==0.8.6
+openai==2.41.0  # AsyncOpenAI + chat.completions stream — 도메인 챗봇용
 
 # ── Utilities ──────────────────────────────
-python-dotenv
-pillow
-httpx
-websockets
-aiofiles
+python-dotenv==1.2.2
+pillow==12.2.0
+httpx==0.28.1
+websockets==16.0
+aiofiles==25.1.0
+# WS_BACKEND=redis / RATE_LIMIT_BACKEND=redis / 토큰 폐기 denylist / 스트림모드 공유에 필요.
+# 미설치 시 위 기능은 자동으로 메모리 폴백(단일 워커 동작). 운영 멀티워커면 설치 필수.
+redis>=5.0,<6.0
 
 # ── Monitoring / Logging ───────────────────
-prometheus_client
-structlog
-sentry-sdk[fastapi]>=2.0.0  # 운영 에러 모니터링 — DSN 미설정 시 no-op
+prometheus_client==0.25.0
+structlog==26.1.0
+sentry-sdk[fastapi]==2.61.1  # 운영 에러 모니터링 — DSN 미설정 시 no-op
 
 # ── Test ───────────────────────────────────
-pytest
-pytest-asyncio
+pytest==9.0.3
+pytest-asyncio==1.4.0

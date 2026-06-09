@@ -21,11 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.jwt import create_access_token, create_refresh_token
+from app.core.logging import get_logger
 from app.dependencies import get_db
 from app.models.user import User
 from app.schemas.user import OAuthCallbackRequest, OrgBriefResponse, TokenResponse, UserResponse
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 # ── 공통 헬퍼 ────────────────────────────────
@@ -148,8 +150,13 @@ async def google_callback(
         )
     if token_resp.status_code != 200:
         error_detail = token_resp.json() if token_resp.headers.get("content-type", "").startswith("application/json") else token_resp.text
-        print(f"[OAuth Google] token exchange failed: {token_resp.status_code} / {error_detail}")
-        print(f"[OAuth Google] redirect_uri sent: {payload.redirect_uri}")
+        # 시크릿은 로그에 남기지 않고 상태/비민감 컨텍스트만 기록.
+        logger.warning(
+            "oauth.google.token_exchange_failed",
+            status_code=token_resp.status_code,
+            error_detail=error_detail,
+            redirect_uri=payload.redirect_uri,
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Google 토큰 교환 실패: {error_detail}")
     token_data = token_resp.json()
     access_token = token_data.get("access_token")

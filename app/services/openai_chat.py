@@ -28,6 +28,7 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.metrics import track_llm_call, record_llm_tokens
 from app.db.session import async_session_factory
 from app.models.ai_chat import AiChatMessage, AiChatThread
 from app.models.defect import DefectLog
@@ -182,7 +183,10 @@ class OpenAIChatService:
             raise RuntimeError(
                 "OPENAI_API_KEY 가 설정되지 않았습니다. 운영 환경에서 .env 또는 시크릿에 설정해 주세요."
             )
-        self._client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        self._client = AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            timeout=settings.LLM_REQUEST_TIMEOUT,
+        )
         return self._client
 
     # ── 메인: SSE 스트리밍 ─────────────────────
@@ -277,27 +281,28 @@ class OpenAIChatService:
         finish_reason: Optional[str] = None
         assistant_msg_id: Optional[UUID] = None
         try:
-            stream = await client.chat.completions.create(**create_params)
+            async with track_llm_call("openai", "chat"):
+                stream = await client.chat.completions.create(**create_params)
 
-            async for chunk in stream:
-                # 클라이언트 끊김 감지 → 부분 응답 보존하고 종료
-                if await is_disconnected():
-                    logger.info("ai_chat 클라이언트 연결 끊김 — 부분 응답 저장")
-                    break
+                async for chunk in stream:
+                    # 클라이언트 끊김 감지 → 부분 응답 보존하고 종료
+                    if await is_disconnected():
+                        logger.info("ai_chat 클라이언트 연결 끊김 — 부분 응답 저장")
+                        break
 
-                if chunk.usage:
-                    completion_tokens = chunk.usage.completion_tokens
-                    prompt_tokens = chunk.usage.prompt_tokens
+                    if chunk.usage:
+                        completion_tokens = chunk.usage.completion_tokens
+                        prompt_tokens = chunk.usage.prompt_tokens
 
-                if not chunk.choices:
-                    continue
-                choice = chunk.choices[0]
-                if choice.finish_reason:
-                    finish_reason = choice.finish_reason
-                delta = choice.delta.content if choice.delta else None
-                if delta:
-                    accumulated.append(delta)
-                    yield self._sse({"delta": delta})
+                    if not chunk.choices:
+                        continue
+                    choice = chunk.choices[0]
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+                    delta = choice.delta.content if choice.delta else None
+                    if delta:
+                        accumulated.append(delta)
+                        yield self._sse({"delta": delta})
 
         except asyncio.CancelledError:
             logger.info("ai_chat 스트림 취소 — 부분 응답 저장")
@@ -306,6 +311,12 @@ class OpenAIChatService:
             logger.exception("ai_chat OpenAI 호출 실패: %s", exc)
             yield self._sse({"error": "응답 생성 중 오류가 발생했습니다."})
         finally:
+            # LLM 토큰 사용량 기록 (관측: 비용/사용량 추적)
+            record_llm_tokens(
+                "openai", "chat",
+                prompt=prompt_tokens or 0,
+                completion=completion_tokens or 0,
+            )
             # 6) assistant 메시지 영속화 (빈 응답이면 저장 X)
             content = "".join(accumulated).strip()
             if content:
@@ -425,17 +436,29 @@ class OpenAIChatService:
         codes = _extract_category_codes(text)
         if codes:
             since = datetime.now(timezone.utc) - timedelta(days=self.DEFECT_RAG_DAYS)
-            for code in codes:
-                # severity 분포 카운트
-                count_q = (
-                    select(DefectLog.severity, func.count(DefectLog.id))
-                    .join(Site, Site.id == DefectLog.site_id)
-                    .where(Site.organization_id == org_id)
-                    .where(DefectLog.category_code == code)
-                    .where(DefectLog.timestamp >= since)
-                    .group_by(DefectLog.severity)
+
+            # 단일 AsyncSession 은 같은 커넥션에서 쿼리를 동시에 실행할 수 없으므로
+            # gather 대신 round-trip 을 줄인다: 모든 코드의 severity 분포를
+            # (category_code, severity) GROUP BY 한 방에 집계한다.
+            counts_q = (
+                select(
+                    DefectLog.category_code,
+                    DefectLog.severity,
+                    func.count(DefectLog.id),
                 )
-                counts = {sev: cnt for sev, cnt in (await db.execute(count_q)).all()}
+                .join(Site, Site.id == DefectLog.site_id)
+                .where(Site.organization_id == org_id)
+                .where(DefectLog.category_code.in_(codes))
+                .where(DefectLog.timestamp >= since)
+                .group_by(DefectLog.category_code, DefectLog.severity)
+            )
+            counts_by_code: dict[str, dict] = {}
+            for code_, sev, cnt in (await db.execute(counts_q)).all():
+                counts_by_code.setdefault(code_, {})[sev] = cnt
+
+            for code in codes:
+                # severity 분포 카운트 (위에서 일괄 집계)
+                counts = counts_by_code.get(code, {})
                 total = sum(counts.values())
                 if total == 0:
                     lines.append(f"- 카테고리 {code}: 최근 {self.DEFECT_RAG_DAYS}일간 탐지 0건.")
@@ -475,17 +498,29 @@ class OpenAIChatService:
                 .limit(self.SITE_MATCH_LIMIT)
             )
             sites = (await db.execute(site_q)).all()
-            for site_id, site_name in sites:
-                count_q = (
-                    select(DefectLog.severity, func.count(DefectLog.id))
-                    .where(DefectLog.site_id == site_id)
-                    .group_by(DefectLog.severity)
+            if sites:
+                # 사이트별 severity 분포를 (site_id, severity) GROUP BY 로 한 번에 집계
+                # (단일 세션 동시 쿼리 불가 → site 수만큼의 round-trip 을 1회로 축소).
+                site_ids = [sid for sid, _ in sites]
+                site_counts_q = (
+                    select(
+                        DefectLog.site_id,
+                        DefectLog.severity,
+                        func.count(DefectLog.id),
+                    )
+                    .where(DefectLog.site_id.in_(site_ids))
+                    .group_by(DefectLog.site_id, DefectLog.severity)
                 )
-                counts = {sev: cnt for sev, cnt in (await db.execute(count_q)).all()}
-                total = sum(counts.values())
-                summary = ", ".join(f"{sev}={cnt}" for sev, cnt in counts.items()) or "탐지 없음"
-                lines.append(f"- 현장 '{site_name}': 누적 결함 {total}건 ({summary}).")
-                rag_keys.append(f"site:{site_name}:{total}")
+                counts_by_site: dict = {}
+                for sid, sev, cnt in (await db.execute(site_counts_q)).all():
+                    counts_by_site.setdefault(sid, {})[sev] = cnt
+
+                for site_id, site_name in sites:
+                    counts = counts_by_site.get(site_id, {})
+                    total = sum(counts.values())
+                    summary = ", ".join(f"{sev}={cnt}" for sev, cnt in counts.items()) or "탐지 없음"
+                    lines.append(f"- 현장 '{site_name}': 누적 결함 {total}건 ({summary}).")
+                    rag_keys.append(f"site:{site_name}:{total}")
 
         if not lines:
             return None, []

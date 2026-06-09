@@ -15,10 +15,14 @@ from typing import List, Optional
 
 
 # 운영(prod) 환경 판정에 사용되는 환경변수.
-# 값이 "production"·"prod"·"live" 중 하나면 placeholder secret 검증을 강제(raise)한다.
-# 그 외 값(개발/테스트)에서는 경고만 띄우고 통과 → 로컬 개발 흐름 방해 X.
+# placeholder secret 검증 정책 (fail-closed):
+# APP_ENV 가 명시적으로 dev/test 계열일 때만 경고 후 통과한다.
+# 그 외 모든 값(production·prod·live·staging·오타·미설정/빈값)은 기동을 차단한다.
+# → APP_ENV 오타/누락으로 공개 placeholder 키를 단 채 운영 기동되는 사고 방지.
 APP_ENV_VAR = "APP_ENV"
 PROD_ENV_VALUES = {"production", "prod", "live"}
+# 이 값들로 명시 선언한 경우에만 placeholder 시크릿을 경고 수준으로 허용.
+DEV_ENV_VALUES = {"development", "dev", "local", "test", "testing", "ci"}
 
 # 운영에서 절대 통과되면 안 되는 placeholder 값 목록.
 # config.py default 와 .env.example sentinel 모두 포함.
@@ -40,6 +44,15 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = "password"
     DB_NAME: str = "aeroinspect_db"
     DATABASE_URL: str = ""
+
+    # ── 커넥션 풀 튜닝 ──
+    # SSE 챗/스트리밍 핸들러가 세션을 오래 점유 → 풀 포화 방지를 위해 기본값 상향.
+    # pool_timeout: 풀 고갈 시 대기 한도(초). 기본 30s 는 사용자 체감 지연이 큼 → 10s.
+    # pool_recycle: 유휴 커넥션 재생성 주기(초). 클라우드 PG/asyncpg 가 유휴 연결을 끊음.
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 10
+    DB_POOL_RECYCLE: int = 1800
 
     @model_validator(mode="after")
     def assemble_database_url(self):
@@ -178,6 +191,14 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
 
+    # 보고서 생성 LLM (llm_report). 모델/타임아웃을 코드 변경 없이 갱신 가능하게 설정화.
+    # Opus 는 보고서 대량 텍스트엔 과한 비용 — 기본은 Sonnet 으로 비용/지연 절충.
+    REPORT_CLAUDE_MODEL: str = "claude-sonnet-4-6"
+    REPORT_GEMINI_MODEL: str = "gemini-1.5-pro"
+    REPORT_MAX_TOKENS: int = 4096
+    # 모든 외부 LLM 호출 공통 타임아웃(초). 멈춘 프로바이더가 슬롯/스레드를 무한 점유하지 않도록.
+    LLM_REQUEST_TIMEOUT: float = 60.0
+
     # OpenAI 챗봇 (건축물·하자 도메인 어시스턴트)
     # gpt-4o-mini 기본 — 저비용/저지연. 운영에서 품질 필요 시 OPENAI_MODEL 만 갱신.
     # OPENAI_MAX_OUTPUT_TOKENS: 응답 한 회당 최대 출력 토큰 (비용/길이 가드).
@@ -236,13 +257,34 @@ class Settings(BaseSettings):
     AI_WEBHOOK_SECRET: str = ""
 
     # 푸시 알림 프로바이더: "noop" | "fcm" | "apns"
-    # 운영 배포 시 firebase-admin 설치 후 "fcm" 으로 전환.
+    # 운영 배포 시 자격증명 설정 후 "fcm" 또는 "apns" 로 전환.
     PUSH_PROVIDER: str = "noop"
+    # FCM HTTP v1 — 서비스 계정 JSON(원문 또는 base64) + 프로젝트 ID.
+    #   GCP Compute 용(GCP_SERVICE_ACCOUNT_JSON)과 별개의 Firebase 서비스 계정 권장.
+    FCM_CREDENTIALS_JSON: str = ""
+    FCM_PROJECT_ID: str = ""
+    # APNs (token-based, .p8) — 키/팀/토픽. APNS_USE_SANDBOX=True 면 개발 게이트웨이.
+    APNS_AUTH_KEY: str = ""       # .p8 키 원문(또는 base64)
+    APNS_KEY_ID: str = ""
+    APNS_TEAM_ID: str = ""
+    APNS_TOPIC: str = ""         # 앱 번들 ID
+    APNS_USE_SANDBOX: bool = True
 
     # WebSocket 브로드캐스트 백엔드: "memory" (단일 워커) | "redis" (수평 확장)
     # redis 선택 시 REDIS_URL 필수.
     WS_BACKEND: str = "memory"
     REDIS_URL: str = "redis://localhost:6379/0"
+
+    # 레이트리밋 백엔드: "memory" (단일 워커) | "redis" (멀티워커 정합).
+    # redis 선택 시 REDIS_URL 사용, 연결 실패하면 자동으로 memory 폴백.
+    RATE_LIMIT_BACKEND: str = "memory"
+
+    # 토큰 폐기(denylist): 로그아웃/리프레시 회전 시 jti 를 Redis 에 등록해 즉시 무효화.
+    # Redis 미가용/미설정이면 자동 비활성(폐기 없이 만료까지 유효 — 기존 동작).
+    TOKEN_DENYLIST_ENABLED: bool = True
+
+    # 타일드 추론 멀티스케일 imgsz 후보 (실배치 추론용).
+    TILED_INFERENCE_IMGSZ: list[int] = [640, 1024]
 
     # ── GCP GPU VM 원격 제어 (관리자 콘솔) ────
     # Fly.io 백엔드(항상 켜진 상태)에서 GCP Compute Engine REST API 를 호출해
@@ -262,6 +304,9 @@ class Settings(BaseSettings):
     NAVER_CLIENT_ID: str = ""
     NAVER_CLIENT_SECRET: str = ""
     OAUTH_REDIRECT_BASE: str = "http://localhost:5173"
+
+    # 이메일 본문 등에서 쓰는 프론트엔드 기본 URL (로그인 링크 등). 운영에선 실제 도메인으로.
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
 
     # ── WebSocket ────────────────────────────
     WS_HEARTBEAT_INTERVAL: int = 3
@@ -328,8 +373,10 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def enforce_no_placeholder_secrets_in_prod(self):
         """
-        APP_ENV=production 일 때 placeholder/빈값 시크릿이 그대로 들어가면 기동 차단.
-        그 외 환경(개발/테스트)에서는 경고만 출력 — 운영 사고 방지.
+        placeholder/빈값 시크릿 검증 — fail-closed.
+        APP_ENV 가 명시적으로 dev/test 계열(DEV_ENV_VALUES)일 때만 경고 후 통과하고,
+        그 외 모든 값(production/staging/오타/미설정)은 기동을 차단한다.
+        → APP_ENV 오타·누락 시 공개 placeholder 키로 운영 기동되는 사고 방지.
         """
         env = os.environ.get(APP_ENV_VAR, "").strip().lower()
         offending: list[str] = []
@@ -345,10 +392,15 @@ class Settings(BaseSettings):
             "보안: 다음 환경변수가 placeholder/빈값 상태입니다 → " + ", ".join(offending)
             + ". .env 또는 시크릿 매니저에서 실제 값을 주입하세요."
         )
-        if env in PROD_ENV_VALUES:
-            raise RuntimeError(f"[CONFIG] 운영 환경 기동 차단 — {msg}")
-        warnings.warn(f"[CONFIG] 개발 모드 경고 — {msg}", stacklevel=2)
-        return self
+        # 명시적으로 dev/test 라고 선언한 경우에만 경고로 완화.
+        if env in DEV_ENV_VALUES:
+            warnings.warn(f"[CONFIG] 개발 모드 경고 — {msg}", stacklevel=2)
+            return self
+        # production/staging/오타/미설정 등 그 외 전부 차단 (fail-closed).
+        raise RuntimeError(
+            f"[CONFIG] 기동 차단(fail-closed) — {msg} "
+            f"(로컬 개발이라면 APP_ENV 를 {sorted(DEV_ENV_VALUES)} 중 하나로 명시 설정하세요.)"
+        )
 
     class Config:
         env_file = ".env"

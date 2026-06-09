@@ -11,9 +11,15 @@
 from __future__ import annotations
 
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+# 보고된 위치 기록(_reported)의 최대 보관 개수. 세션 전체 동안 무한정
+# 누적되어 메모리/스캔 비용이 커지는 것을 막기 위해 최근 N개만 유지(오래된 항목 제거).
+MAX_REPORTED_POSITIONS = 500
+# 보고된 위치를 유지하는 시간 창(초). 이보다 오래된 기록은 중복 판정에서 제외.
+REPORTED_RETENTION_SEC = 60.0
 
 
 @dataclass
@@ -92,8 +98,9 @@ class TemporalFilter:
 
         # class → [SpatialBucket, ...] — 클래스별 공간 버킷
         self._buckets: Dict[str, List[SpatialBucket]] = defaultdict(list)
-        # 보고된 하자 위치: [(class, x, y, z)]
-        self._reported: List[tuple] = []
+        # 보고된 하자 위치: [(class, x, y, z, timestamp)]
+        # 무한 누적/선형 스캔 비용 방지를 위해 최근 MAX_REPORTED_POSITIONS개만 유지(오래된 항목 자동 제거).
+        self._reported: deque = deque(maxlen=MAX_REPORTED_POSITIONS)
 
     # ── 공개 API ─────────────────────────────
     def update(
@@ -246,7 +253,11 @@ class TemporalFilter:
         px = pos.get("x", 0.0)
         py = pos.get("y", 0.0)
         pz = pos.get("z", 0.0)
-        for rcls, rx, ry, rz in self._reported:
+        # 시간 창 밖(오래된) 기록은 중복 판정에서 제외.
+        cutoff = time.time() - REPORTED_RETENTION_SEC
+        for rcls, rx, ry, rz, rts in self._reported:
+            if rts < cutoff:
+                continue
             if rcls != cls:
                 continue
             dist = ((px - rx) ** 2 + (py - ry) ** 2 + (pz - rz) ** 2) ** 0.5
@@ -256,6 +267,7 @@ class TemporalFilter:
 
     def _record_position(self, cls: str, pos: Optional[dict]):
         if pos is not None:
+            # deque(maxlen) 가 초과분(가장 오래된 항목)을 자동 제거 → 메모리 상한 보장.
             self._reported.append(
-                (cls, pos.get("x", 0.0), pos.get("y", 0.0), pos.get("z", 0.0))
+                (cls, pos.get("x", 0.0), pos.get("y", 0.0), pos.get("z", 0.0), time.time())
             )

@@ -102,6 +102,9 @@ async def create_telemetry(
     )
 
     db.add(log)
+    # flush로 DB write를 먼저 반영(PK 채번 + 무결성 제약 검증)한다. 아래 WS 브로드캐스트는
+    # 반드시 flush 성공 이후에 수행 — flush 전에 broadcast하면 이후 롤백 시 클라이언트가
+    # 영속화되지 않은 telemetry.update를 받게 된다. (최종 commit은 get_db teardown에서 1회)
     await db.flush()
 
     # 메모리 캐시 갱신 (실시간 추론 경로에서 DB 조회 없이 O(1) 접근)
@@ -121,7 +124,7 @@ async def create_telemetry(
 
     response = TelemetryResponse.model_validate(log)
 
-    # WS "telemetry" 채널에 실시간 브로드캐스트
+    # WS "telemetry" 채널에 실시간 브로드캐스트 (flush 성공 이후이므로 영속화 보장)
     await manager.broadcast("telemetry", {
         "type": "telemetry.update",
         "data": response.model_dump(mode="json"),

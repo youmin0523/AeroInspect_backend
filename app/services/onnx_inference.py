@@ -175,7 +175,14 @@ class ONNXYoloDetector:
         y2 = np.clip((y2 - pad_h) / scale, 0, orig_h)
 
         xyxy = np.stack([x1, y1, x2, y2], axis=1)
-        keep = _nms_numpy(xyxy, max_scores, iou_threshold)
+
+        # 클래스별 NMS: 서로 다른 클래스의 겹치는 박스가 상호 억제되지 않도록
+        # 클래스 id마다 큰 좌표 오프셋을 더해 단일 NMS로 처리(표준 YOLO 트릭).
+        # 단일 클래스(nc==1)면 오프셋이 모두 0 → 기존 동작과 동일.
+        max_coord = float(max(orig_w, orig_h)) + 1.0
+        offset = class_ids.astype(np.float32) * max_coord
+        xyxy_offset = xyxy + offset[:, None]
+        keep = _nms_numpy(xyxy_offset, max_scores, iou_threshold)
 
         results = []
         for i in keep:
@@ -187,6 +194,23 @@ class ONNXYoloDetector:
             })
         return results
 
+    @property
+    def supports_batch(self) -> bool:
+        """ONNX 입력의 batch 축이 동적(N>1 허용)인지 여부.
+
+        ultralytics를 dynamic=True 로 export 하면 입력 shape[0] 이 정수 1 이
+        아니라 심볼릭 문자열('batch')로 남는다. 이 경우 여러 타일/프레임을
+        하나의 배치로 묶어 단일 추론 호출이 가능하다.
+        고정 export(shape[0]==1)면 진짜 배치가 불가능하므로 False.
+        """
+        try:
+            n = self.session.get_inputs()[0].shape[0]
+        except Exception:
+            return False
+        # 정수 1 이면 고정 batch=1 export → 배치 불가.
+        # 심볼릭('batch') 또는 정수 >1 이면 동적 → 배치 가능.
+        return not (isinstance(n, int) and n == 1)
+
     def predict(
         self,
         frame_bgr: np.ndarray,
@@ -197,6 +221,54 @@ class ONNXYoloDetector:
         blob, scale, pad_w, pad_h, orig_w, orig_h = self.preprocess(frame_bgr)
         output = self.session.run([self.output_name], {self.input_name: blob})[0]
         return self.postprocess(output, scale, pad_w, pad_h, orig_w, orig_h, conf, iou)
+
+    def predict_batch(
+        self,
+        frames_bgr: List[np.ndarray],
+        conf: float = 0.25,
+        iou: float = 0.45,
+    ) -> List[List[dict]]:
+        """여러 프레임을 단일 ONNX 추론으로 일괄 처리.
+
+        각 프레임을 letterbox 전처리(모두 input_size×input_size 로 정규화)한 뒤
+        [N,3,S,S] 로 스택하여 ONNX 세션을 *한 번만* 호출한다. 출력 [N, 4+nc, A]
+        를 프레임별로 분리해 각자의 letterbox 스케일/패딩으로 postprocess 한다.
+
+        입력 batch 축이 고정(batch=1)인 모델이면 진짜 배치가 불가능하므로
+        프레임별 순차 predict 로 폴백한다(supports_batch 로 판단).
+
+        Returns:
+            프레임별 검출 리스트의 리스트 (입력 순서 보존).
+        """
+        if not frames_bgr:
+            return []
+
+        # 고정 batch=1 export → 진짜 배치 불가. 순차 폴백.
+        if not self.supports_batch:
+            return [self.predict(f, conf=conf, iou=iou) for f in frames_bgr]
+
+        blobs: List[np.ndarray] = []
+        metas: List[Tuple[float, int, int, int, int]] = []
+        for frame in frames_bgr:
+            blob, scale, pad_w, pad_h, orig_w, orig_h = self.preprocess(frame)
+            blobs.append(blob)  # blob: [1,3,S,S]
+            metas.append((scale, pad_w, pad_h, orig_w, orig_h))
+
+        # [N,3,S,S] 단일 텐서로 결합 → ONNX 1회 호출
+        batch_blob = np.concatenate(blobs, axis=0)
+        outputs = self.session.run([self.output_name], {self.input_name: batch_blob})[0]
+
+        results: List[List[dict]] = []
+        for i, (scale, pad_w, pad_h, orig_w, orig_h) in enumerate(metas):
+            # postprocess 는 output[0] 으로 첫 배치 요소를 집으므로,
+            # i번째 요소만 잘라 다시 [1, 4+nc, A] 형태로 넣어 재사용.
+            single = outputs[i : i + 1]
+            results.append(
+                self.postprocess(
+                    single, scale, pad_w, pad_h, orig_w, orig_h, conf, iou,
+                )
+            )
+        return results
 
 
 # ═══════════════════════════════════════════════
@@ -384,6 +456,9 @@ class ONNXPatchCoreDetector:
         norm_map = (anomaly_map - anomaly_map.min()) / (anomaly_map.max() - anomaly_map.min() + 1e-6)
         mask = (norm_map > self.threshold).astype(np.uint8) * 255
 
+        # score 는 계약상 0.0~1.0 (docstring). export 버전/폴백(raw max)에서 범위를 벗어나면
+        # grading 에서 conf>=CONFIRMED_STRONG 로 잘못 자동 CONFIRM 될 수 있어 클램프.
+        score = max(0.0, min(1.0, score))
         return mask, score
 
 
@@ -391,12 +466,16 @@ class ONNXPatchCoreDetector:
 # 유틸리티
 # ═══════════════════════════════════════════════
 
-def crop_roi(
+def crop_roi_xyxy(
     frame: np.ndarray,
     bbox_xyxy: List[float],
     padding: float = 0.1,
 ) -> np.ndarray:
-    """bbox 영역을 패딩과 함께 크롭. 빈 크롭 시 원본 반환."""
+    """bbox(xyxy 픽셀) 영역을 패딩과 함께 크롭. 빈 크롭 시 원본 반환.
+
+    주의: app.utils.image_utils.crop_roi 는 xywh-normalized 규약의 *다른* 함수다.
+    혼동 방지를 위해 이 픽셀-xyxy 버전은 _xyxy 접미사로 구분한다.
+    """
     h, w = frame.shape[:2]
     x1, y1, x2, y2 = bbox_xyxy
     pw = (x2 - x1) * padding
