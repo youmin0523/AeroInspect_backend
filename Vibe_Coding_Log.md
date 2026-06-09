@@ -3283,3 +3283,14 @@ uploads/gazebo_worlds_real/
 ## 🔧 node_modules/ gitignore (MS 브랜치 catch-up) (2026-06-09)
 
 > MS 는 R-v1.1.19 기반이라 develop/main 의 node_modules gitignore 커밋(ff9fb5b) 이전 → node_modules(583파일)가 untracked 로 노출(VSCode 579 changes). develop/main 과 동일하게 .gitignore 에 추가(파일 보존, 추적만 제외).
+
+## 🔒 전체 점검 1/5 — 보안 (2026-06-09)
+
+> 전체 기능 버그·지연 감사 후 일괄 보완. 1차: 보안 critical 4건.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| S.1 | 06-09 | 보고서 API 인증·테넌트 격리: generate/preview 에 get_current_org_member, _fetch_defects 를 소속 조직 현장으로 스코프 | app/api/report.py, app/services/llm_report.py |
+| S.2 | 06-09 | placeholder 시크릿 검증 fail-closed: APP_ENV 가 명시적 dev/test 아니면 기동 차단 | app/config.py, .env.example |
+| S.3 | 06-09 | SSE/보고서 스트리밍이 전용 DB 세션을 직접 열고 commit (라우트 반환 후 닫힌 세션 재사용 해소) | app/api/ai_chat.py, app/services/llm_report.py |
+| S.4 | 06-09 | Alembic 신규 DB 프로비저닝 스크립트(create_all+stamp) + init_db 문서 정정 | scripts/provision_db.py, app/db/init_db.py |
