@@ -3427,3 +3427,12 @@ uploads/gazebo_worlds_real/
 | ID | 시각 | 작업 | 파일 |
 |---|---|---|---|
 | HF.1 | 06-10 | 로그인/리프레시 500 크래시 수정 — create_refresh_token 이 존재하지 않는 settings.JWT_REFRESH_EXPIRE_DAYS 참조(config 엔 JWT_REFRESH_EXPIRE_HOURS 만 존재) → AttributeError 로 /auth/login·/auth/refresh 전부 500. days→hours 로 정정(24h 유휴 윈도우 정책 일치). 호출처 전부 인자 없이 호출 → 시그니처 변경 안전 | app/core/jwt.py |
+
+## 🚑 핫픽스: 테스트모드 영상 재생/검출 불가 (2026-06-10)
+
+> 사용자 보고: 배포 URL에서 영상 업로드 후 "서버에 연결할 수 없습니다" + 검은 화면. 진단 결과 인프라/레이트리밋 복합 결함.
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| HF.2 | 06-10 | Fly 머신 2대→1대 축소(flyctl scale count 1). 테스트모드 상태(업로드 파일·active 영상·로드 모델·인메모리 레이트카운터)는 머신별이라 2대 로드밸런싱 시 영상은 A에 업로드·재생요청은 B로 가서 404/상태불일치 → 검은 화면 | (infra: flyctl) |
+| HF.3 | 06-10 | 레이트리밋 완화 — /test/active(1s 폴링)+영상 range 요청이 _default 120/분 공유로 429("서버 연결 불가") 유발. /api/v1/stream/ 한도 1200/분 분리 + MJPEG·영상서빙(/test/upload/file) EXEMPT 처리. /test/init·/start(모델로드 트리거)가 429로 막혀 models_loaded=false 였던 것도 해소 | app/core/rate_limit.py |
