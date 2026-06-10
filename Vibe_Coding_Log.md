@@ -3493,3 +3493,13 @@ uploads/gazebo_worlds_real/
   → 최신 main.py 를 docker cp 하면 ModuleNotFoundError 크래시. test_stream 등 의존성 충족 파일만 cp 가능.
 - GPU 사용 확인: nvidia-smi 컨테이너 내부 L4 인식, onnxruntime CUDAExecutionProvider 가용, pipeline20 3.6GB GPU 메모리 점유.
 - 정식 반영(device 표시·rate_limit·최신 기능)은 GCP VM 에서 git pull + Dockerfile.gpu 재빌드 필요(후속).
+
+## 🎯 이미지 모드 라이브 다중 박스 (2026-06-10)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| DQ.3 | 06-10 | 이미지 모드 라이브에 다중 박스 동기 표시 — 이미지 분기를 "raw 즉시 표시 → 그 이미지의 모든 하자 검출(timeout) → 같은 이미지에 모든 박스 burned-in 갱신 표시 + 카드 broadcast"로 재구성. 검출 끝나기 전엔 다음 이미지로 안 넘어가 박스가 항상 현재 이미지에 정확히 동기화. (영상 모드는 DetectionOverlay SVG 로 이미 다중) | app/services/test_stream.py |
+
+### 📐 트레이드오프
+- 박스를 보여주려면 detection 완료를 기다려야 함 → VLM(pro) 느리면 라이브 전환이 그만큼 지연. 속도 우선이면 VLM_MODEL=flash 로.
+- GCP VM 적용은 docker cp(또는 재빌드) 필요. 현재 GPU VM TERMINATED → 적용·검증은 VM 기동 후.
