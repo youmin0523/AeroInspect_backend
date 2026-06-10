@@ -3503,3 +3503,17 @@ uploads/gazebo_worlds_real/
 ### 📐 트레이드오프
 - 박스를 보여주려면 detection 완료를 기다려야 함 → VLM(pro) 느리면 라이브 전환이 그만큼 지연. 속도 우선이면 VLM_MODEL=flash 로.
 - GCP VM 적용은 docker cp(또는 재빌드) 필요. 현재 GPU VM TERMINATED → 적용·검증은 VM 기동 후.
+
+## 🌉 운영 검출 다리: Fly→GCP 추론 프록시 (2026-06-10)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| BR.1 | 06-10 | Fly→GCP 추론 프록시 미들웨어 — INFERENCE_PROXY_URL 설정 시 /api/v1/stream/test/* 를 GPU VM 으로 프록시(운영 사이트 검출 활성화용). GPU 꺼짐→503 안내, 오류→로컬 fallthrough(fail-safe), 미설정→무동작(무회귀). HTTP 경로만(스트리밍 응답 지원). | app/core/inference_proxy.py, app/main.py, app/config.py |
+
+### 🔜 활성화 런북 (다음 세션, GPU 켜고)
+1. (선택) Fly 관리형 Redis 생성 → `WS_BACKEND=redis` + `REDIS_URL` 을 Fly·GCP 양쪽에 — 검출 WS(defect.new)가 GCP→프론트로 닿게. (대안: Fly→GCP WS 릴레이 구현)
+2. **JWT 정합**: Fly·GCP `JWT_SECRET` 일치(프록시되는 제어 엔드포인트 토큰 검증용). 다르면 한쪽을 맞춤(기존 세션 재로그인 필요).
+3. Fly: `flyctl secrets set INFERENCE_PROXY_URL=http://34.64.124.77:8000` (프록시 활성)
+4. GPU VM 시작 → 운영 사이트(aeroinspect.site)에서 검출 테스트 → 확인 후 GPU 정지.
+### ⚠️ 미완성
+- WS 다리(Redis/릴레이)·JWT 정합 미적용 → 현재는 HTTP 프록시 코드만(inert 배포). 검출이 운영에서 완전 동작하려면 위 1~4 필요.
