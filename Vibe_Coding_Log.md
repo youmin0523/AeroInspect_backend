@@ -3447,3 +3447,15 @@ uploads/gazebo_worlds_real/
 ### 📐 메모
 - GCP VM(34.64.124.77) 에 docker cp + restart 로 즉시 적용(이미지 재빌드 없이). 영속화하려면 추후 git pull + Dockerfile.gpu 재빌드 필요.
 - 영상 모드: DetectionOverlay 가 timestamp 별 다중 박스 이미 지원 → 백엔드 다중 broadcast 로 동시 표시됨. 이미지 모드: 다중 카드는 표시되나 라이브 <img> 위 다중 박스 SVG 오버레이는 별도 프론트 작업(이미지 cycling 동기화 이슈) 필요.
+
+## 🔧 health device 표시 정정 (2026-06-10)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| HF.4 | 06-10 | /health 의 device 를 활성 파이프라인 기준으로 표기 — 기존엔 비활성 레거시 inference_pipeline.device(cpu) 를 노출해 pipeline20 이 GPU(L4, CUDAExecutionProvider, 3.6GB)에서 도는데도 'cpu' 로 오표기. USE_20DEFECT_PIPELINE+pipeline20.is_loaded 면 onnxruntime CUDA provider 가용 여부로 판단 | app/main.py |
+
+### ⚠️ 운영 메모: GCP VM 이미지 staleness
+- GCP VM(drone-stream-api) 의 docker 이미지가 ~5주 전 빌드라 최신 모듈(app.core.rate_limit 등) 부재.
+  → 최신 main.py 를 docker cp 하면 ModuleNotFoundError 크래시. test_stream 등 의존성 충족 파일만 cp 가능.
+- GPU 사용 확인: nvidia-smi 컨테이너 내부 L4 인식, onnxruntime CUDAExecutionProvider 가용, pipeline20 3.6GB GPU 메모리 점유.
+- 정식 반영(device 표시·rate_limit·최신 기능)은 GCP VM 에서 git pull + Dockerfile.gpu 재빌드 필요(후속).
