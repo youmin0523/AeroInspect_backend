@@ -302,6 +302,14 @@ class Settings(BaseSettings):
     GCP_GPU_ZONE: str = "asia-northeast3-a"
     GCP_GPU_INSTANCE: str = "drone-stream-api"
 
+    # ── 추론 프록시 (운영 검출) ────────────────────
+    # 설정 시 Fly 가 `/api/v1/stream/test/*` 요청을 이 GPU VM 백엔드로 프록시한다.
+    # (Fly 엔 모델이 없으므로 운영 사이트 검출을 GPU VM 으로 위임.) 예:
+    #   INFERENCE_PROXY_URL=http://34.64.124.77:8000
+    # 미설정(빈 문자열)이면 프록시 비활성 — 기존 로컬 동작 그대로(무회귀).
+    # GPU 꺼져 있으면 503 안내, 오류 시 로컬 fallthrough(fail-safe). 자세한 활성화는 런북 참고.
+    INFERENCE_PROXY_URL: str = ""
+
     # ── OAuth (SNS 로그인) ────────────────────
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
