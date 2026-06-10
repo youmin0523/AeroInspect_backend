@@ -391,9 +391,21 @@ async def health_check():
     from fastapi.responses import JSONResponse
 
     status_code = 200 if is_healthy else 503
+    # device: 활성 파이프라인 기준으로 표기. pipeline20(20defect)이 활성·로드면
+    # onnxruntime CUDA provider 가용 여부로 판단한다. (기존엔 비활성 레거시
+    # inference_pipeline.device 를 그대로 노출 → GPU 로 추론 중에도 'cpu' 로 오표기되어
+    # "GPU 안 쓰는 것처럼 보이는" 혼란 유발.)
+    if settings.USE_20DEFECT_PIPELINE and pipeline20.is_loaded:
+        try:
+            import onnxruntime as _ort
+            _active_device = "cuda" if "CUDAExecutionProvider" in _ort.get_available_providers() else "cpu"
+        except Exception:
+            _active_device = "unknown"
+    else:
+        _active_device = inference_pipeline.device
     body = {
         "status": "ok" if is_healthy else "degraded",
-        "device": inference_pipeline.device,
+        "device": _active_device,
         "active_pipeline": "20defect" if settings.USE_20DEFECT_PIPELINE else "3model",
         "models_loaded_3model": {
             "yolo_thermal": models.yolo_thermal,
