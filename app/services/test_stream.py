@@ -735,40 +735,45 @@ class TestStreamService:
 
             self._frame_counter += 1
 
-            # 1) 이미지를 *즉시* 표시한다. detection(ONNX+VLM 하이브리드 네트워크 왕복)을
-            #    여기서 await 하지 않는다.
-            #    과거: _detect 를 await 한 뒤에야 yield → 업로드 이미지가 VLM 응답
-            #    (수 초~수십 초, 쿼터/네트워크 장애 시 사실상 무한)까지 화면에 안 뜨고
-            #    "No test images" 가 그대로 남는 freeze 사고. 라이브 박스는 프론트가
-            #    WS defect.new → DetectionOverlay(SVG) 로 그리므로 burned-in 오버레이 불필요.
+            # 1) raw 이미지를 즉시 표시 — detection(특히 VLM)을 기다리느라 화면이 비는 것 방지.
             rgb_jpeg = self._encode_jpeg(frame)
             self._current_rgb_jpeg = rgb_jpeg
-
-            # Thermal 프레임 준비(raw — 오버레이는 프론트 SVG 담당). 드리프트 방지용으로
-            # 이 raw thermal 스냅샷을 백그라운드 detection 에 넘겨 짝을 굳혀둔다.
             raw_thermal_jpeg = await self._prepare_thermal_frame(test_frame, None)
             self._frame_version += 1
-
-            # 2) 즉시 yield → 사용자는 detection 과 무관하게 바로 이미지를 본다.
             yield self._mjpeg_boundary(rgb_jpeg)
 
-            # 3) detection 은 백그라운드 태스크로 분리(영상 경로와 동일 패턴) — 스트림 흐름을
-            #    절대 막지 않는다. 1 vCPU 보호: 직전 detection 이 아직 돌고 있으면 이번
-            #    프레임은 표시만 하고 스킵. 모델 미로드면 _detect 가 어차피 None → 스킵.
-            if (self._models_loaded
-                    and self._image_detect_inflight < self._MAX_INFLIGHT_DETECT):
-                self._image_detect_inflight += 1
-                rgb_snapshot = rgb_jpeg
-                thermal_snapshot = (
-                    raw_thermal_jpeg if test_frame.thermal_path is not None else None
-                )
-                asyncio.create_task(
-                    self._detect_and_broadcast_image(
-                        frame, filepath, rgb_snapshot, thermal_snapshot
+            # 2) 이 이미지의 *모든* 하자를 검출(timeout). 검출이 끝날 때까지 다음 이미지로
+            #    넘어가지 않으므로, 박스가 항상 "지금 보이는 그 이미지"에 정확히 동기화된다.
+            detections = []
+            if self._models_loaded:
+                try:
+                    detections = await asyncio.wait_for(
+                        self._detect_all(frame, filepath),
+                        timeout=settings.TEST_DETECT_TIMEOUT_SEC,
                     )
-                )
+                except asyncio.TimeoutError:
+                    print(f"[TestStream] 이미지 detection 타임아웃 — 박스 없이 진행: "
+                          f"{os.path.basename(filepath)}")
+                except Exception as e:
+                    print(f"[TestStream] 이미지 detection 오류: {e}")
 
-            # 4) 다음 프레임까지 대기
+            # 3) 검출이 있으면 같은 이미지에 *모든 박스*를 구워서 갱신 표시(이미지 모드 라이브
+            #    다중 박스) + 각 검출 카드 broadcast. (라이브 burned-in + 프론트 카드/클릭뷰 병행)
+            if detections:
+                annotated = frame
+                for det in detections:
+                    det["_rgb_snapshot"] = rgb_jpeg
+                    if raw_thermal_jpeg is not None and test_frame.thermal_path is not None:
+                        det["_thermal_snapshot"] = raw_thermal_jpeg
+                    annotated = self._apply_live_overlay(annotated, det)
+                annotated_jpeg = self._encode_jpeg(annotated)
+                self._current_rgb_jpeg = annotated_jpeg
+                self._frame_version += 1
+                yield self._mjpeg_boundary(annotated_jpeg)
+                for det in detections:
+                    await self._broadcast_detection(det)
+
+            # 4) 박스가 충분히 보이도록 대기 후 다음 이미지
             await asyncio.sleep(settings.TEST_IMAGE_INTERVAL)
 
     async def thermal_mjpeg_generator(self):
