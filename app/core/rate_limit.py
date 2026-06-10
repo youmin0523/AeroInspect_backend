@@ -38,12 +38,25 @@ PATH_LIMITS: Dict[str, int] = {
     "/api/v1/telemetry": 600,     # 드론 텔레메트리 — webhook secret 인증
     # AI 챗봇: CRUD 일반 한도. SSE 메시지 전송은 라우터 내부 사용자별 카운터로 추가 보호.
     "/api/v1/ai-chat": 120,
+    # 스트림/테스트모드 제어·폴링 — 프론트가 /test/active 를 1초마다 폴링하고
+    # 대시보드가 state/defect 등을 자주 조회한다. 기본 120/분(_default 공유)에 묶이면
+    # 폴링만으로 429("서버 연결 불가") → 영상 재생/검출 전부 막힘. 넉넉히 분리.
+    "/api/v1/stream/": 1200,
 }
 DEFAULT_LIMIT = 120  # 분당 기본 한도
 WINDOW_SEC = 60
 
-# 미들웨어가 건드리지 말아야 할 경로 (헬스체크/메트릭/정적)
-EXEMPT_PATHS = ("/", "/health", "/metrics", "/uploads")
+# 미들웨어가 건드리지 말아야 할 경로 (헬스체크/메트릭/정적 + 미디어 스트림)
+# 미디어 스트림은 rate-limit 대상에서 제외:
+#   - MJPEG(/stream*/rgb·thermal·blend): 장기 연결이지만 <img> 재연결·소스전환 빈발
+#   - 영상 직접재생(/test/upload/file/*): <video> 가 버퍼링/시킹 시 다수의 HTTP range
+#     요청을 보내 금세 한도 초과 → 검은 화면. 정적 파일 서빙과 동급으로 예외 처리.
+EXEMPT_PATHS = (
+    "/", "/health", "/metrics", "/uploads",
+    "/api/v1/stream/rgb", "/api/v1/stream/thermal", "/api/v1/stream/blend",
+    "/api/v1/stream/test/rgb", "/api/v1/stream/test/thermal",
+    "/api/v1/stream/test/upload/file",
+)
 
 
 def _resolve_limit(path: str) -> tuple[str, int]:
