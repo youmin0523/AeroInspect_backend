@@ -3436,3 +3436,14 @@ uploads/gazebo_worlds_real/
 |---|---|---|---|
 | HF.2 | 06-10 | Fly 머신 2대→1대 축소(flyctl scale count 1). 테스트모드 상태(업로드 파일·active 영상·로드 모델·인메모리 레이트카운터)는 머신별이라 2대 로드밸런싱 시 영상은 A에 업로드·재생요청은 B로 가서 404/상태불일치 → 검은 화면 | (infra: flyctl) |
 | HF.3 | 06-10 | 레이트리밋 완화 — /test/active(1s 폴링)+영상 range 요청이 _default 120/분 공유로 429("서버 연결 불가") 유발. /api/v1/stream/ 한도 1200/분 분리 + MJPEG·영상서빙(/test/upload/file) EXEMPT 처리. /test/init·/start(모델로드 트리거)가 429로 막혀 models_loaded=false 였던 것도 해소 | app/core/rate_limit.py |
+
+## 🎯 검출 품질·다중표시 보완 (2026-06-10)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| DQ.1 | 06-10 | (GCP VM env) VLM_MODEL flash→**gemini-2.5-pro** — grounding 박스 정밀도 개선. test_stream 의 VLM 주도 검출 박스 위치 품질↑ | (GCP VM env) |
+| DQ.2 | 06-10 | **다중 하자 동시표시** — test_stream 이 프레임당 최고신뢰 1건만 broadcast 하던 것을 usable 전부(신뢰도 내림차순 상위 N=8)로 변경. _detect_all/_detect_hybrid_all/_hybrid_det_to_dict 신설, 이미지·영상 경로 모두 각 검출 개별 broadcast(동일 프레임 스냅샷·동일 video_timestamp 공유) → 프론트가 여러 박스/카드 동시 표시 | app/services/test_stream.py |
+
+### 📐 메모
+- GCP VM(34.64.124.77) 에 docker cp + restart 로 즉시 적용(이미지 재빌드 없이). 영속화하려면 추후 git pull + Dockerfile.gpu 재빌드 필요.
+- 영상 모드: DetectionOverlay 가 timestamp 별 다중 박스 이미 지원 → 백엔드 다중 broadcast 로 동시 표시됨. 이미지 모드: 다중 카드는 표시되나 라이브 <img> 위 다중 박스 SVG 오버레이는 별도 프론트 작업(이미지 cycling 동기화 이슈) 필요.

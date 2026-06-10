@@ -142,6 +142,9 @@ class TestStreamService:
         # 돌고 있으면 새 프레임은 표시만 하고 detection 은 스킵 — 태스크 누적 방지.
         self._image_detect_inflight: int = 0
         self._MAX_INFLIGHT_DETECT: int = 1
+        # 프레임당 동시 표시할 최대 검출 수 — 여러 하자를 한 번에 표시하되,
+        # 화면 박스 혼잡/카드 폭주를 막기 위한 상한 (신뢰도 내림차순 상위 N).
+        self._MAX_DEFECTS_PER_FRAME: int = 8
 
     # ── 재생 제어 ────────────────────────────
     @property
@@ -915,13 +918,20 @@ class TestStreamService:
                     # 영상 경로는 tier=2 (M4 thermal U-Net + M6 PatchCore 제외).
                     # RGB 영상에 thermal 추론은 무의미하고 PatchCore는 무거워 60fps 동반 inference 시
                     # 1 vCPU 결정적 병목. 핵심 RGB 결함(M1/M2/M3/M5)만 충분히 잡힌다.
-                    det = await self._detect(frame, filepath, tier=2)
-                    if det is not None and det.get("bbox"):
-                        det["_rgb_snapshot"] = self._encode_jpeg(frame)
-                        det["_video_timestamp_sec"] = video_t
-                        det["_frame_w"] = frame.shape[1]
-                        det["_frame_h"] = frame.shape[0]
-                        asyncio.create_task(self._broadcast_detection(det))
+                    dets = await self._detect_all(frame, filepath, tier=2)
+                    if dets:
+                        # 같은 키프레임의 모든 하자를 동일 timestamp/스냅샷으로 broadcast
+                        # → 프론트 DetectionOverlay 가 그 시점에 여러 박스를 동시 표시.
+                        rgb_snap = self._encode_jpeg(frame)
+                        fw, fh = frame.shape[1], frame.shape[0]
+                        for det in dets:
+                            if not det.get("bbox"):
+                                continue
+                            det["_rgb_snapshot"] = rgb_snap
+                            det["_video_timestamp_sec"] = video_t
+                            det["_frame_w"] = fw
+                            det["_frame_h"] = fh
+                            asyncio.create_task(self._broadcast_detection(det))
 
                 frame_idx += 1
                 # 이벤트 루프에 양보 — 1 vCPU 환경에서 다른 코루틴(MJPEG placeholder yield 등) 진행 보장
@@ -952,21 +962,23 @@ class TestStreamService:
         어긋나는 드리프트를 방지(store_defect_frame 으로 클릭 뷰가 정확한 프레임을 보여주도록)."""
         try:
             try:
-                detection = await asyncio.wait_for(
-                    self._detect(frame, filepath),
+                detections = await asyncio.wait_for(
+                    self._detect_all(frame, filepath),
                     timeout=settings.TEST_DETECT_TIMEOUT_SEC,
                 )
             except asyncio.TimeoutError:
                 print(f"[TestStream] 이미지 detection 타임아웃"
                       f"({settings.TEST_DETECT_TIMEOUT_SEC}s) — 스킵: {os.path.basename(filepath)}")
                 return
-            if detection is None:
+            if not detections:
                 return
-            detection["_rgb_snapshot"] = rgb_snapshot
-            if thermal_snapshot is not None:
-                detection["_thermal_snapshot"] = thermal_snapshot
-            # 이미지는 이미 화면에 떠 있으므로(영상 먼저, 카드 다음) 바로 broadcast.
-            await self._broadcast_detection(detection)
+            # 한 프레임의 모든 하자를 각각 broadcast → 프론트가 여러 박스/카드를 동시 표시.
+            # 동일 프레임 raw 스냅샷을 공유해 클릭 뷰 프레임 드리프트 방지.
+            for detection in detections:
+                detection["_rgb_snapshot"] = rgb_snapshot
+                if thermal_snapshot is not None:
+                    detection["_thermal_snapshot"] = thermal_snapshot
+                await self._broadcast_detection(detection)
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -1048,6 +1060,70 @@ class TestStreamService:
             },
             "source": det.source,  # onnx+vlm | vlm | onnx
         }
+
+    def _hybrid_det_to_dict(self, det, frame: np.ndarray, filepath: str) -> dict:
+        """hybrid 검출 1건 → broadcast 스키마 dict. (_detect_hybrid 의 단건 구성과 동일,
+        다중 검출에서 재사용하기 위해 분리)."""
+        x1, y1, x2, y2 = [int(v) for v in det.bbox_xyxy[:4]]
+        bbox_dict = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+        image_crop_b64 = self._crop_to_base64(frame, x1, y1, x2, y2)
+        conf_rounded = round(float(det.conf), 3)
+        class_name = getattr(det, "class_", "") or ""
+        class_en = getattr(det, "class_display_en", "") or class_name
+        grade_ko = getattr(det, "grade_display_ko", "") or ""
+        label = f"{det.code} {det.class_display_ko} ({conf_rounded*100:.0f}%·{grade_ko})".strip()
+        return {
+            "id": uuid.uuid4().hex,
+            "bbox": bbox_dict,
+            "label": label,
+            "severity": det.severity or "HIGH",
+            "image_crop": image_crop_b64,
+            "confidence": conf_rounded,
+            "filepath": filepath,
+            "defect_info": {
+                "area": det.area,
+                "category_code": det.code,
+                "defect_type": det.class_display_ko,
+                "severity": det.severity,
+                "defect_class": class_name,
+                "defect_class_display_en": class_en,
+                "defect_class_display_ko": det.class_display_ko,
+            },
+            "source": det.source,
+        }
+
+    async def _detect_hybrid_all(self, frame: np.ndarray, filepath: str) -> List[dict]:
+        """하이브리드 검출 — usable(CONFIRMED+REVIEW, bbox 보유) 전부를 dict 리스트로 반환.
+        최고신뢰 1건만 고르던 _detect_hybrid 의 '다중 하자 동시 표시' 버전.
+        신뢰도 내림차순 상위 _MAX_DEFECTS_PER_FRAME 건으로 제한(화면 혼잡 방지)."""
+        from app.services.hybrid_detector import detect_hybrid_async
+        image_bytes = await asyncio.to_thread(self._encode_jpeg, frame)
+        result = await detect_hybrid_async(image_bytes)
+
+        usable = [d for d in result.detections
+                  if d.grade in ("CONFIRMED", "REVIEW") and d.bbox_xyxy and d.localization == "bbox"]
+        if not usable:
+            usable = [d for d in result.detections
+                      if d.grade in ("CONFIRMED", "REVIEW") and d.bbox_xyxy]
+        if not usable:
+            return []
+        usable.sort(key=lambda d: d.conf, reverse=True)
+        usable = usable[: self._MAX_DEFECTS_PER_FRAME]
+        return [self._hybrid_det_to_dict(d, frame, filepath) for d in usable]
+
+    async def _detect_all(
+        self, frame: np.ndarray, filepath: str, tier: int = 3,
+    ) -> List[dict]:
+        """한 프레임의 검출을 *전부* 반환 (다중 하자). 모델 미로드/0건/예외 → [].
+        하이브리드(ONNX 후보 → VLM 판정) 다중 버전; 실패 시 ONNX 단독 단건으로 폴백."""
+        if not self._models_loaded:
+            return []
+        try:
+            return await self._detect_hybrid_all(frame, filepath)
+        except Exception as e:
+            print(f"[TestStream] 하이브리드(다중) 실패 — ONNX 단독 폴백: {e}")
+            d = await self._detect_real(frame, filepath, tier=tier)
+            return [d] if d else []
 
     def _detect_mock(self, frame: np.ndarray, filepath: str) -> dict:
         """[DEPRECATED — 호출되지 않음] 디렉토리명 기반 가짜 라벨.
