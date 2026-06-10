@@ -37,13 +37,14 @@ def create_access_token(user_id: str, expires_minutes: Optional[int] = None) -> 
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 
-def create_refresh_token(user_id: str, expires_days: Optional[int] = None) -> str:
+def create_refresh_token(user_id: str, expires_hours: Optional[int] = None) -> str:
     """
-    장기 유효 리프레시 토큰. /auth/refresh에서만 받아들임.
+    리프레시 토큰. /auth/refresh에서만 받아들임.
     access 토큰과 같은 비밀키로 서명하되 type 클레임으로 용도 구분. jti 로 회전 시 폐기.
+    수명 = 재접속 유휴 윈도우(기본 24h). 회전으로 사용 시마다 갱신됨.
     """
     expire = datetime.now(timezone.utc) + timedelta(
-        days=expires_days or settings.JWT_REFRESH_EXPIRE_DAYS
+        hours=expires_hours or settings.JWT_REFRESH_EXPIRE_HOURS
     )
     payload = {
         "sub": str(user_id), "exp": expire,
