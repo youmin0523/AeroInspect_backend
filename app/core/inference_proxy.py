@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import time
 
 import httpx
@@ -116,3 +118,54 @@ async def _proxy_request(request: Request, target: str, path: str) -> Response:
         headers=resp_headers,
         media_type=upstream.headers.get("content-type"),
     )
+
+
+# ── WS 릴레이: GPU VM 의 검출 결과를 Fly WS 클라이언트(프론트)로 중계 ────────────
+# 검출(defect.new)은 GPU VM 의 ws_manager 가 broadcast 한다. 프론트는 Fly 의 WS 를 보므로,
+# 운영에서 검출 카드를 받으려면 GPU→Fly WS 다리가 필요. defects 채널은 공개(토큰 불필요)라
+# Fly 가 GPU 의 /ws?channels=defects 에 붙어 defect.new 를 받아 Fly ws_manager 로 재broadcast 한다.
+_relay_task: "asyncio.Task | None" = None
+
+
+async def _ws_relay_loop() -> None:
+    """GPU VM defects WS → Fly ws_manager 중계. 설정/ GPU 상태 따라 동작, 끊기면 재시도."""
+    import websockets
+    from app.core.ws_manager import ws_manager
+
+    while True:
+        try:
+            target = settings.INFERENCE_PROXY_URL
+            if not target:
+                await asyncio.sleep(30)
+                continue
+            if not await _gpu_running():
+                await asyncio.sleep(15)
+                continue
+            ws_url = (
+                target.rstrip("/").replace("https://", "wss://").replace("http://", "ws://")
+                + "/api/v1/ws?channels=defects"
+            )
+            async with websockets.connect(ws_url, ping_interval=20, open_timeout=15) as ws:
+                print(f"[InferenceRelay] GPU defects WS 연결됨: {ws_url}")
+                async for raw in ws:
+                    try:
+                        data = json.loads(raw)
+                        if isinstance(data, dict) and data.get("type") == "defect.new":
+                            await ws_manager.broadcast("defects", data)
+                    except Exception:
+                        pass  # 개별 메시지 파싱 실패는 무시
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[InferenceRelay] 연결 실패/끊김 — 5s 후 재시도: {e}")
+            await asyncio.sleep(5)
+
+
+def start_ws_relay() -> None:
+    """lifespan startup 에서 호출 — INFERENCE_PROXY_URL 설정 시에만 릴레이 기동."""
+    global _relay_task
+    if not settings.INFERENCE_PROXY_URL:
+        return
+    if _relay_task is None or _relay_task.done():
+        _relay_task = asyncio.create_task(_ws_relay_loop())
+        print("[InferenceRelay] WS 릴레이 태스크 기동")

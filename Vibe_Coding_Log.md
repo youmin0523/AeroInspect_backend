@@ -3517,3 +3517,10 @@ uploads/gazebo_worlds_real/
 4. GPU VM 시작 → 운영 사이트(aeroinspect.site)에서 검출 테스트 → 확인 후 GPU 정지.
 ### ⚠️ 미완성
 - WS 다리(Redis/릴레이)·JWT 정합 미적용 → 현재는 HTTP 프록시 코드만(inert 배포). 검출이 운영에서 완전 동작하려면 위 1~4 필요.
+
+## 🌉 운영 검출 다리 완성 작업 (2026-06-10 저녁)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| BR.2 | 06-10 | Fly→GCP WS 릴레이 — GPU VM 의 defects(공개) WS 에 붙어 defect.new 를 Fly ws_manager 로 재broadcast. 운영 프론트가 검출 카드 수신. INFERENCE_PROXY_URL 설정 시 lifespan 에서 기동, 끊기면 재시도, GPU 꺼짐/미설정이면 대기 | app/core/inference_proxy.py, app/main.py |
+| BR.3 | 06-10 | JWT 정합 — Fly·GCP JWT_SECRET 불일치 확인(Fly토큰→GCP 401). 프록시 제어 엔드포인트 인증 위해 양쪽 동일 시크릿으로 맞춤 | (Fly secrets + GCP env) |
