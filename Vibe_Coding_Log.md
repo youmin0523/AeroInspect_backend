@@ -3455,3 +3455,9 @@ uploads/gazebo_worlds_real/
 | PF.2 | 06-09 | TEST_DETECT_TIMEOUT_SEC(12s) 신설 — 느린/멈춘 VLM 좀비 태스크 방지. 동시 detection 1건 cap(1 vCPU 보호) | app/config.py, app/services/test_stream.py |
 
 - 라이브 박스는 프론트가 WS defect.new → DetectionOverlay(SVG) 로 직접 그리므로 backend burned-in 오버레이 불필요 → 분리 안전. 하자 클릭 뷰는 저장된 스냅샷 사용 → 회귀 없음.
+
+## 🚑 핫픽스: 운영 로그인 500 복구 (2026-06-10)
+
+| ID | 시각 | 작업 | 파일 |
+|---|---|---|---|
+| HF.1 | 06-10 | 로그인/리프레시 500 크래시 수정 — create_refresh_token 이 존재하지 않는 settings.JWT_REFRESH_EXPIRE_DAYS 참조(config 엔 JWT_REFRESH_EXPIRE_HOURS 만 존재) → AttributeError 로 /auth/login·/auth/refresh 전부 500. days→hours 로 정정(24h 유휴 윈도우 정책 일치). 호출처 전부 인자 없이 호출 → 시그니처 변경 안전 | app/core/jwt.py |
