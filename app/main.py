@@ -163,6 +163,14 @@ async def lifespan(app: FastAPI):
     else:
         print("[AeroInspect] DRONE_CONNECTED=False → 카메라/LiDAR/추론 파이프라인 건너뜀 (API 전용 모드)")
 
+    # 추론 프록시 WS 릴레이 — INFERENCE_PROXY_URL 설정 시 GPU VM 의 검출(defect.new)을
+    # Fly WS 클라이언트로 중계. 미설정이면 no-op. (운영 사이트 검출 결과 전달용)
+    try:
+        from app.core.inference_proxy import start_ws_relay
+        start_ws_relay()
+    except Exception as e:
+        print(f"[AeroInspect] 추론 WS 릴레이 기동 실패 (계속): {e}")
+
     print("[AeroInspect] 서버 준비 완료")
 
     yield  # 앱 실행 중
