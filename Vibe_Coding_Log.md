@@ -3490,3 +3490,15 @@ uploads/gazebo_worlds_real/
 |---|---|---|---|
 | BR.2 | 06-10 | Fly→GCP WS 릴레이 — GPU VM 의 defects(공개) WS 에 붙어 defect.new 를 Fly ws_manager 로 재broadcast. 운영 프론트가 검출 카드 수신. INFERENCE_PROXY_URL 설정 시 lifespan 에서 기동, 끊기면 재시도, GPU 꺼짐/미설정이면 대기 | app/core/inference_proxy.py, app/main.py |
 | BR.3 | 06-10 | JWT 정합 — Fly·GCP JWT_SECRET 불일치 확인(Fly토큰→GCP 401). 프록시 제어 엔드포인트 인증 위해 양쪽 동일 시크릿으로 맞춤 | (Fly secrets + GCP env) |
+
+---
+
+## 2026-06-11 — 상업 준비도 점검: 운영 블로커 정리 (backend)
+
+전체 코드감사(인증/라우팅/API연결/코어플로우/백엔드) + 빌드·import 실측 후 P0 보안 블로커 수정.
+
+- **슈퍼관리자 시드 차단**: `SEED_SUPERADMIN` 플래그 + 비-dev 환경에서 `SUPERADMIN_PASSWORD`(12자+) 강제. 운영에 `admin/admin` 자동 생성 사고 방지(dev 는 'admin' 폴백 유지). (config.py, main.py)
+- **전역 예외 핸들러**: 미처리 예외의 풀 스택트레이스 노출 차단 → 일반화 500 + `request_id`, 상세는 로그/Sentry. `StarletteHTTPException` 핸들러로 응답에 request_id 동봉. (main.py)
+- **RequestIDMiddleware**: `request.state.request_id` 보관 → 핸들러 접근 가능. (middleware.py)
+- **CORS 축소**: `allow_methods/allow_headers` 와일드카드 → 실제 사용 항목만 화이트리스트. (main.py)
+- 검증: `import app.main` OK.
