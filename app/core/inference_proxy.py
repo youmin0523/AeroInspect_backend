@@ -45,6 +45,18 @@ _HOP_HEADERS = {
     "transfer-encoding", "upgrade", "proxy-authenticate", "proxy-authorization", "te", "trailers",
 }
 
+# upstream(GPU VM) 응답에서 제거할 CORS 헤더 — CORS 는 Fly 의 CORSMiddleware(가장 바깥)가
+# 단독으로 설정한다. upstream 도 보내면 Access-Control-Allow-Origin 이 중복되어 브라우저가 차단.
+_STRIP_RESP_HEADERS = _HOP_HEADERS | {
+    "access-control-allow-origin",
+    "access-control-allow-credentials",
+    "access-control-allow-methods",
+    "access-control-allow-headers",
+    "access-control-expose-headers",
+    "access-control-max-age",
+    "vary",
+}
+
 
 async def _gpu_running() -> bool:
     """GPU VM 이 RUNNING 인지(캐시).
@@ -115,7 +127,7 @@ async def _proxy_request(request: Request, target: str, path: str) -> Response:
         content=content,
     )
     upstream = await client.send(req, stream=True)
-    resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP_HEADERS}
+    resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _STRIP_RESP_HEADERS}
 
     async def _body_iter():
         try:

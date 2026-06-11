@@ -3552,3 +3552,12 @@ uploads/gazebo_worlds_real/
 
 - **대용량 영상 업로드 버퍼링 제거**: 추론 프록시가 `/api/v1/stream/test/*` 를 GPU VM 으로 중계할 때 `await request.body()` 로 multipart 전체(영상 원본)를 Fly 1GB RAM 에 적재 → 메모리 압박·전송 지연으로 연결 끊김 → 프론트 "업로드 중 오류". 클라이언트 수신 스트림(`request.stream()`)을 그대로 흘려보내 RAM 상수로 중계(chunked transfer-encoding). 기존 TODO("후속: 대용량 업로드 스트리밍") 해소. (inference_proxy.py)
 - 검증: ast 파싱 OK.
+
+---
+
+## 2026-06-11 — CORS 미들웨어 순서 수정: 추론 프록시 경로 차단 해결 (backend)
+
+- **문제**: 운영(www.aeroinspect.site)에서 `/api/v1/stream/test/*`(검출·영상 업로드)가 CORS 차단 — `No 'Access-Control-Allow-Origin' header`. `InferenceProxyMiddleware` 가 LIFO 상 가장 바깥이라, 프록시 short-circuit 응답(전달·GPU 503)과 OPTIONS 프리플라이트가 안쪽 `CORSMiddleware` 를 건너뛰어 헤더 누락.
+- **수정**: `CORSMiddleware` 를 마지막 추가(=가장 바깥)로 이동 → 프록시·503·레이트리밋 429·프리플라이트 포함 모든 응답에 CORS 헤더 보장. upstream(GPU VM) 응답의 `access-control-*`·`vary` 제거로 헤더 중복 차단 방지. (main.py, inference_proxy.py)
+- **확인**: 운영 Fly 에 `CORS_ORIGINS` 시크릿/env 없음 → config.py 기본값(www 포함) 사용 = www 이미 허용. 운영 실패는 순수 미들웨어 순서 문제. 로컬 `.env` 에도 www 추가(운영 일치).
+- 검증: 로컬 OPTIONS/GET/upload 프록시 경로 모두 200 + `allow-origin: https://www.aeroinspect.site`.

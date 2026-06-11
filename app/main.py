@@ -357,8 +357,18 @@ app = FastAPI(
 app.openapi = _custom_openapi  # type: ignore[method-assign]
 
 # ── 미들웨어 ─────────────────────────────────
-# RequestIDMiddleware 먼저 (가장 바깥) → CORS
-# add_middleware는 LIFO 순서로 dispatch되므로 마지막에 추가한 것이 가장 바깥.
+# add_middleware는 LIFO 순서로 dispatch되므로 마지막에 추가한 것이 '가장 바깥'.
+# CORS 는 반드시 가장 바깥이어야 한다 — 그래야 추론 프록시가 short-circuit 으로 반환하는
+# 응답(프록시 전달·GPU 꺼짐 503)과 OPTIONS 프리플라이트에도 CORS 헤더가 붙는다.
+# (CORS 를 안쪽에 두면 프록시 대상 경로 /stream/test/* 가 CORS 를 건너뛰어 브라우저가 차단)
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(PrometheusMiddleware)
+app.add_middleware(RateLimitMiddleware)
+# 추론 프록시(운영 검출) — INFERENCE_PROXY_URL 설정 시 /stream/test/* 를 GPU VM 으로 전달.
+# 미설정이면 무동작. CORS 보다 안쪽에 둬서 프록시 대상도 CORS 헤더를 받게 한다.
+from app.core.inference_proxy import InferenceProxyMiddleware
+app.add_middleware(InferenceProxyMiddleware)
+# CORS — 마지막 추가 = 가장 바깥. 모든 응답(프록시 포함)에 CORS 헤더 보장.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -373,13 +383,6 @@ app.add_middleware(
         "X-Request-ID",
     ],
 )
-app.add_middleware(RequestIDMiddleware)
-app.add_middleware(PrometheusMiddleware)
-app.add_middleware(RateLimitMiddleware)
-# 추론 프록시(운영 검출) — INFERENCE_PROXY_URL 설정 시 /stream/test/* 를 GPU VM 으로 전달.
-# 미설정이면 무동작. 가장 바깥(LIFO 마지막)에 둬서 프록시 대상은 로컬 라우트/레이트리밋 전에 처리.
-from app.core.inference_proxy import InferenceProxyMiddleware
-app.add_middleware(InferenceProxyMiddleware)
 
 # ── 라우터 마운트 ─────────────────────────────
 app.include_router(api_router, prefix="/api/v1")

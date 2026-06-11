@@ -10,7 +10,7 @@
 # 운영 진입 시 1회만. 키 회전 시 동일 명령으로 덮어쓰기.
 flyctl secrets set `
   JWT_SECRET=<32+chars random> `
-  JWT_REFRESH_EXPIRE_DAYS=14 `
+  JWT_REFRESH_EXPIRE_HOURS=24 `
   AI_WEBHOOK_SECRET=<32+chars random> `
   OPENAI_API_KEY=<sk-...> `
   OPENAI_MODEL=gpt-4o-mini-search-preview `
