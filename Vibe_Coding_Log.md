@@ -3571,3 +3571,29 @@ uploads/gazebo_worlds_real/
 - **부팅 플래그 동기화**: USE_20DEFECT_PIPELINE=true(GPU VM) lifespan 에서 pipeline20 로드 완료 시 `test_stream_service._models_loaded=True` 세팅. 첫 warmup/start 가 모델을 재로드하지 않고, 프론트 /test/active 가 즉시 models_loaded=true 수신 → 'GPU RUNNING = 바로 START' UX. (main.py)
 - 주의: 효과는 **GPU VM 이미지 재빌드 시 반영**(Dockerfile.gpu). fly deploy(Fly CPU 앱, USE_20DEFECT_PIPELINE=false)로는 안 닿음.
 - 검증: ast 파싱 OK.
+
+---
+
+## 2026-06-11 — 추론 프록시 경로 지연 진단 계측 (backend/Fly)
+
+- **배경 질문**: "영상이 Fly로 올라가 GCP가 읽는 방식인가, GCP 직행인가? 직행이면 더 빠르지 않나?" → 현재는 **브라우저→Fly→GCP 프록시(스트리밍 중계, 버퍼링 X)**. 직접 업로드(GCP 직행) 전환 가치를 판단하려면 먼저 **지연의 출처**(Fly 홉 vs GPU 처리/콜드스타트)를 측정해야 함.
+- **계측 추가**(무위험·동작 무변경): `_proxy_request` 에 (1) `_counting_stream` 으로 업로드 바이트 카운트(스트리밍 그대로, 메모리 상수 유지), (2) 구간 타이밍 로깅 `up(MB)/fwd/total/thru(MB/s)` — `fwd`=Fly→GPU 본문 전송+GPU 첫 응답까지(`client.send`), `total`=응답 중계 완료, (3) `Server-Timing: fwd` 응답 헤더 → 브라우저 DevTools Network 에서 Fly 구간 직접 확인. (inference_proxy.py)
+- **판단 게이트**: 브라우저 총시간 ≫ total & thru 낮음 → 브라우저↔Fly 병목 → 직접 업로드 효과 큼. thru 높음 → Fly 홉 거의 공짜. fwd 작은데 시작 지연 크면 → GPU 콜드 스타트(직접 업로드 무관, 1f9f8ba 영역).
+- **하이브리드 설계안 정리**(측정 후 착수): Fly=컨트롤 플레인(인증·GPU on/off·`GET /api/v1/inference/endpoint` 발급), GPU=데이터 플레인(업로드/MJPEG/WS 직행). GPU HTTPS 부여 방식(Cloudflare Tunnel vs static IP+Caddy)은 측정값 보고 결정 — 미정.
+- 검증: ast 파싱 OK. INFERENCE_PROXY_URL 미설정 시 무영향(무회귀).
+
+---
+
+## 2026-06-11 — 검출 broadcast 에 source_channel 추가 (backend)
+
+- defect.new broadcast 에 `source_channel` 필드 추가(영상 tier=2 RGB 추론 → 기본 'rgb'). 프론트가 검출을 일치 채널 피드에만 인스펙션뷰로 표시(RGB→Drone1, thermal→Drone2)하도록. 프론트는 없으면 'rgb' 폴백이라 GPU VM 재빌드 전에도 동작. thermal 영상 검출 대비 확장 포인트. (test_stream.py)
+- 검증: ast 파싱 OK.
+
+---
+
+## 2026-06-11 — VLM(Gemini) 3중 고장 진단: cffi 누락·키 미설정·결제 고갈 (backend/GPU VM)
+
+- **핵심 발견**: GPU VM 에서 VLM(Gemini)이 **처음부터 한 번도 동작 안 함** → 검출이 전부 ONNX 단독. 정확도 저하의 큰 원인.
+- 3중 고장: (1) `cffi` 누락으로 `cryptography._rust → _cffi_backend` ModuleNotFoundError → `google.generativeai` import 실패, (2) GPU VM `.env` 에 `GOOGLE_API_KEY` 미설정, (3) Gemini API 결제 크레딧 고갈(429 ResourceExhausted).
+- 조치: requirements.gpu.txt 에 `cffi>=1.17.0` 명시(이미지 재빌드 시 영구), GPU VM `.env` 에 GOOGLE_API_KEY 추가(Fly 값), VLM_MODEL=gemini-3.1-pro-preview 설정. **남은 블로커=결제(계정 액션 필요)**.
+- 부가 확인: 레거시 `google.generativeai` SDK 도 gemini-3.1-pro-preview 호출 가능(단 deprecated 경고 — 추후 google.genai 마이그레이션 권장). 결제 충전 후 VLM 검증 필요.

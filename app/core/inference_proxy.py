@@ -110,10 +110,25 @@ async def _proxy_request(request: Request, target: str, path: str) -> Response:
     """요청을 GPU VM 으로 전달하고 응답을 스트리밍으로 되돌린다(MJPEG 등 장기 스트림 대응)."""
     url = target.rstrip("/") + path
     fwd_headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP_HEADERS}
+
+    # ── 계측(진단): 지연이 'Fly 홉(중계)' 때문인지 'GPU 처리' 때문인지 데이터로 분리 ──
+    #   t0      : 프록시 진입
+    #   t_sent  : client.send 반환 = 업로드 본문(Fly→GPU) 전송 완료 + GPU 첫 응답 헤더 도착
+    #   t_done  : 응답 본문 전부 프론트로 중계 완료(_body_iter 종료)
+    # 업로드 throughput = up_bytes / (t_sent - t0) → Fly→GPU 회선 속도 가늠.
+    # 짧은 응답(upload-file API 등)은 (t_sent-t0)가 사실상 업로드 전송 시간.
+    # MJPEG/영상 직재생 등 장기 스트림은 t_done 이 매우 커도 정상(연결 유지 시간).
+    t0 = time.monotonic()
+    up_bytes = 0
+
     # 대용량 업로드(영상)는 전체 버퍼링하면 Fly 1GB RAM 을 압박하고 전송 지연으로 연결이 끊긴다.
     # 클라이언트 수신 스트림을 그대로 GPU VM 으로 흘려보내 메모리 상수·끊김 없이 중계한다.
     # (content-length 는 hop 헤더라 제거됨 → httpx 가 chunked transfer-encoding 으로 전송)
-    content = request.stream()
+    async def _counting_stream():
+        nonlocal up_bytes
+        async for chunk in request.stream():
+            up_bytes += len(chunk)
+            yield chunk
 
     # read=None: MJPEG 장기 스트림 무한 대기 허용. write=None: 대용량 업로드 전송 시간 무제한.
     # connect 만 짧게(10s) — GPU VM 미응답 시 빠르게 fallthrough.
@@ -124,10 +139,18 @@ async def _proxy_request(request: Request, target: str, path: str) -> Response:
         request.method, url,
         params=dict(request.query_params),
         headers=fwd_headers,
-        content=content,
+        content=_counting_stream(),
     )
     upstream = await client.send(req, stream=True)
+    t_sent = time.monotonic()
     resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _STRIP_RESP_HEADERS}
+
+    # Server-Timing: 브라우저 DevTools Network 탭에서 Fly 구간을 직접 확인.
+    #   fwd = Fly→GPU 업로드 전송 + GPU 첫 응답까지(= client.send 소요).
+    #   (브라우저가 잰 전체 시간) - fwd ≈ 브라우저↔Fly 회선 구간.
+    # 참고: JS(PerformanceObserver)로 읽으려면 CORS expose-headers 필요. DevTools 표시는 무관.
+    fwd_ms = (t_sent - t0) * 1000.0
+    resp_headers["Server-Timing"] = f"fwd;dur={fwd_ms:.0f}"
 
     async def _body_iter():
         try:
@@ -136,6 +159,19 @@ async def _proxy_request(request: Request, target: str, path: str) -> Response:
         finally:
             await upstream.aclose()
             await client.aclose()
+            total_ms = (time.monotonic() - t0) * 1000.0
+            if up_bytes > 0:
+                mb = up_bytes / (1024 * 1024)
+                thru = mb / max(t_sent - t0, 1e-6)
+                print(
+                    f"[InferenceProxy] {request.method} {path} "
+                    f"up={mb:.1f}MB fwd={fwd_ms:.0f}ms total={total_ms:.0f}ms thru={thru:.1f}MB/s"
+                )
+            else:
+                print(
+                    f"[InferenceProxy] {request.method} {path} "
+                    f"fwd={fwd_ms:.0f}ms total={total_ms:.0f}ms"
+                )
 
     return StreamingResponse(
         _body_iter(),

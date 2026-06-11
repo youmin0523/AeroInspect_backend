@@ -1309,6 +1309,9 @@ class TestStreamService:
             "frame_id": self._frame_counter,
             "source_file": os.path.basename(detection["filepath"]),
             "mode": self._detection_mode,
+            # 검출 소스 채널 — 프론트가 일치하는 피드(RGB→Drone1, thermal→Drone2)에만
+            # 인스펙션 뷰를 띄우도록. 영상 경로(tier=2)는 RGB 추론이라 기본 'rgb'.
+            "source_channel": detection.get("_source_channel", "rgb"),
         }
         # 영상 직접재생 모드일 때만 채워지는 동기화용 메타.
         # 프론트 <video>.currentTime ↔ video_timestamp_sec 비교로 SVG 오버레이 동기화.
