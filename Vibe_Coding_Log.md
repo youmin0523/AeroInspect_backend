@@ -3502,3 +3502,12 @@ uploads/gazebo_worlds_real/
 - **RequestIDMiddleware**: `request.state.request_id` 보관 → 핸들러 접근 가능. (middleware.py)
 - **CORS 축소**: `allow_methods/allow_headers` 와일드카드 → 실제 사용 항목만 화이트리스트. (main.py)
 - 검증: `import app.main` OK.
+
+---
+
+## 2026-06-11 — 신뢰성 강화: 추론 프록시·로그인 잠금 (backend)
+
+- **추론 프록시 GPU 상태 캐시**: 조회 실패를 '꺼짐'으로 단정하지 않고 직전 상태 유지 + 짧은 재시도 TTL(3s). 일시적 GCP 장애로 멀쩡한 GPU 가 꺼진 것처럼 보여 불필요한 재시작·비용 유발하던 문제 해소. (inference_proxy.py)
+- **WS 릴레이**: 재연결 지수 백오프(5s→최대 60s, 연결 성공 시 리셋), broadcast 타임아웃(5s)으로 read 루프 무한 블로킹 방지. (inference_proxy.py)
+- **로그인 계정 잠금**: IP rate-limit 만으로 못 막는 분산 무차별 대입 대응 — username 단위 연속 실패 5회 → 5분 잠금. Redis 우선·메모리 폴백·fail-open. (login_guard.py 신설, auth.py 로그인 연동)
+- 검증: import OK.
