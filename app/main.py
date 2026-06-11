@@ -156,9 +156,17 @@ async def lifespan(app: FastAPI):
     # Pipeline20 자동 로드 (USE_20DEFECT_PIPELINE=true 시 — GCP GPU VM 등 정밀 추론 서버용)
     if settings.USE_20DEFECT_PIPELINE:
         try:
+            import time as _time
+            _p20_t0 = _time.monotonic()
             from app.services.inference_pipeline_20 import pipeline20 as _p20
             _p20.load_models()
-            print("[AeroInspect] Pipeline20 로드 완료")
+            print(f"[AeroInspect] Pipeline20 로드 완료 (lifespan {_time.monotonic() - _p20_t0:.1f}s)")
+            # test_stream 서비스 플래그 동기화 — 부팅 시 이미 로드/워밍업 완료했으므로
+            # 첫 warmup/start 가 모델을 다시 로드하지 않고, 프론트 /test/active 가 즉시
+            # models_loaded=true 를 받아 'GPU RUNNING = 바로 START 가능' 으로 보이게 한다.
+            if _p20.is_loaded:
+                from app.services.test_stream import test_stream_service as _tss
+                _tss._models_loaded = True
         except Exception as _e:
             print(f"[AeroInspect] Pipeline20 로드 실패: {_e}")
 

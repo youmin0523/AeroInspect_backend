@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from typing import List, Optional
 
 import numpy as np
@@ -180,6 +181,7 @@ class InferencePipeline20:
             print("[Pipeline20] 이미 로드됨 — 스킵")
             return
 
+        _load_t0 = time.monotonic()
         wd = settings.AEROINSPECT_WEIGHTS_DIR
 
         # M1: 구조·방수
@@ -311,7 +313,10 @@ class InferencePipeline20:
         critical_loaded = self._m1_yolo is not None and self._m2_yolo is not None
         if critical_loaded:
             self._loaded = True
-            print(f"[Pipeline20] 모델 로드 완료: {loaded_count}/11 가용")
+            print(
+                f"[Pipeline20] 모델 로드 완료: {loaded_count}/11 가용 "
+                f"(총 {time.monotonic() - _load_t0:.1f}s)"
+            )
         else:
             self._loaded = False
             missing = []
@@ -741,11 +746,13 @@ class InferencePipeline20:
             print(f"[{label}] 경고: {path} 없음 — 스킵")
             return None
         try:
+            _t0 = time.monotonic()
             detector = ONNXYoloDetector(path, class_names, input_size=input_size)
             # 더미 추론으로 shape 검증 (input_size 기준)
             dummy = np.zeros((input_size, input_size, 3), dtype=np.uint8)
             detector.predict(dummy, conf=0.99)  # 고신뢰 임계값 → 결과 무시, shape만 확인
-            print(f"[{label}] 로드+검증 완료: {path}")
+            # 콜드 스타트 진단: 세션 생성 + CUDA 커널 워밍업에 걸린 시간(부팅 병목 추적).
+            print(f"[{label}] 로드+검증 완료 ({time.monotonic() - _t0:.1f}s): {path}")
             return detector
         except Exception as e:
             print(f"[{label}] ⚠ 로드 실패: {path} — {e}")
@@ -760,11 +767,12 @@ class InferencePipeline20:
             print(f"[{label}] 경고: {path} 없음 — 스킵")
             return None
         try:
+            _t0 = time.monotonic()
             classifier = ONNXResNetClassifier(path, class_names)
             # 더미 추론으로 shape 검증 (224x224 검정 이미지)
             dummy = np.zeros((224, 224, 3), dtype=np.uint8)
             classifier.classify(dummy)
-            print(f"[{label}] 로드+검증 완료: {path}")
+            print(f"[{label}] 로드+검증 완료 ({time.monotonic() - _t0:.1f}s): {path}")
             return classifier
         except Exception as e:
             print(f"[{label}] ⚠ 로드 실패: {path} — {e}")
