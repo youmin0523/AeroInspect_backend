@@ -48,6 +48,13 @@ from app.models.ai_chat import AiChatThread, AiChatMessage  # noqa: F401
 # ── 감사 추적 ────────────────────────────────
 from app.models.audit_log import AuditLog  # noqa: F401
 
+# ── 자율비행 미션 / SLAM (union: 통합 repo 자율비행 서브시스템) ──
+# 주의: 현재 WIP — 라우터는 등록되나 런타임 기능은 FSM 완성 + DB 마이그레이션 후 동작.
+from app.models.mission_plan import MissionPlan  # noqa: F401
+from app.models.coverage_grid import CoverageGrid  # noqa: F401
+from app.models.room_topology import RoomTopology  # noqa: F401
+from app.models.slam_pointcloud import SlamPointcloud  # noqa: F401
+
 __all__ = [
     # 사용자 / 인증
     "User",
@@ -82,4 +89,9 @@ __all__ = [
     "AiChatMessage",
     # 감사 추적
     "AuditLog",
+    # 자율비행 미션 / SLAM (WIP union)
+    "MissionPlan",
+    "CoverageGrid",
+    "RoomTopology",
+    "SlamPointcloud",
 ]

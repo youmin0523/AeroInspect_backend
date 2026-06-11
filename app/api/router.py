@@ -7,7 +7,7 @@
 
 from fastapi import APIRouter
 
-from app.api import auth, oauth, defects, stream, websocket, report, telemetry, slam, floorplan, ai_webhook, sites, notifications, chat, organization, detect, ws_stream, coverage, employee, admin_gpu, missions, contact, ai_chat, audit_logs
+from app.api import auth, oauth, defects, stream, websocket, report, telemetry, slam, floorplan, ai_webhook, sites, notifications, chat, organization, detect, ws_stream, coverage, employee, admin_gpu, missions, contact, ai_chat, audit_logs, mission
 from app.schemas.common import PROTECTED_RESPONSES, PUBLIC_RESPONSES, WEBHOOK_RESPONSES
 
 api_router = APIRouter()
@@ -165,6 +165,15 @@ api_router.include_router(
     missions.router,
     prefix="/missions",
     tags=["Missions"],
+    responses=PROTECTED_RESPONSES,
+)
+
+# 자율비행 FSM 미션 (통합 repo union — WIP). 구 /missions(autonomous-scan)와 별개 경로 /mission.
+# 주의: 런타임 기능은 FSM 완성 + DB 마이그레이션 후 동작. 현재는 라우트 등록·import 무결성 확보 단계.
+api_router.include_router(
+    mission.router,
+    prefix="/mission",
+    tags=["Mission FSM"],
     responses=PROTECTED_RESPONSES,
 )
 

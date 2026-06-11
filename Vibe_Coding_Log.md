@@ -3545,3 +3545,13 @@ uploads/gazebo_worlds_real/
 - **WS 릴레이**: 재연결 지수 백오프(5s→최대 60s, 연결 성공 시 리셋), broadcast 타임아웃(5s)으로 read 루프 무한 블로킹 방지. (inference_proxy.py)
 - **로그인 계정 잠금**: IP rate-limit 만으로 못 막는 분산 무차별 대입 대응 — username 단위 연속 실패 5회 → 5분 잠금. Redis 우선·메모리 폴백·fail-open. (login_guard.py 신설, auth.py 로그인 연동)
 - 검증: import OK.
+
+---
+
+## 2026-06-11 — [union/WIP] 자율비행 FSM 백엔드 서브시스템 편입 (통합 repo → 배포본)
+
+안전 단계적 union — `union` 브랜치에만 추가, 운영 배포 X.
+- 통합 repo의 자율비행/SLAM 백엔드 편입: api/mission.py(FSM, /mission 경로), 모델 4개(MissionPlan·CoverageGrid·RoomTopology·SlamPointcloud), 서비스 9개(orchestrator·path_planner·obstacle_avoider·safety_monitor·slam_runner·room_segmenter·floorplan_verifier·inspection_area·fc_bridge).
+- 라우터 등록(/mission) + models/__init__ 등록(Base.metadata). 외부 deps(cv2·numpy·pymavlink) 모두 기존 requirements 에 존재.
+- ⚠️ WIP: 통합 repo 에서도 mission.py 가 라우터 미등록·모델 미등록 상태였음(미완성). import·라우트 무결성은 확보했으나 런타임 동작은 FSM 완성 + DB 마이그레이션(4테이블) 후 가능.
+- 검증: import app.main OK (mission FSM 라우트 8개 등록).
