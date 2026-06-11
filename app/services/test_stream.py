@@ -1114,6 +1114,12 @@ class TestStreamService:
                 "defect_class_display_ko": det.class_display_ko,
             },
             "source": det.source,
+            # 근거 감사로그(4-4) — 분쟁 증거 + 점검자 판단 보조. hybrid_detector 가 생성.
+            "grade": getattr(det, "grade", None),
+            "reasoning": getattr(det, "reasoning", None),
+            "onnx_conf": getattr(det, "onnx_conf", None),
+            "vlm_conf": getattr(det, "vlm_conf", None),
+            "agreement": getattr(det, "agreement", None),
         }
 
     async def _detect_hybrid_all(self, frame: np.ndarray, filepath: str) -> List[dict]:
@@ -1312,6 +1318,12 @@ class TestStreamService:
             # 검출 소스 채널 — 프론트가 일치하는 피드(RGB→Drone1, thermal→Drone2)에만
             # 인스펙션 뷰를 띄우도록. 영상 경로(tier=2)는 RGB 추론이라 기본 'rgb'.
             "source_channel": detection.get("_source_channel", "rgb"),
+            # 근거 감사로그(4-4) — 분쟁 증거 + 점검자 판단 보조.
+            "grade": detection.get("grade"),
+            "reasoning": detection.get("reasoning"),
+            "onnx_conf": detection.get("onnx_conf"),
+            "vlm_conf": detection.get("vlm_conf"),
+            "agreement": detection.get("agreement"),
         }
         # 영상 직접재생 모드일 때만 채워지는 동기화용 메타.
         # 프론트 <video>.currentTime ↔ video_timestamp_sec 비교로 SVG 오버레이 동기화.
