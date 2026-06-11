@@ -3552,3 +3552,22 @@ uploads/gazebo_worlds_real/
 
 - **대용량 영상 업로드 버퍼링 제거**: 추론 프록시가 `/api/v1/stream/test/*` 를 GPU VM 으로 중계할 때 `await request.body()` 로 multipart 전체(영상 원본)를 Fly 1GB RAM 에 적재 → 메모리 압박·전송 지연으로 연결 끊김 → 프론트 "업로드 중 오류". 클라이언트 수신 스트림(`request.stream()`)을 그대로 흘려보내 RAM 상수로 중계(chunked transfer-encoding). 기존 TODO("후속: 대용량 업로드 스트리밍") 해소. (inference_proxy.py)
 - 검증: ast 파싱 OK.
+
+---
+
+## 2026-06-11 — CORS 미들웨어 순서 수정: 추론 프록시 경로 차단 해결 (backend)
+
+- **문제**: 운영(www.aeroinspect.site)에서 `/api/v1/stream/test/*`(검출·영상 업로드)가 CORS 차단 — `No 'Access-Control-Allow-Origin' header`. `InferenceProxyMiddleware` 가 LIFO 상 가장 바깥이라, 프록시 short-circuit 응답(전달·GPU 503)과 OPTIONS 프리플라이트가 안쪽 `CORSMiddleware` 를 건너뛰어 헤더 누락.
+- **수정**: `CORSMiddleware` 를 마지막 추가(=가장 바깥)로 이동 → 프록시·503·레이트리밋 429·프리플라이트 포함 모든 응답에 CORS 헤더 보장. upstream(GPU VM) 응답의 `access-control-*`·`vary` 제거로 헤더 중복 차단 방지. (main.py, inference_proxy.py)
+- **확인**: 운영 Fly 에 `CORS_ORIGINS` 시크릿/env 없음 → config.py 기본값(www 포함) 사용 = www 이미 허용. 운영 실패는 순수 미들웨어 순서 문제. 로컬 `.env` 에도 www 추가(운영 일치).
+- 검증: 로컬 OPTIONS/GET/upload 프록시 경로 모두 200 + `allow-origin: https://www.aeroinspect.site`.
+
+---
+
+## 2026-06-11 — 추론 콜드 스타트 진단 계측 + 부팅 플래그 동기화 (backend/GPU VM)
+
+- **원인 규명**: "영상 시작까지 오래" = 프레임 추론 속도가 아니라 **GPU VM 콜드 스타트**. GPU 정지(비용 절감) → GCP L4 인스턴스 부팅(30~60s) + lifespan 에서 ~15개 ONNX 세션 순차 생성+더미 CUDA 워밍업 + 컨테이너 시작. 가중치는 Dockerfile.gpu 에 베이크(런타임 다운로드 없음), 로드 시 더미 추론으로 커널 워밍업까지 됨 → 한 번 RUNNING 이면 추론은 실시간.
+- **계측 추가**(무위험): `_try_load_yolo`/`_try_load_resnet` 에 모델별 로드+검증 소요(s) 출력, `load_models` 총 소요(s) 출력. 다음 GPU 기동 1회 로그로 어느 모델/구간이 병목인지 데이터 확보 → 정밀 병렬화 근거. (inference_pipeline_20.py)
+- **부팅 플래그 동기화**: USE_20DEFECT_PIPELINE=true(GPU VM) lifespan 에서 pipeline20 로드 완료 시 `test_stream_service._models_loaded=True` 세팅. 첫 warmup/start 가 모델을 재로드하지 않고, 프론트 /test/active 가 즉시 models_loaded=true 수신 → 'GPU RUNNING = 바로 START' UX. (main.py)
+- 주의: 효과는 **GPU VM 이미지 재빌드 시 반영**(Dockerfile.gpu). fly deploy(Fly CPU 앱, USE_20DEFECT_PIPELINE=false)로는 안 닿음.
+- 검증: ast 파싱 OK.
