@@ -13,7 +13,7 @@
 #     이 모듈은 HTTP 경로만 프록시한다. WS 다리는 활성화 런북 참고.
 #   - 인증 정합: 프록시되는 제어 엔드포인트(/test/start 등)는 GPU VM 에서 토큰을 검증하므로
 #     Fly·GCP 의 JWT_SECRET 이 동일해야 한다(런북 참고). MJPEG/active/upload-file 은 public.
-#   - 업로드(대용량)는 현재 전체 버퍼링 — 매우 큰 파일 동시 업로드 시 RAM 주의(후속: 스트리밍).
+#   - 업로드(대용량)는 클라이언트 수신 스트림을 그대로 GPU VM 으로 흘려보냄(버퍼링 X) → RAM 상수.
 # =============================================
 
 from __future__ import annotations
@@ -98,9 +98,13 @@ async def _proxy_request(request: Request, target: str, path: str) -> Response:
     """요청을 GPU VM 으로 전달하고 응답을 스트리밍으로 되돌린다(MJPEG 등 장기 스트림 대응)."""
     url = target.rstrip("/") + path
     fwd_headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP_HEADERS}
-    body = await request.body()  # 후속: 대용량 업로드 스트리밍
+    # 대용량 업로드(영상)는 전체 버퍼링하면 Fly 1GB RAM 을 압박하고 전송 지연으로 연결이 끊긴다.
+    # 클라이언트 수신 스트림을 그대로 GPU VM 으로 흘려보내 메모리 상수·끊김 없이 중계한다.
+    # (content-length 는 hop 헤더라 제거됨 → httpx 가 chunked transfer-encoding 으로 전송)
+    content = request.stream()
 
-    # read=None: MJPEG 장기 스트림 무한 대기 허용. connect 만 짧게.
+    # read=None: MJPEG 장기 스트림 무한 대기 허용. write=None: 대용량 업로드 전송 시간 무제한.
+    # connect 만 짧게(10s) — GPU VM 미응답 시 빠르게 fallthrough.
     client = httpx.AsyncClient(
         timeout=httpx.Timeout(10.0, read=None, write=None, pool=None)
     )
@@ -108,7 +112,7 @@ async def _proxy_request(request: Request, target: str, path: str) -> Response:
         request.method, url,
         params=dict(request.query_params),
         headers=fwd_headers,
-        content=body,
+        content=content,
     )
     upstream = await client.send(req, stream=True)
     resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP_HEADERS}

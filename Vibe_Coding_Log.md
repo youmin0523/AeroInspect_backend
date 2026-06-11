@@ -3511,3 +3511,10 @@ uploads/gazebo_worlds_real/
 - **WS 릴레이**: 재연결 지수 백오프(5s→최대 60s, 연결 성공 시 리셋), broadcast 타임아웃(5s)으로 read 루프 무한 블로킹 방지. (inference_proxy.py)
 - **로그인 계정 잠금**: IP rate-limit 만으로 못 막는 분산 무차별 대입 대응 — username 단위 연속 실패 5회 → 5분 잠금. Redis 우선·메모리 폴백·fail-open. (login_guard.py 신설, auth.py 로그인 연동)
 - 검증: import OK.
+
+---
+
+## 2026-06-11 — 추론 프록시 업로드 스트리밍 (backend)
+
+- **대용량 영상 업로드 버퍼링 제거**: 추론 프록시가 `/api/v1/stream/test/*` 를 GPU VM 으로 중계할 때 `await request.body()` 로 multipart 전체(영상 원본)를 Fly 1GB RAM 에 적재 → 메모리 압박·전송 지연으로 연결 끊김 → 프론트 "업로드 중 오류". 클라이언트 수신 스트림(`request.stream()`)을 그대로 흘려보내 RAM 상수로 중계(chunked transfer-encoding). 기존 TODO("후속: 대용량 업로드 스트리밍") 해소. (inference_proxy.py)
+- 검증: ast 파싱 OK.
