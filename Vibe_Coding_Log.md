@@ -3581,3 +3581,10 @@ uploads/gazebo_worlds_real/
 - **판단 게이트**: 브라우저 총시간 ≫ total & thru 낮음 → 브라우저↔Fly 병목 → 직접 업로드 효과 큼. thru 높음 → Fly 홉 거의 공짜. fwd 작은데 시작 지연 크면 → GPU 콜드 스타트(직접 업로드 무관, 1f9f8ba 영역).
 - **하이브리드 설계안 정리**(측정 후 착수): Fly=컨트롤 플레인(인증·GPU on/off·`GET /api/v1/inference/endpoint` 발급), GPU=데이터 플레인(업로드/MJPEG/WS 직행). GPU HTTPS 부여 방식(Cloudflare Tunnel vs static IP+Caddy)은 측정값 보고 결정 — 미정.
 - 검증: ast 파싱 OK. INFERENCE_PROXY_URL 미설정 시 무영향(무회귀).
+
+---
+
+## 2026-06-11 — 검출 broadcast 에 source_channel 추가 (backend)
+
+- defect.new broadcast 에 `source_channel` 필드 추가(영상 tier=2 RGB 추론 → 기본 'rgb'). 프론트가 검출을 일치 채널 피드에만 인스펙션뷰로 표시(RGB→Drone1, thermal→Drone2)하도록. 프론트는 없으면 'rgb' 폴백이라 GPU VM 재빌드 전에도 동작. thermal 영상 검출 대비 확장 포인트. (test_stream.py)
+- 검증: ast 파싱 OK.
