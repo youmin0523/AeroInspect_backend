@@ -3597,3 +3597,12 @@ uploads/gazebo_worlds_real/
 - 3중 고장: (1) `cffi` 누락으로 `cryptography._rust → _cffi_backend` ModuleNotFoundError → `google.generativeai` import 실패, (2) GPU VM `.env` 에 `GOOGLE_API_KEY` 미설정, (3) Gemini API 결제 크레딧 고갈(429 ResourceExhausted).
 - 조치: requirements.gpu.txt 에 `cffi>=1.17.0` 명시(이미지 재빌드 시 영구), GPU VM `.env` 에 GOOGLE_API_KEY 추가(Fly 값), VLM_MODEL=gemini-3.1-pro-preview 설정. **남은 블로커=결제(계정 액션 필요)**.
 - 부가 확인: 레거시 `google.generativeai` SDK 도 gemini-3.1-pro-preview 호출 가능(단 deprecated 경고 — 추후 google.genai 마이그레이션 권장). 결제 충전 후 VLM 검증 필요.
+
+---
+
+## 2026-06-11 — FP/FN 4-4: 근거 감사로그 (backend)
+
+- defect.new broadcast 에 grade·reasoning·onnx_conf·vlm_conf·agreement 추가 (hybrid_detector 가 이미 생성하던 것을 카드까지 전달). 분쟁 증거 + 점검자 판단 보조.
+- 순수 추가 필드 — 검출 동작 무변경(회귀 없음). 프론트는 없으면 미표시(graceful).
+- 배포: GPU 백엔드 재배포 시 라이브(다음 B 작업과 함께).
+- 검증: ast OK.
