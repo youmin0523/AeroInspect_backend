@@ -3524,3 +3524,24 @@ uploads/gazebo_worlds_real/
 |---|---|---|---|
 | BR.2 | 06-10 | Fly→GCP WS 릴레이 — GPU VM 의 defects(공개) WS 에 붙어 defect.new 를 Fly ws_manager 로 재broadcast. 운영 프론트가 검출 카드 수신. INFERENCE_PROXY_URL 설정 시 lifespan 에서 기동, 끊기면 재시도, GPU 꺼짐/미설정이면 대기 | app/core/inference_proxy.py, app/main.py |
 | BR.3 | 06-10 | JWT 정합 — Fly·GCP JWT_SECRET 불일치 확인(Fly토큰→GCP 401). 프록시 제어 엔드포인트 인증 위해 양쪽 동일 시크릿으로 맞춤 | (Fly secrets + GCP env) |
+
+---
+
+## 2026-06-11 — 상업 준비도 점검: 운영 블로커 정리 (backend)
+
+전체 코드감사(인증/라우팅/API연결/코어플로우/백엔드) + 빌드·import 실측 후 P0 보안 블로커 수정.
+
+- **슈퍼관리자 시드 차단**: `SEED_SUPERADMIN` 플래그 + 비-dev 환경에서 `SUPERADMIN_PASSWORD`(12자+) 강제. 운영에 `admin/admin` 자동 생성 사고 방지(dev 는 'admin' 폴백 유지). (config.py, main.py)
+- **전역 예외 핸들러**: 미처리 예외의 풀 스택트레이스 노출 차단 → 일반화 500 + `request_id`, 상세는 로그/Sentry. `StarletteHTTPException` 핸들러로 응답에 request_id 동봉. (main.py)
+- **RequestIDMiddleware**: `request.state.request_id` 보관 → 핸들러 접근 가능. (middleware.py)
+- **CORS 축소**: `allow_methods/allow_headers` 와일드카드 → 실제 사용 항목만 화이트리스트. (main.py)
+- 검증: `import app.main` OK.
+
+---
+
+## 2026-06-11 — 신뢰성 강화: 추론 프록시·로그인 잠금 (backend)
+
+- **추론 프록시 GPU 상태 캐시**: 조회 실패를 '꺼짐'으로 단정하지 않고 직전 상태 유지 + 짧은 재시도 TTL(3s). 일시적 GCP 장애로 멀쩡한 GPU 가 꺼진 것처럼 보여 불필요한 재시작·비용 유발하던 문제 해소. (inference_proxy.py)
+- **WS 릴레이**: 재연결 지수 백오프(5s→최대 60s, 연결 성공 시 리셋), broadcast 타임아웃(5s)으로 read 루프 무한 블로킹 방지. (inference_proxy.py)
+- **로그인 계정 잠금**: IP rate-limit 만으로 못 막는 분산 무차별 대입 대응 — username 단위 연속 실패 5회 → 5분 잠금. Redis 우선·메모리 폴백·fail-open. (login_guard.py 신설, auth.py 로그인 연동)
+- 검증: import OK.

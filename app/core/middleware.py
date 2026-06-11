@@ -32,6 +32,9 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         incoming_id = request.headers.get(self.HEADER_NAME)
         request_id = incoming_id or uuid.uuid4().hex[:16]
 
+        # 전역 예외 핸들러 등에서 request.state 로 접근할 수 있도록 보관.
+        request.state.request_id = request_id
+
         # structlog의 모든 후속 로그에 자동 포함됨
         clear_contextvars()
         bind_contextvars(
