@@ -3588,3 +3588,12 @@ uploads/gazebo_worlds_real/
 
 - defect.new broadcast 에 `source_channel` 필드 추가(영상 tier=2 RGB 추론 → 기본 'rgb'). 프론트가 검출을 일치 채널 피드에만 인스펙션뷰로 표시(RGB→Drone1, thermal→Drone2)하도록. 프론트는 없으면 'rgb' 폴백이라 GPU VM 재빌드 전에도 동작. thermal 영상 검출 대비 확장 포인트. (test_stream.py)
 - 검증: ast 파싱 OK.
+
+---
+
+## 2026-06-11 — VLM(Gemini) 3중 고장 진단: cffi 누락·키 미설정·결제 고갈 (backend/GPU VM)
+
+- **핵심 발견**: GPU VM 에서 VLM(Gemini)이 **처음부터 한 번도 동작 안 함** → 검출이 전부 ONNX 단독. 정확도 저하의 큰 원인.
+- 3중 고장: (1) `cffi` 누락으로 `cryptography._rust → _cffi_backend` ModuleNotFoundError → `google.generativeai` import 실패, (2) GPU VM `.env` 에 `GOOGLE_API_KEY` 미설정, (3) Gemini API 결제 크레딧 고갈(429 ResourceExhausted).
+- 조치: requirements.gpu.txt 에 `cffi>=1.17.0` 명시(이미지 재빌드 시 영구), GPU VM `.env` 에 GOOGLE_API_KEY 추가(Fly 값), VLM_MODEL=gemini-3.1-pro-preview 설정. **남은 블로커=결제(계정 액션 필요)**.
+- 부가 확인: 레거시 `google.generativeai` SDK 도 gemini-3.1-pro-preview 호출 가능(단 deprecated 경고 — 추후 google.genai 마이그레이션 권장). 결제 충전 후 VLM 검증 필요.

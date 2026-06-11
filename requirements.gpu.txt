@@ -27,6 +27,10 @@ pydantic-settings==2.6.1
 # ── Auth / Security ────────────────────────
 passlib[bcrypt]==1.7.4
 python-jose[cryptography]==3.3.0
+# cffi 명시 고정 — cryptography 의 _cffi_backend 가 GPU 이미지에서 누락되어
+# google.auth → google.generativeai(VLM) import 가 ModuleNotFoundError 로 죽던 사고 방지.
+# (이게 빠지면 Gemini VLM 경로가 import 단계에서 실패해 검출이 ONNX 단독으로 폴백됨)
+cffi>=1.17.0
 
 # ── Computer Vision / AI (GPU) ─────────────
 opencv-python-headless==4.10.0.84
