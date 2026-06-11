@@ -33,8 +33,11 @@ from app.config import settings
 _PROXY_PREFIX = "/api/v1/stream/test"
 
 # GPU 상태 캐시 — 매 요청마다 GCP Compute API 호출(느림·쿼터) 방지
-_gpu_cache = {"running": False, "at": 0.0}
+#   known: 한 번이라도 실제 조회에 성공했는지. 실패를 '꺼짐'으로 단정하지 않기 위함.
+#   ttl:   정상 조회는 10초, 조회 실패 시 3초로 줄여 빠르게 회복 시도.
+_gpu_cache = {"running": False, "at": 0.0, "known": False, "ttl": 10.0}
 _GPU_TTL_SEC = 10.0
+_GPU_ERROR_TTL_SEC = 3.0
 
 # 전달하지 않을 hop-by-hop 헤더
 _HOP_HEADERS = {
@@ -44,20 +47,26 @@ _HOP_HEADERS = {
 
 
 async def _gpu_running() -> bool:
-    """GPU VM 이 RUNNING 인지(캐시 10초). 실패 시 False(=꺼짐으로 간주, 503 안내)."""
+    """GPU VM 이 RUNNING 인지(캐시).
+
+    조회 실패(GCP 일시 장애·쿼터 등)를 곧장 '꺼짐'으로 단정하지 않는다 —
+    직전에 알려진 상태가 있으면 그 값을 유지하고 짧은 TTL 로 빠르게 재시도한다.
+    (실패→False 로 덮으면 멀쩡히 켜진 GPU 가 꺼진 것처럼 보여 불필요한 재시작·비용 유발.)
+    """
     now = time.monotonic()
-    if now - _gpu_cache["at"] < _GPU_TTL_SEC:
+    if now - _gpu_cache["at"] < _gpu_cache["ttl"]:
         return _gpu_cache["running"]
-    running = False
     try:
         from app.services.gcp_compute import gcp_compute
         data = await gcp_compute.get_status()
         running = str(data.get("status", "")).upper() == "RUNNING"
-    except Exception:
-        running = False
-    _gpu_cache["running"] = running
-    _gpu_cache["at"] = now
-    return running
+        _gpu_cache.update(running=running, at=now, known=True, ttl=_GPU_TTL_SEC)
+        return running
+    except Exception as e:
+        print(f"[InferenceProxy] GPU 상태 조회 실패 — 직전 상태 유지(짧은 재시도): {e}")
+        # 직전 성공 상태가 있으면 유지, 한 번도 성공한 적 없으면 보수적으로 False.
+        _gpu_cache.update(at=now, ttl=_GPU_ERROR_TTL_SEC)
+        return _gpu_cache["running"] if _gpu_cache["known"] else False
 
 
 class InferenceProxyMiddleware(BaseHTTPMiddleware):
@@ -127,11 +136,20 @@ async def _proxy_request(request: Request, target: str, path: str) -> Response:
 _relay_task: "asyncio.Task | None" = None
 
 
+# 재연결 백오프: 연속 실패 시 5s→최대 60s 로 증가, 연결 성공하면 5s 로 리셋.
+# (고정 5s 재시도는 GPU/네트워크 장기 장애 시 로그·소켓 시도를 과도하게 스팸)
+_RELAY_BACKOFF_MIN = 5.0
+_RELAY_BACKOFF_MAX = 60.0
+# broadcast 가 멈춰도 릴레이 read 루프가 무한 블로킹되지 않도록 상한.
+_RELAY_BROADCAST_TIMEOUT = 5.0
+
+
 async def _ws_relay_loop() -> None:
-    """GPU VM defects WS → Fly ws_manager 중계. 설정/ GPU 상태 따라 동작, 끊기면 재시도."""
+    """GPU VM defects WS → Fly ws_manager 중계. 설정/ GPU 상태 따라 동작, 끊기면 백오프 재시도."""
     import websockets
     from app.core.ws_manager import ws_manager
 
+    backoff = _RELAY_BACKOFF_MIN
     while True:
         try:
             target = settings.INFERENCE_PROXY_URL
@@ -147,18 +165,26 @@ async def _ws_relay_loop() -> None:
             )
             async with websockets.connect(ws_url, ping_interval=20, open_timeout=15) as ws:
                 print(f"[InferenceRelay] GPU defects WS 연결됨: {ws_url}")
+                backoff = _RELAY_BACKOFF_MIN  # 연결 성공 → 백오프 리셋
                 async for raw in ws:
                     try:
                         data = json.loads(raw)
                         if isinstance(data, dict) and data.get("type") == "defect.new":
-                            await ws_manager.broadcast("defects", data)
+                            # broadcast 가 멈춰도 read 루프 전체가 막히지 않도록 타임아웃.
+                            await asyncio.wait_for(
+                                ws_manager.broadcast("defects", data),
+                                timeout=_RELAY_BROADCAST_TIMEOUT,
+                            )
+                    except asyncio.TimeoutError:
+                        print("[InferenceRelay] broadcast 타임아웃 — 해당 메시지 건너뜀")
                     except Exception:
-                        pass  # 개별 메시지 파싱 실패는 무시
+                        pass  # 개별 메시지 파싱/전파 실패는 무시
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"[InferenceRelay] 연결 실패/끊김 — 5s 후 재시도: {e}")
-            await asyncio.sleep(5)
+            print(f"[InferenceRelay] 연결 실패/끊김 — {backoff:.0f}s 후 재시도: {e}")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, _RELAY_BACKOFF_MAX)
 
 
 def start_ws_relay() -> None:

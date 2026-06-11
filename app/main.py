@@ -50,24 +50,50 @@ logger = get_logger(__name__)
 
 
 async def _ensure_superadmin_seed():
-    """슈퍼어드민 시드 계정이 없으면 자동 생성 (admin / admin)."""
+    """슈퍼어드민 시드 계정이 없으면 자동 생성.
+
+    보안 정책(운영에 admin/admin 사고 방지):
+      - SEED_SUPERADMIN=false → 건너뜀.
+      - 비밀번호는 SUPERADMIN_PASSWORD 사용. 미설정 시 dev/test 환경에서만 'admin' 폴백.
+      - 비-dev 환경에서 강한 비밀번호(12자+)가 없으면 시드를 생성하지 않는다.
+    """
+    import os
+    from app.config import DEV_ENV_VALUES, APP_ENV_VAR
     from sqlalchemy import select
     from app.db.session import async_session_factory
     from app.models.user import User
     from app.core.security import hash_password
 
+    if not settings.SEED_SUPERADMIN:
+        logger.info("superadmin_seed_disabled")
+        return
+
+    env = os.environ.get(APP_ENV_VAR, "").strip().lower()
+    is_dev = env in DEV_ENV_VALUES
+    password = settings.SUPERADMIN_PASSWORD or ("admin" if is_dev else "")
+
+    # 운영 안전장치: 비-dev 환경에서 약한/빈 비밀번호면 시드 생성 거부.
+    if not password or (not is_dev and len(password) < 12):
+        logger.warning(
+            "superadmin_seed_skipped_weak_password",
+            reason="SUPERADMIN_PASSWORD 미설정 또는 12자 미만 (비-dev 환경)",
+        )
+        print("[AeroInspect] 슈퍼어드민 시드 건너뜀 — SUPERADMIN_PASSWORD(12자+) 미설정")
+        return
+
+    username = settings.SUPERADMIN_USERNAME
     async with async_session_factory() as db:
         existing = await db.scalar(
-            select(User.id).where(User.username == "admin")
+            select(User.id).where(User.username == username)
         )
         if existing:
-            logger.info("superadmin_seed_exists", username="admin")
+            logger.info("superadmin_seed_exists", username=username)
             return
 
         superadmin = User(
-            username="admin",
-            email="admin@aeroinspect.io",
-            password_hash=hash_password("admin"),
+            username=username,
+            email=settings.SUPERADMIN_EMAIL,
+            password_hash=hash_password(password),
             name="슈퍼관리자",
             phone="000-0000-0000",
             account_type="personal",
@@ -75,8 +101,8 @@ async def _ensure_superadmin_seed():
         )
         db.add(superadmin)
         await db.commit()
-        logger.info("superadmin_seed_created", username="admin")
-        print("[AeroInspect] 슈퍼어드민 시드 계정 생성 완료 (admin / admin)")
+        logger.info("superadmin_seed_created", username=username)
+        print(f"[AeroInspect] 슈퍼어드민 시드 계정 생성 완료 (username={username})")
 
 
 @asynccontextmanager
@@ -337,8 +363,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # 와일드카드 대신 실제 사용하는 메서드/헤더만 허용 (과허용 축소).
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Organization-Id",
+        "X-AI-Webhook-Secret",
+        "X-Request-ID",
+    ],
 )
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(PrometheusMiddleware)
@@ -356,6 +389,44 @@ import os
 os.makedirs("./uploads/profiles", exist_ok=True)
 os.makedirs("./uploads/chat", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="./uploads"), name="uploads")
+
+
+# ── 전역 예외 핸들러 ─────────────────────────
+# 라우트 핸들러에서 처리되지 않은 예외가 클라이언트에 풀 스택트레이스(파일경로·소스·로컬변수)로
+# 노출되는 것을 차단한다. 상세 정보는 서버 로그/Sentry 로만, 응답은 일반화된 500 + request_id.
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    request_id = getattr(request.state, "request_id", None)
+    logger.error(
+        "unhandled_exception",
+        path=str(request.url.path),
+        method=request.method,
+        request_id=request_id,
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "내부 서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+            "request_id": request_id,
+        },
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_handler(request: Request, exc: StarletteHTTPException):
+    # HTTPException(4xx 등)은 의도된 응답이므로 detail 을 그대로 전달하되 request_id 동봉.
+    request_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "request_id": request_id},
+        headers=getattr(exc, "headers", None),
+    )
 
 
 @app.get("/", tags=["Health"])

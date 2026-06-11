@@ -28,6 +28,11 @@ from app.core.jwt import (
     TOKEN_TYPE_ACCESS, TOKEN_TYPE_REFRESH,
 )
 from app.core.token_denylist import revoke_jti, is_revoked
+from app.core.login_guard import (
+    check_locked as login_check_locked,
+    record_failure as login_record_failure,
+    reset as login_reset,
+)
 from app.services.email_service import send_found_username_email, send_temp_password_email
 from app.dependencies import get_db, get_current_user_with_org
 from app.models.user import User
@@ -246,16 +251,33 @@ async def login(
 ):
     """
     일반 로그인: 아이디 + 비밀번호 → JWT 액세스 토큰 발급.
+
+    계정 단위 실패 잠금(login_guard) 적용 — 분산 무차별 대입 완화.
     """
+    # 계정 잠금 확인 — 연속 실패 누적 시 일정 시간 차단(분산 봇넷 대응).
+    locked_for = await login_check_locked(payload.username)
+    if locked_for:
+        minutes = max(1, (locked_for + 59) // 60)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"로그인 시도가 너무 많습니다. 약 {minutes}분 후 다시 시도하세요.",
+            headers={"Retry-After": str(locked_for)},
+        )
+
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalar_one_or_none()
 
     if user is None or user.password_hash is None:
+        await login_record_failure(payload.username)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
 
     # bcrypt(rounds=12) 검증은 ~250ms 동기 CPU 작업 → 스레드로 오프로드해 이벤트 루프 블로킹 제거.
     if not await asyncio.to_thread(verify_password, payload.password, user.password_hash):
+        await login_record_failure(payload.username)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
+
+    # 성공 — 실패 카운터/잠금 해제.
+    await login_reset(payload.username)
 
     token = create_access_token(user.id)
     refresh = create_refresh_token(user.id)
