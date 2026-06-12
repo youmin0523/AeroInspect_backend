@@ -3744,3 +3744,13 @@ uploads/gazebo_worlds_real/
 - 영상 경로 단일 검출(_detect_all)로 전환 — 투표(3x)는 병렬이라 시간 비슷하나 크레딧 3배+동시성 대기. 시간적합의+dedup+분석완료로 신뢰성 확보.
 - 다중 영상 순차 재생: _scan mtime 오름차순(업로드 순서), advance_to_next_video + POST /test/video/next, 프론트 <video> onEnded → 다음 영상.
 - 검수 저장 실패: 검수는 DefectLog.id==frontend id 로 조회하는데 _build_record 가 id 미설정 → 다른 uuid 저장 → 못 찾음. _persist_detection 이 broadcast id(defect_db_id)를 DB row id 로 저장하도록 수정. (site_id 는 /test/start org-site 해석본 사용.)
+
+---
+
+## 2026-06-12 (8) — VLM 쿼터 소진 시 ONNX 폴백 (검출 0건 방지) (backend)
+
+- 사고: gemini-3.1-pro-preview 일일 쿼터(250 req/day) 소진(검증·렌더 테스트가 다 씀) → VLM 429 → 검출 0건.
+  원인 = 정확도 수정(VLM-primary ONNX 단독 폐기)이 VLM 죽으면 아무것도 안 남게 만듦.
+- 수정: _detect_vlm_primary 가 vlm_available(=성공 provider>0) 를 _merge_vlm_primary 에 전달.
+  VLM 전원 실패 시 ONNX 단독 후보 유지(degrade) → 검출 0 방지. VLM 정상일 때만 정확도 우선 폐기.
+- ⚠️ 운영 이슈: gemini-3.1-pro-preview 250/일은 프로덕션 부족(영상 1개≈30콜=하루 8영상). 모델 tier/선택 재검토 필요.
