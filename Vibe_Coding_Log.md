@@ -3754,3 +3754,11 @@ uploads/gazebo_worlds_real/
 - 수정: _detect_vlm_primary 가 vlm_available(=성공 provider>0) 를 _merge_vlm_primary 에 전달.
   VLM 전원 실패 시 ONNX 단독 후보 유지(degrade) → 검출 0 방지. VLM 정상일 때만 정확도 우선 폐기.
 - ⚠️ 운영 이슈: gemini-3.1-pro-preview 250/일은 프로덕션 부족(영상 1개≈30콜=하루 8영상). 모델 tier/선택 재검토 필요.
+
+---
+
+## 2026-06-12 (9) — GPU 누적 사용량 DB 영속화 (Fly 재배포에도 보존) (backend)
+
+- 문제: GPU VM 월 누적 사용량이 Fly 재배포/재시작마다 0으로 리셋(인메모리 트래커라 휘발). 오늘 Fly 여러 번 배포 → 누적 무의미.
+- 수정: gpu_usage.py 를 DB 영속(gpu_usage 단일 행 id=1)으로 재작성. 첫 사용 시 CREATE TABLE IF NOT EXISTS 자체 부트스트랩(운영 create_all 스킵·마이그레이션 없이). 모든 메서드 async, KST 월 롤오버 유지. admin_gpu 엔드포인트가 await + DB 오류 시 GPU 제어 안 막게 try/except.
+- 검증: 로컬 — 새 트래커 인스턴스(재배포 시뮬)가 DB 누적 보존 확인, start/stop 누적 정상.
