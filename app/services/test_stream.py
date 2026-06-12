@@ -146,6 +146,16 @@ class TestStreamService:
         # 프레임당 동시 표시할 최대 검출 수 — 여러 하자를 한 번에 표시하되,
         # 화면 박스 혼잡/카드 폭주를 막기 위한 상한 (신뢰도 내림차순 상위 N).
         self._MAX_DEFECTS_PER_FRAME: int = 8
+        # 보고서 연동 — 검출을 defect_logs DB 에 저장할 때 쓰는 site_id(세션 시작 시 설정).
+        # None 이면 site 미해석(저장은 되지만 org-site 조인 보고서엔 안 잡힘).
+        self._site_id: Optional[str] = None
+        # 영속화 중복 제거 — 같은 검출 id(영상은 트랙 id 재사용) 1회만 저장.
+        self._persisted_ids: set = set()
+
+    def set_site_id(self, site_id) -> None:
+        """보고서 연동용 site_id 설정 — 이후 검출이 이 site 로 DB 저장된다(세션 단위 갱신)."""
+        self._site_id = str(site_id) if site_id else None
+        self._persisted_ids.clear()   # 새 세션 = 중복필터 초기화(이전 세션 id 와 무관)
 
     # ── 재생 제어 ────────────────────────────
     @property
@@ -1112,8 +1122,9 @@ class TestStreamService:
         어긋나는 드리프트를 방지(store_defect_frame 으로 클릭 뷰가 정확한 프레임을 보여주도록)."""
         try:
             try:
+                # 이미지도 자기일관성 투표 — 단발 VLM 변동 흡수(영상 경로와 동일 신뢰도).
                 detections = await asyncio.wait_for(
-                    self._detect_all(frame, filepath),
+                    self._detect_all_voted(frame, filepath, tier=3),
                     timeout=settings.TEST_DETECT_TIMEOUT_SEC,
                 )
             except asyncio.TimeoutError:
@@ -1464,6 +1475,51 @@ class TestStreamService:
             data["frame_w"] = detection["_frame_w"]
             data["frame_h"] = detection["_frame_h"]
         await ws_manager.broadcast("defects", {"type": "defect.new", "data": data})
+
+        # ── 보고서 연동: 검출을 defect_logs DB 에 영속화(중복 제거) ──────
+        # WS broadcast 만으로는 프론트 임시 store 에만 쌓여 보고서(/report = DB 조회)에 안 들어감.
+        # '사용자가 본 카드 = 보고서 등재'가 되도록 broadcast 되는 검출을 DB 에 저장한다.
+        # 영상은 _track_video_defect 가 트랙 id 를 재사용 → 같은 하자는 1회만 저장.
+        await self._persist_detection(detection, info)
+
+    async def _persist_detection(self, detection: dict, info: dict) -> None:
+        """검출 1건을 defect_logs 에 저장(보고서 연동). site_id 미설정/DB 실패에도
+        스트림을 절대 깨지 않는다(전부 try/except + 보수적 스킵)."""
+        try:
+            did = detection.get("id")
+            bbox = detection.get("bbox") or {}
+            if not did or did in self._persisted_ids:
+                return
+            if not all(k in bbox for k in ("x1", "y1", "x2", "y2")):
+                return
+            self._persisted_ids.add(did)
+            if len(self._persisted_ids) > 5000:        # 메모리 가드(장시간 세션)
+                self._persisted_ids.clear()
+                self._persisted_ids.add(did)
+            # defect_source 는 enum(yolo_thermal|yolo_delam|wallpaper) — 하이브리드/VLM source
+            # (onnx+vlm·vlm·test_mock)는 무효라 None 으로 넣고, 실제 source 는 raw_payload 에 보존.
+            raw_src = detection.get("source")
+            valid_src = raw_src if raw_src in ("yolo_thermal", "yolo_delam", "wallpaper") else None
+            from app.services.defect_persistence import defect_persistence
+            await defect_persistence.save_batch(
+                detections=[{
+                    "bbox_xyxy": [bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]],
+                    "code": info.get("category_code"),
+                    "class_display_ko": info.get("defect_class_display_ko") or info.get("defect_type"),
+                    "defect_source": valid_src,
+                    "detection_source": raw_src,   # 실제 source(감사용) → raw_payload 에 보존
+                    "class": info.get("defect_class", "unknown"),
+                    "class_display_en": info.get("defect_class_display_en", ""),
+                    "severity": detection.get("severity", "LOW"),
+                    "conf": detection.get("confidence", 0.0),
+                    "accumulated_conf": detection.get("_vote_count"),
+                }],
+                frame_id=self._frame_counter,
+                tier=0,                       # 테스트/하이브리드 검출
+                site_id=self._site_id,
+            )
+        except Exception as e:
+            print(f"[TestStream] DB 저장 스킵(스트림 계속): {e}")
 
     # ── 라이브 오버레이 (numpy 프레임에 직접 그리기) ────────
     def _apply_live_overlay(

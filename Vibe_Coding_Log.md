@@ -3678,3 +3678,16 @@ uploads/gazebo_worlds_real/
   - 실측: 15건 → 7건(대부분 2~3표 재현분).
 - 테이프: inpaint(모자이크) 폐기 — 이미지에 테이프 그대로 둠. 대신 프롬프트 강화:
   초록/형광 테이프 명시 + "테이프 있다고 거기 하자 있는 건 아니다, 표면 독립 판단, 테이프 없는 부위도 동일 기준" → 테이프 끌림 거짓양성 차단.
+
+---
+
+## 2026-06-12 (3) — 검출 → 보고서 연동: 업로드 검출을 defect_logs DB 저장 (backend)
+
+- 검증 결과: 보고서 기계(API·LLM·프론트 버튼)는 동작하나, **업로드 검출(test_stream)이 DB에 저장 안 돼** 보고서에 안 들어감(WS broadcast 만 함). 보고서는 defect_logs(DB)를 읽음.
+- 구현:
+  - test_stream `_broadcast_detection` 끝에서 `_persist_detection` → `defect_persistence.save_batch(site_id)`. 트랙 id 로 중복 제거(영상 같은 하자 1회만). '본 카드 = 보고서 등재'.
+  - `/test/start` 에서 로그인 사용자 org → 최신 site 해석(없으면 생성) → `set_site_id`. 실패해도 스트림은 계속(보고서 미연동만, start 안 깨짐).
+  - 이미지 경로도 `_detect_all_voted`(투표)로 통일.
+  - defect_source 는 enum(yolo_thermal|yolo_delam|wallpaper) — 하이브리드/VLM source(onnx+vlm·vlm·test_mock)는 무효라 None 으로 넣고 실제 source 는 raw_payload(detection_source)에 보존. (워킹 VLM 경로의 동일한 조용한 enum 실패도 우회.)
+- 검증: 로컬 DB 실제 save_batch=1 성공(테스트 행 정리). 배선/모델 정합 OK.
+- ⚠️ 배포 전제: test_stream 이 GPU VM 프록시 실행 시 GPU VM 에 DATABASE_URL(=Fly 동일 DB) 필요. 아니면 save_batch 가 버퍼 폴백되어 보고서 미반영.
