@@ -496,9 +496,13 @@ async def upload_test_files(
         raise HTTPException(status_code=404, detail="Test mode is disabled")
 
     from app.services.test_stream import test_stream_service
+    # 새 업로드 = 이전 업로드 '교체'. 옛 파일(디스크)·활성 영상 상태를 먼저 비워야
+    # 새 영상이 바로 재생된다. (안 그러면 옛 영상이 active 로 남아 계속 재생되는 버그.)
+    test_stream_service.clear_uploaded_files()
+    test_stream_service.reset_video_state()
     result = await test_stream_service.add_uploaded_files(files)
-    if result.get("saved", 0) > 0 and test_stream_service.source != "upload":
-        test_stream_service.set_source("upload")
+    if result.get("saved", 0) > 0:
+        test_stream_service.set_source("upload")   # _scan(mtime 정렬) → 새 파일이 index 0
         result["source"] = "upload"
     return result
 

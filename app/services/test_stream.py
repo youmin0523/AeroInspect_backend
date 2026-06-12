@@ -321,9 +321,26 @@ class TestStreamService:
         self._uploaded_files.clear()
         upload_dir = settings.TEST_UPLOAD_DIR
         if os.path.isdir(upload_dir):
-            for f in os.listdir(upload_dir):
-                if Path(f).suffix.lower() in ALL_EXTENSIONS:
-                    self._uploaded_files.append(os.path.join(upload_dir, f))
+            paths = [os.path.join(upload_dir, f) for f in os.listdir(upload_dir)
+                     if Path(f).suffix.lower() in ALL_EXTENSIONS]
+            # 최신 업로드 우선(결정적 순서). os.listdir 의 파일시스템 순서 의존 제거 —
+            # 새 영상을 올려도 옛 파일이 index 0 으로 잡혀 재생되던 버그 방지.
+            try:
+                paths.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+            except OSError:
+                pass
+            self._uploaded_files.extend(paths)
+
+    def reset_video_state(self) -> None:
+        """활성 영상 직접재생 상태 초기화 — 새 업로드/소스전환 시 옛 영상이 active 로 남아
+        계속 재생되는 버그 방지. 진행 중 inference task 도 취소."""
+        self._cancel_video_inference()
+        self._active_video_filename = None
+        self._active_video_fps = 0.0
+        self._active_video_duration = 0.0
+        self._active_video_frame_w = 0
+        self._active_video_frame_h = 0
+        self._upload_index = 0
 
     # ── 모델 로드 ────────────────────────────
     @property

@@ -351,17 +351,21 @@ class HybridDetector:
             if det is not None:
                 out.append(det)
 
-        # ONNX 단독(VLM 미검출) 처리.
-        # 기본(KEEP_ONNX_ONLY=False): 폐기 — VLM 이 프레임 전체를 보고도 안 잡은 걸 ONNX 가
-        #   우기는 건 대부분 오탐(코킹·방수·걸레받이 conf 1.0 남발 = '중구난방'). VLM 권위 우선.
-        # True: ONNX recall 보완 차원에서 REVIEW 로 유지(과거 동작).
-        if not settings.VLM_PRIMARY_KEEP_ONNX_ONLY:
-            return out
+        # ONNX 단독(VLM 미검출) 처리 — 클래스별 차등.
+        #  • 균열·구조(crack/structural/rebar): ONNX(M1/M3)가 강하고 안전직결(미탐 비용 큼) →
+        #    VLM 미확인이어도 유지. 균열난 면엔 균열이 조밀히 잡혀야 함(사용자 레퍼런스 기대치).
+        #  • 그 외 노이즈성(코킹·방수·걸레받이·표면·얼룩): VLM 미확인이면 폐기 — ONNX 가 conf 1.0
+        #    으로 아무 데나 남발하는 '중구난방' 차단. VLM 권위 우선.
+        #  KEEP_ONNX_ONLY=True 면 전부 유지(과거 동작).
         for i, oc in enumerate(onnx_cands):
             if i in used_onnx:
                 continue
             ob = [float(x) for x in (oc.get("bbox_xyxy") or [])[:4]]
             if len(ob) != 4:
+                continue
+            cls = str(oc.get("class_name", "")).lower()
+            trusted = any(k in cls for k in ("crack", "structural", "rebar", "균열", "철근"))
+            if not settings.VLM_PRIMARY_KEEP_ONNX_ONLY and not trusted:
                 continue
             det = self._build_detection(
                 final_class=oc.get("class_name"), bbox=ob, localization="bbox",
