@@ -244,8 +244,16 @@ class Settings(BaseSettings):
     #                False면 기존 ONNX 주도 캐스케이드(adjudicate).  ONNX recall이 약해 VLM 우선.
     #   VLM_ENSEMBLE: 병렬 호출할 "provider:model" 쉼표구분 — 여러 VLM 합의(앙상블)로 신뢰도↑.
     #   VLM_PRIMARY_IOU: VLM↔ONNX를 같은 검출로 볼 IoU 하한.
+    #   VLM_PRIMARY_KEEP_ONNX_ONLY: VLM-primary 에서 VLM 이 확인 안 한 'ONNX 단독' 후보를
+    #       유지할지. False(기본)=폐기 — VLM 이 권위인데 ONNX 가 코킹·방수·걸레받이를 아무 데나
+    #       conf 1.0 으로 찍는 오탐('중구난방')을 차단(정확도 우선). True=ONNX recall 보완차 유지.
     VLM_PRIMARY: bool = True
-    VLM_ENSEMBLE_ENABLED: bool = True
+    VLM_PRIMARY_KEEP_ONNX_ONLY: bool = False
+    # 앙상블 기본 OFF — "gemini-flash + gpt-4o" 교차앙상블은 gpt-4o TPM 429 로 자주 깨지고
+    # (앙상블이 사실상 무력화) gpt-4o 가 건설 결함에 오탐을 더한다. 단일 강력 모델
+    # (VLM_MODEL=gemini-3.1-pro, 운영 env) + 자기일관성 투표(test_stream)로 신뢰도 확보.
+    # 다시 켜려면 VLM_ENSEMBLE 를 신뢰 가능한 모델들로 재구성 후 True.
+    VLM_ENSEMBLE_ENABLED: bool = False
     VLM_ENSEMBLE: str = "gemini:gemini-2.5-flash,openai:gpt-4o"
     VLM_PRIMARY_IOU: float = 0.3
 

@@ -3691,3 +3691,18 @@ uploads/gazebo_worlds_real/
   - defect_source 는 enum(yolo_thermal|yolo_delam|wallpaper) — 하이브리드/VLM source(onnx+vlm·vlm·test_mock)는 무효라 None 으로 넣고 실제 source 는 raw_payload(detection_source)에 보존. (워킹 VLM 경로의 동일한 조용한 enum 실패도 우회.)
 - 검증: 로컬 DB 실제 save_batch=1 성공(테스트 행 정리). 배선/모델 정합 OK.
 - ⚠️ 배포 전제: test_stream 이 GPU VM 프록시 실행 시 GPU VM 에 DATABASE_URL(=Fly 동일 DB) 필요. 아니면 save_batch 가 버퍼 폴백되어 보고서 미반영.
+
+---
+
+## 2026-06-12 (4) — 검출 "중구난방" 근본수정: VLM-primary 에서 ONNX 단독 오탐 폐기 (backend)
+
+- 사용자 지적: 이미지 검출이 중구난방(코킹 필요없는데 코킹불량, 안 보이는 방수 들뜸, bbox 부정확).
+- 진단(로컬 실측):
+  - 로컬 .env VLM_DETECTION_ENABLED=False → 검출이 ONNX 단독이었음(VLM off). ONNX 는 코킹·걸레받이·방수를 conf 1.0 으로 남발(문서화된 약점) = 중구난방. (프로덕션 GPU 는 VLM on.)
+  - VLM 켜도 _merge_vlm_primary 가 'ONNX 단독(VLM 미검출)' 후보를 REVIEW 로 그대로 출력(line 354~). VLM 이 프레임 전체를 보고도 안 잡은 걸 ONNX 가 우김.
+  - 앙상블 기본값 "gemini-flash+gpt-4o" → gpt-4o TPM 429 빈발(앙상블 무력화) + gpt-4o 가 건설결함 오탐 추가.
+- 수정:
+  - hybrid_detector._merge_vlm_primary: VLM_PRIMARY_KEEP_ONNX_ONLY=False(기본)면 ONNX 단독 후보 폐기 → VLM 권위 우선(정확도). True 로 과거 동작 복원 가능.
+  - config: VLM_ENSEMBLE_ENABLED 기본 False(gpt-4o 429/노이즈 제거). 단일 gemini-3.1-pro + 자기일관성 투표로 신뢰도.
+- 실측(gemini-3.1-pro, 수정후): 코킹·걸레받이 ONNX 오탐 이미지 → 0건, 실제 도배들뜸(C-02)·창틀도장(E-02)만 VLM 근거와 함께 남음.
+- ⚠️ 로컬 검증은 env override(VLM_DETECTION_ENABLED=true, VLM_MODEL=gemini-3.1-pro-preview)로 해야 대표성. 로컬 .env 기본 off 는 크레딧 절약용으로 유지.
