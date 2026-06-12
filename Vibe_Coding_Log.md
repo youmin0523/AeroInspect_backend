@@ -3657,3 +3657,13 @@ uploads/gazebo_worlds_real/
   - _track_video_defect/_bbox_iou 추가, _video_inference_loop 에 트랙 누적. 실패 시 보수적(검출 그대로).
 - 프론트 DefectCard: temporal_count≥2 시 "반복 N회" 신뢰 배지.
 - GPU VM 재배포 시 활성. 검증: ast OK + vite build OK.
+
+---
+
+## 2026-06-12 — 영상 검출: 장면전환 선별 + 자기일관성 투표 (긴 영상 현실화) (backend)
+
+- 긴 영상(20분 등)에서 1~2회 재생으로 확실한 검출:
+  - **장면전환 선별**: 1.5s마다 32x32 grayscale MAD로 화면 변화 감지 → 같은 화면 반복 분석 스킵(정적이면 max_gap=kf마다 1회). 긴 영상 VLM 호출 폭증 방지.
+  - **자기일관성 투표(_detect_all_voted)**: 분석 프레임마다 검출 N(3)회 '병렬' 호출 → 카테고리+IoU 클러스터 다수결. 과반 검출 OR 고신뢰(0.8+) 채택. VLM 단발 변동을 프레임당 흡수(영상 길이 무관, 병렬이라 ~1회 시간).
+  - broadcast 에 vote_count 동봉. 시간적 합의(B)와 병행 → 프레임내 투표 + 프레임간 합의 이중 안정화.
+- 검증: ast OK + 로컬 실행(장면전환 스킵·vote_count 동작 확인).

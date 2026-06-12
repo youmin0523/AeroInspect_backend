@@ -922,9 +922,13 @@ class TestStreamService:
         # (Live _vlm_keyframe_loop 와 동일 정책 — 영상 프레임 폭주로 VLM 일일상한/동시성 소진 방지.
         #  과거 fps/3(초당 3회)면 VLM 경로에서 즉시 쿼터 고갈.)
         kf = max(1.0, float(settings.VLM_KEYFRAME_INTERVAL_SEC))
-        sample_interval = max(1, int(round(fps * kf)))
+        # 장면전환 체크는 더 촘촘히(1.5s) — 장면이 바뀌면 즉시 분석, 정적이면 max_gap(kf)마다 1회.
+        check_interval = max(1, int(round(fps * 1.5)))
+        max_gap_sec = kf
         frame_idx = 0
         _video_tracks: List[dict] = []   # 시간적 합의용 하자 트랙 [{id, code, bbox, count, last_t}]
+        _last_sig = None                 # 장면전환 비교용 32x32 grayscale
+        _last_analyzed_t = -1e9
 
         try:
             while cap.isOpened():
@@ -938,12 +942,22 @@ class TestStreamService:
                 if not ret:
                     break
 
-                if frame_idx % sample_interval == 0:
+                if frame_idx % check_interval == 0:
                     video_t = frame_idx / fps if fps > 0 else 0.0
+                    # 장면전환 선별 — 같은 화면 반복 분석 방지(긴 영상 비용 절감).
+                    # 화면이 충분히 바뀌었거나(scene change), 안 바뀌어도 max_gap 경과 시 1회 분석.
+                    sig = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (32, 32)).astype(np.int16)
+                    changed = (_last_sig is None
+                               or float(np.abs(sig - _last_sig).mean()) >= self._SCENE_CHANGE_MAD)
+                    if not (changed or (video_t - _last_analyzed_t) >= max_gap_sec):
+                        frame_idx += 1
+                        await asyncio.sleep(0)
+                        continue
+                    _last_sig = sig
+                    _last_analyzed_t = video_t
                     # 영상 경로는 tier=2 (M4 thermal U-Net + M6 PatchCore 제외).
-                    # RGB 영상에 thermal 추론은 무의미하고 PatchCore는 무거워 60fps 동반 inference 시
-                    # 1 vCPU 결정적 병목. 핵심 RGB 결함(M1/M2/M3/M5)만 충분히 잡힌다.
-                    dets = await self._detect_all(frame, filepath, tier=2)
+                    # 자기일관성 투표(병렬 N회)로 단발 변동 흡수 → 1회 재생으로도 확실.
+                    dets = await self._detect_all_voted(frame, filepath, tier=2)
                     if dets:
                         # 같은 키프레임의 모든 하자를 동일 timestamp/스냅샷으로 broadcast
                         # → 프론트 DetectionOverlay 가 그 시점에 여러 박스를 동시 표시.
@@ -971,8 +985,7 @@ class TestStreamService:
             print(f"[TestStream] 영상 inference 오류: {e}")
         finally:
             cap.release()
-            print(f"[TestStream] 영상 inference 종료: {os.path.basename(filepath)} "
-                  f"(샘플 {frame_idx // sample_interval}회)")
+            print(f"[TestStream] 영상 inference 종료: {os.path.basename(filepath)}")
 
     # 시간적 합의 매칭 파라미터
     _TRACK_IOU = 0.3            # 같은 위치로 볼 IoU 하한
@@ -1019,6 +1032,58 @@ class TestStreamService:
             det["_temporal_count"] = 1
         except Exception:
             det["_temporal_count"] = 1
+
+    # 자기일관성 투표 파라미터
+    _SELF_CONSISTENCY_VOTES = 3   # 같은 프레임 N회 병렬 검출 → 다수결(VLM 단발 변동 흡수)
+    _VOTE_IOU = 0.5               # 투표 클러스터 매칭 IoU
+    _SCENE_CHANGE_MAD = 9.0       # 장면전환 판정 임계(32x32 grayscale MAD)
+
+    async def _detect_all_voted(self, frame: np.ndarray, filepath: str, tier: int = 2) -> List[dict]:
+        """자기일관성(self-consistency) 투표 — 같은 프레임에 검출을 N회 '병렬' 호출 후 다수결.
+
+        VLM 단발 변동(검출↔미탐 flip)을 한 프레임 안에서 흡수 → 1회 재생으로도 확실.
+        병렬 호출이라 영상 길이/프레임 수와 무관하게 프레임당 ~1회 호출 시간만 든다.
+        채택: 과반 run 에서 검출 OR 고신뢰(conf>=0.8) 단발. _vote_count(1~N) 부여.
+        """
+        votes = max(1, int(self._SELF_CONSISTENCY_VOTES))
+        results = await asyncio.gather(
+            *[self._detect_all(frame, filepath, tier=tier) for _ in range(votes)],
+            return_exceptions=True,
+        )
+        runs = [r for r in results if isinstance(r, list)]
+        if not runs:
+            return []
+        if len(runs) == 1:
+            for d in runs[0]:
+                d["_vote_count"] = 1
+            return runs[0]
+        clusters: List[dict] = []   # {code, rep, runs:set}
+        for ri, run in enumerate(runs):
+            for d in run:
+                if not d.get("bbox"):
+                    continue
+                code = (d.get("defect_info") or {}).get("category_code")
+                b = d["bbox"]
+                matched = None
+                for c in clusters:
+                    if c["code"] == code and self._bbox_iou(b, c["rep"]["bbox"]) >= self._VOTE_IOU:
+                        matched = c
+                        break
+                if matched:
+                    matched["runs"].add(ri)
+                    if d.get("confidence", 0) > matched["rep"].get("confidence", 0):
+                        matched["rep"] = d
+                else:
+                    clusters.append({"code": code, "rep": d, "runs": {ri}})
+        majority = (len(runs) // 2) + 1
+        out = []
+        for c in clusters:
+            vc = len(c["runs"])
+            rep = c["rep"]
+            if vc >= majority or rep.get("confidence", 0) >= 0.8:
+                rep["_vote_count"] = vc
+                out.append(rep)
+        return out
 
     # ── 이미지 detection 백그라운드 실행 + 브로드캐스트 ────────
     async def _detect_and_broadcast_image(
@@ -1378,6 +1443,8 @@ class TestStreamService:
             # 시간적 합의(4-3) — 영상에서 같은 하자가 몇 키프레임에 반복됐는지.
             # 1=단발(노이즈 가능), >=2=반복 검출(신뢰). 프론트가 신뢰도 표기/필터에 사용.
             "temporal_count": detection.get("_temporal_count", 1),
+            # 자기일관성 투표 — 같은 프레임 N회 호출 중 몇 번 검출됐는지(과반=신뢰).
+            "vote_count": detection.get("_vote_count", 1),
         }
         # 영상 직접재생 모드일 때만 채워지는 동기화용 메타.
         # 프론트 <video>.currentTime ↔ video_timestamp_sec 비교로 SVG 오버레이 동기화.
