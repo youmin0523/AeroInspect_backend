@@ -226,7 +226,9 @@ class HybridDetector:
         vlm_calls = len(dets_by_provider)
 
         vlm_consensus = self._cluster_vlm(dets_by_provider)
-        detections = self._merge_vlm_primary(vlm_consensus, onnx_cands, frame)
+        # VLM 전원 실패(429 쿼터/장애)면 vlm_calls==0 → ONNX 폴백(단독 후보 유지)으로 degrade.
+        detections = self._merge_vlm_primary(
+            vlm_consensus, onnx_cands, frame, vlm_available=(vlm_calls > 0))
 
         confirmed = sum(1 for d in detections if d.grade == "CONFIRMED")
         review = sum(1 for d in detections if d.grade == "REVIEW")
@@ -306,6 +308,7 @@ class HybridDetector:
     def _merge_vlm_primary(
         self, vlm_consensus: List[Dict[str, Any]],
         onnx_cands: List[Dict[str, Any]], frame: np.ndarray,
+        vlm_available: bool = True,
     ) -> List[HybridDetection]:
         out: List[HybridDetection] = []
         used_onnx: set = set()
@@ -365,7 +368,9 @@ class HybridDetector:
                 continue
             cls = str(oc.get("class_name", "")).lower()
             trusted = any(k in cls for k in ("crack", "structural", "rebar", "균열", "철근"))
-            if not settings.VLM_PRIMARY_KEEP_ONNX_ONLY and not trusted:
+            # VLM 사용 불가(429 쿼터/장애)면 ONNX 폴백 — 단독 후보 유지(0건 방지).
+            # VLM 정상일 때만 정확도 우선(비신뢰 ONNX 단독 폐기).
+            if vlm_available and not settings.VLM_PRIMARY_KEEP_ONNX_ONLY and not trusted:
                 continue
             det = self._build_detection(
                 final_class=oc.get("class_name"), bbox=ob, localization="bbox",
