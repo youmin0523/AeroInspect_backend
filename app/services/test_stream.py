@@ -1035,7 +1035,8 @@ class TestStreamService:
 
     # 자기일관성 투표 파라미터
     _SELF_CONSISTENCY_VOTES = 3   # 같은 프레임 N회 병렬 검출 → 다수결(VLM 단발 변동 흡수)
-    _VOTE_IOU = 0.5               # 투표 클러스터 매칭 IoU
+    _VOTE_IOU = 0.3               # 투표 클러스터 매칭 IoU(같은 하자의 박스 변동까지 합쳐 표 누적)
+    _VOTE_SINGLE_CONF = 0.90      # 단발(1표)이라도 채택할 고신뢰 하한(엄격 — 노이즈 차단)
     _SCENE_CHANGE_MAD = 9.0       # 장면전환 판정 임계(32x32 grayscale MAD)
 
     async def _detect_all_voted(self, frame: np.ndarray, filepath: str, tier: int = 2) -> List[dict]:
@@ -1043,7 +1044,10 @@ class TestStreamService:
 
         VLM 단발 변동(검출↔미탐 flip)을 한 프레임 안에서 흡수 → 1회 재생으로도 확실.
         병렬 호출이라 영상 길이/프레임 수와 무관하게 프레임당 ~1회 호출 시간만 든다.
-        채택: 과반 run 에서 검출 OR 고신뢰(conf>=0.8) 단발. _vote_count(1~N) 부여.
+        투표는 '필터'다: 실제 하자는 temp 낮아도 여러 run 에 반복 → 과반(2/3) 득표.
+        단발(1표)은 stochastic 노이즈로 보고 기각(단, conf>=0.90 초고신뢰만 예외).
+        같은 하자의 박스가 run 마다 조금 달라도 IoU 0.3 으로 합쳐 표를 누적한다.
+        채택분은 (득표수, conf) 내림차순 상위 _MAX_DEFECTS_PER_FRAME 건으로 제한(혼잡 방지).
         """
         votes = max(1, int(self._SELF_CONSISTENCY_VOTES))
         results = await asyncio.gather(
@@ -1056,7 +1060,7 @@ class TestStreamService:
         if len(runs) == 1:
             for d in runs[0]:
                 d["_vote_count"] = 1
-            return runs[0]
+            return runs[0][: self._MAX_DEFECTS_PER_FRAME]
         clusters: List[dict] = []   # {code, rep, runs:set}
         for ri, run in enumerate(runs):
             for d in run:
@@ -1065,10 +1069,13 @@ class TestStreamService:
                 code = (d.get("defect_info") or {}).get("category_code")
                 b = d["bbox"]
                 matched = None
-                for c in clusters:
-                    if c["code"] == code and self._bbox_iou(b, c["rep"]["bbox"]) >= self._VOTE_IOU:
-                        matched = c
-                        break
+                best_iou = self._VOTE_IOU
+                for c in clusters:                     # 같은 코드 중 IoU 최대 클러스터에 합류
+                    if c["code"] != code:
+                        continue
+                    iou = self._bbox_iou(b, c["rep"]["bbox"])
+                    if iou >= best_iou:
+                        best_iou = iou; matched = c
                 if matched:
                     matched["runs"].add(ri)
                     if d.get("confidence", 0) > matched["rep"].get("confidence", 0):
@@ -1080,10 +1087,13 @@ class TestStreamService:
         for c in clusters:
             vc = len(c["runs"])
             rep = c["rep"]
-            if vc >= majority or rep.get("confidence", 0) >= 0.8:
+            # 과반 득표 = 신뢰(채택). 1표라도 초고신뢰(>=0.90)면 안전상 채택, 그 외 단발은 기각.
+            if vc >= majority or rep.get("confidence", 0) >= self._VOTE_SINGLE_CONF:
                 rep["_vote_count"] = vc
                 out.append(rep)
-        return out
+        # (득표수, conf) 내림차순 → 프레임당 상한(혼잡 방지)
+        out.sort(key=lambda d: (d.get("_vote_count", 1), d.get("confidence", 0)), reverse=True)
+        return out[: self._MAX_DEFECTS_PER_FRAME]
 
     # ── 이미지 detection 백그라운드 실행 + 브로드캐스트 ────────
     async def _detect_and_broadcast_image(
