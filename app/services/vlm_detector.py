@@ -305,7 +305,8 @@ class VLMDetector:
   도장·벽지 표면의 가는 실선이면 마감. (얼룩·정상 이음매와 구분)
 - 타일 줄눈 불량(D-04): 타일 사이 메지(줄눈)가 갈라짐·탈락·오염. 타일 면에서만.
 - 타일 박리/들뜸(D-02): 타일이 들뜨거나 떨어져 단차·공간 발생.
-- 도배 들뜸·기포(C-02): 벽지가 부풀어 떠오름(공기층). 벽·천장.
+- 도배 들뜸·기포(C-02): 벽지가 부풀어 떠오르거나(공기층), 모서리·이음매·사물
+  (스위치·콘센트·조절기) 가장자리에서 벽지가 들뜨거나 벌어짐. 벽·천장.
 - 도배 이음매 불량(C-01): 벽지 이음새 벌어짐·겹침·들뜸.
 - 걸레받이 오염·파손(C-05): 바닥-벽 경계의 '수평' 몰딩(걸레받이)의 흠집·찍힘·때·파손.
 - 몰딩 구분 규칙: 트림(몰딩)은 방향으로 판단 — '수평' 바닥 몰딩은 걸레받이(C-05),
@@ -356,7 +357,9 @@ class VLMDetector:
         resp = await asyncio.to_thread(
             gm.generate_content,
             parts,
-            generation_config={"response_mime_type": "application/json"},
+            # temperature 낮춤 — 하자 검출은 재현성이 중요. 기본(~1.0)은 같은 이미지도
+            # run 마다 결과가 흔들려(검출↔미탐) 신뢰성을 해친다. 0.1 로 거의 결정론적.
+            generation_config={"response_mime_type": "application/json", "temperature": 0.1},
             request_options={"timeout": settings.LLM_REQUEST_TIMEOUT},
         )
         return resp.text or "{}"
