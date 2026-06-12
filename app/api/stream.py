@@ -396,6 +396,17 @@ async def start_test_mode(_user=Depends(get_current_user), db: AsyncSession = De
     }
 
 
+@router.post("/test/video/next")
+async def next_test_video(_user=Depends(get_current_user)):
+    """현재 영상 종료 시 다음 업로드 영상으로 전환(순차 재생).
+    프론트 <video> ended 핸들러가 호출 → active_media 가 다음 영상으로 갱신."""
+    if not settings.TEST_MODE_ENABLED:
+        raise HTTPException(status_code=404, detail="Test mode is disabled")
+    from app.services.test_stream import test_stream_service
+    nxt = test_stream_service.advance_to_next_video()
+    return {"active": nxt}
+
+
 @router.post("/test/pause")
 async def pause_test_mode(_user=Depends(get_current_user)):
     """테스트 모드 일시중지."""

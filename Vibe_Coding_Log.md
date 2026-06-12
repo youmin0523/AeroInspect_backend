@@ -3734,3 +3734,13 @@ uploads/gazebo_worlds_real/
   - VLM(gemini-3.1-pro)은 균열 정확하나 holistic/희소(영역당 1~2).
   - hybrid_detector: VLM-primary ONNX 단독을 클래스차등(crack/structural/rebar 만 유지, 코킹·방수·표면은 폐기). M1 이 균열을 코킹으로 오라벨하므로 이 footage 에선 ONNX 균열 거의 안 남음 → 균열 recall 은 VLM 의존.
 - 결론: 레퍼런스 수준 조밀 균열 = 전용 균열 모델 학습 필요(로드맵). 현 시스템은 VLM 정확검출(희소)이 최선.
+
+---
+
+## 2026-06-12 (7) — 실시간 오버레이 신뢰성 + 다중영상 순차 + 검수저장 수정 (backend+frontend)
+
+- 균열 등 일부 하자 bbox 안 뜸: testDetectionsStore dedup 이 id 만 비교 → 시간적 합의가 id 재사용하는 지속 하자(균열)의 2번째 키프레임부터 전부 버려짐. (id+timestamp) 비교로 수정(frontend).
+- "제멋대로/재생마다 다름": 게이트가 85%/90초 휴리스틱 → 분석 덜 끝났는데 재생. 백엔드 _video_analysis_complete 플래그 + active_media 노출, 프론트 게이트가 그 신호 1순위로 대기 → 첫 재생부터 모든 박스 일관.
+- 영상 경로 단일 검출(_detect_all)로 전환 — 투표(3x)는 병렬이라 시간 비슷하나 크레딧 3배+동시성 대기. 시간적합의+dedup+분석완료로 신뢰성 확보.
+- 다중 영상 순차 재생: _scan mtime 오름차순(업로드 순서), advance_to_next_video + POST /test/video/next, 프론트 <video> onEnded → 다음 영상.
+- 검수 저장 실패: 검수는 DefectLog.id==frontend id 로 조회하는데 _build_record 가 id 미설정 → 다른 uuid 저장 → 못 찾음. _persist_detection 이 broadcast id(defect_db_id)를 DB row id 로 저장하도록 수정. (site_id 는 /test/start org-site 해석본 사용.)

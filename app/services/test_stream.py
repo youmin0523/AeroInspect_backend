@@ -125,6 +125,10 @@ class TestStreamService:
         self._active_video_frame_w: int = 0
         self._active_video_frame_h: int = 0
         self._video_inference_task: Optional[asyncio.Task] = None
+        # 분석 완료 신호 — activate 시 False, inference loop 끝나면 True. 프론트 게이트가 이걸로
+        # '완전 분석 후 재생'을 보장(불완전 재생→재생마다 박스 들쭉날쭉 방지).
+        self._video_analysis_complete: bool = False
+        self._video_detection_count: int = 0
 
         # ── 하자별 프레임 저장소 (클릭 시 해당 시점 프레임 조회용) ──
         self._defect_frames: OrderedDict[str, Tuple[bytes, Optional[bytes]]] = OrderedDict()
@@ -208,6 +212,10 @@ class TestStreamService:
                 "duration_sec": self._active_video_duration,
                 "frame_w": self._active_video_frame_w,
                 "frame_h": self._active_video_frame_h,
+                # 분석 완료 신호 — 프론트 게이트가 이 값이 True 일 때만 재생 시작 →
+                # 첫 재생부터 '모든' 키프레임 박스가 일관되게 뜬다(휴리스틱 타임아웃 불완전 재생 방지).
+                "analysis_complete": self._video_analysis_complete,
+                "detection_count": self._video_detection_count,
             }
         return {"kind": "image", "filename": None}
 
@@ -323,13 +331,32 @@ class TestStreamService:
         if os.path.isdir(upload_dir):
             paths = [os.path.join(upload_dir, f) for f in os.listdir(upload_dir)
                      if Path(f).suffix.lower() in ALL_EXTENSIONS]
-            # 최신 업로드 우선(결정적 순서). os.listdir 의 파일시스템 순서 의존 제거 —
-            # 새 영상을 올려도 옛 파일이 index 0 으로 잡혀 재생되던 버그 방지.
+            # 업로드(생성) 순서 오름차순 = 멀티선택으로 올린 순서대로 순차 재생.
+            # os.listdir 의 파일시스템 순서 의존 제거. (옛 파일은 /test/upload 가 clear 로 교체하므로
+            #  오름차순이어도 직전 배치만 남아 '옛 영상 재생' 버그 없음.)
             try:
-                paths.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+                paths.sort(key=lambda p: os.path.getmtime(p))
             except OSError:
                 pass
             self._uploaded_files.extend(paths)
+
+    def advance_to_next_video(self) -> Optional[dict]:
+        """현재 활성 영상 '다음' 업로드 영상으로 전환(순차 재생). 마지막이면 처음으로 wrap
+        (영상 1개뿐이면 그대로 재활성=loop). 업로드 소스/영상 없으면 None.
+        프론트가 <video> ended 시 호출 → /test/active 가 다음 영상으로 갱신됨."""
+        if self._source != "upload":
+            return None
+        videos = [p for p in self._uploaded_files if _is_video(p)]
+        if not videos:
+            return None
+        idx = 0
+        for i, p in enumerate(videos):
+            if os.path.basename(p) == self._active_video_filename:
+                idx = i
+                break
+        nxt = videos[(idx + 1) % len(videos)]
+        self.activate_video_mode(nxt)
+        return self.active_media
 
     def reset_video_state(self) -> None:
         """활성 영상 직접재생 상태 초기화 — 새 업로드/소스전환 시 옛 영상이 active 로 남아
@@ -916,6 +943,8 @@ class TestStreamService:
         self._active_video_duration = duration
         self._active_video_frame_w = w
         self._active_video_frame_h = h
+        self._video_analysis_complete = False    # 새 영상 = 분석 다시 시작
+        self._video_detection_count = 0
         # 이전 task 있으면 취소 후 새 task
         self._cancel_video_inference()
         self._video_inference_task = asyncio.create_task(self._video_inference_loop(filepath))
@@ -982,9 +1011,10 @@ class TestStreamService:
                         continue
                     _last_sig = sig
                     _last_analyzed_t = video_t
-                    # 영상 경로는 tier=2 (M4 thermal U-Net + M6 PatchCore 제외).
-                    # 자기일관성 투표(병렬 N회)로 단발 변동 흡수 → 1회 재생으로도 확실.
-                    dets = await self._detect_all_voted(frame, filepath, tier=2)
+                    # 영상 경로는 tier=2 (M4 thermal U-Net + M6 PatchCore 제외). 단일 검출 —
+                    # 같은 하자가 여러 키프레임에 반복 검출(시간적 합의) + 프론트 dedup(id+ts) +
+                    # 분석완료 후 재생으로 신뢰성 확보. 투표(3x)는 크레딧만 3배라 영상엔 미사용.
+                    dets = await self._detect_all(frame, filepath, tier=2)
                     if dets:
                         # 같은 키프레임의 모든 하자를 동일 timestamp/스냅샷으로 broadcast
                         # → 프론트 DetectionOverlay 가 그 시점에 여러 박스를 동시 표시.
@@ -1001,11 +1031,18 @@ class TestStreamService:
                             det["_video_timestamp_sec"] = video_t
                             det["_frame_w"] = fw
                             det["_frame_h"] = fh
+                            self._video_detection_count += 1
                             asyncio.create_task(self._broadcast_detection(det))
 
                 frame_idx += 1
                 # 이벤트 루프에 양보 — 1 vCPU 환경에서 다른 코루틴(MJPEG placeholder yield 등) 진행 보장
                 await asyncio.sleep(0)
+            # while 정상 종료 = 영상 끝까지 분석 완료. 이 영상이 아직 active 일 때만 완료 신호
+            # (새 영상으로 교체됐으면 그 영상의 분석 상태를 덮어쓰지 않는다).
+            if os.path.basename(filepath) == self._active_video_filename:
+                self._video_analysis_complete = True
+                print(f"[TestStream] 영상 분석 완료: {os.path.basename(filepath)} "
+                      f"(검출 {self._video_detection_count}건)")
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -1520,6 +1557,7 @@ class TestStreamService:
             from app.services.defect_persistence import defect_persistence
             await defect_persistence.save_batch(
                 detections=[{
+                    "defect_db_id": did,           # broadcast id == DB row id → 프론트 검수가 찾음
                     "bbox_xyxy": [bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]],
                     "code": info.get("category_code"),
                     "class_display_ko": info.get("defect_class_display_ko") or info.get("defect_type"),
