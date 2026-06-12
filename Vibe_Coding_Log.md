@@ -3646,3 +3646,14 @@ uploads/gazebo_worlds_real/
 - **VLM stochastic 발견**: gemini 호출에 temperature 미설정(기본~1.0)이라 같은 이미지도 run마다 검출↔미탐 flip. `temperature=0.1` 추가 → 명확 하자는 일관, **경계/미세 하자는 temp 낮춰도 여전히 변동**.
 - **핵심 결론**: 단발 VLM은 경계하자 신뢰 불가 → **멀티 키프레임 + 시간적 합의(FP/FN 4-3)**가 신뢰성의 핵심. taxonomy 갭(몰딩·창틀오염)은 별도 보완 필요.
 - 미반영 활성: GPU VM 재배포 시. 검증: ast OK.
+
+---
+
+## 2026-06-12 — B: 영상 시간적 합의(temporal consensus) — 경계하자 신뢰성 (backend)
+
+- 단발 VLM이 경계하자에서 검출↔미탐 flip 하는 문제 → 영상 키프레임 간 같은 하자(category_code + bbox IoU≥0.3, 8초 내) 추적.
+  - **id 재사용**: 매칭되면 같은 트랙 id → 프론트가 같은 카드 갱신(키프레임마다 중복 카드 양산 제거).
+  - **temporal_count**: 반복 검출 횟수 → 1=단발(노이즈 가능), ≥2=반복(신뢰). broadcast 에 동봉.
+  - _track_video_defect/_bbox_iou 추가, _video_inference_loop 에 트랙 누적. 실패 시 보수적(검출 그대로).
+- 프론트 DefectCard: temporal_count≥2 시 "반복 N회" 신뢰 배지.
+- GPU VM 재배포 시 활성. 검증: ast OK + vite build OK.
