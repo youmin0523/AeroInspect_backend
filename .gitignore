@@ -79,3 +79,12 @@ htmlcov/
 
 # Node 의존성 (실수 커밋 방지 — develop/main 과 동일)
 node_modules/
+
+# 세션 임시 검증/렌더 스크립트·출력·캐시 (커밋 대상 아님)
+/_*.py
+/_*.out
+/_*.pkl
+
+# training 평가·갤러리 생성물 (대용량 산출물, 소스 아님)
+training/_*/
+training/M4v2_artifacts/
