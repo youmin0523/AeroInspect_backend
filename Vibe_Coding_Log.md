@@ -3721,3 +3721,16 @@ uploads/gazebo_worlds_real/
   - ReportPanel '📊 엑셀 양식' 버튼: testDetections+defectStore 합쳐 id 중복제거 후 전송.
 - 검증: 실제 검출 11건으로 샘플 생성(178KB, 상세표·사진 삽입 확인). Desktop/DroneShot/_하자점검_결과보고서_SAMPLE.xlsx.
 - 비고: image_crop DB 컬럼은 deprecated(파일경로 방식) → 엑셀은 프론트 payload 방식으로 우회.
+
+---
+
+## 2026-06-12 (6) — 업로드 영상 교체 버그 + 균열/코킹 진단 (backend)
+
+- 버그: 새 영상 업로드해도 옛 영상이 재생. 원인 = `_scan_uploaded_files` 가 os.listdir(파일시스템 순서)로 읽고 옛 파일 미삭제 + `_active_video_filename` 미리셋.
+  - 수정: 스캔을 mtime 내림차순(최신 우선); reset_video_state() 추가; /test/upload 가 clear+reset 후 새 파일 저장(교체).
+- 진단(사용자 레퍼런스 KakaoTalk_20260612_161600053.mp4 = 조밀한 crack 검출 기대치):
+  - **M1 YOLO 가 균열을 caulking_defect 로 고신뢰(0.56~0.83) 오라벨**. crack 클래스는 0.12~0.23 저신뢰만. → 사용자가 본 '코킹 오탐'의 정체 = 오라벨된 균열.
+  - raw pipeline20·M1 모두 균열에 희소(0~3건). 레퍼런스의 조밀한 crack 95% 는 우리 모델 아님(전용 균열 YOLO 필요).
+  - VLM(gemini-3.1-pro)은 균열 정확하나 holistic/희소(영역당 1~2).
+  - hybrid_detector: VLM-primary ONNX 단독을 클래스차등(crack/structural/rebar 만 유지, 코킹·방수·표면은 폐기). M1 이 균열을 코킹으로 오라벨하므로 이 footage 에선 ONNX 균열 거의 안 남음 → 균열 recall 은 VLM 의존.
+- 결론: 레퍼런스 수준 조밀 균열 = 전용 균열 모델 학습 필요(로드맵). 현 시스템은 VLM 정확검출(희소)이 최선.
