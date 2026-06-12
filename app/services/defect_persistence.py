@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from collections import deque
 from typing import Deque, Dict, List, Optional
 
@@ -145,7 +146,7 @@ class DefectPersistenceService:
         # xyxy → normalized center (xywhn) 변환은 이미지 크기 필요
         # 여기서는 원본 pixel 좌표 저장 (정규화는 프론트엔드에서)
 
-        return {
+        record = {
             "site_id": site_id,
             "area": None,  # taxonomy 매핑은 별도
             "category_code": det.get("code"),
@@ -172,6 +173,15 @@ class DefectPersistenceService:
             "ensemble_boosted": str(det.get("ensemble_boosted", False)).lower() if det.get("ensemble_boosted") else None,
             "raw_payload": det,
         }
+        # 검수 연동: broadcast 검출 id 를 그대로 DB row id 로 사용 → 프론트가 그 id 로
+        # /defects/{id}/review 호출 시 행을 찾을 수 있다. (없으면 모델 default uuid 사용.)
+        _did = det.get("defect_db_id")
+        if _did:
+            try:
+                record["id"] = _did if isinstance(_did, uuid.UUID) else uuid.UUID(str(_did))
+            except (ValueError, AttributeError, TypeError):
+                pass
+        return record
 
 
 # ── 모듈 레벨 싱글톤 ─────────────────────────
