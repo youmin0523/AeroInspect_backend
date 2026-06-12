@@ -3706,3 +3706,18 @@ uploads/gazebo_worlds_real/
   - config: VLM_ENSEMBLE_ENABLED 기본 False(gpt-4o 429/노이즈 제거). 단일 gemini-3.1-pro + 자기일관성 투표로 신뢰도.
 - 실측(gemini-3.1-pro, 수정후): 코킹·걸레받이 ONNX 오탐 이미지 → 0건, 실제 도배들뜸(C-02)·창틀도장(E-02)만 VLM 근거와 함께 남음.
 - ⚠️ 로컬 검증은 env override(VLM_DETECTION_ENABLED=true, VLM_MODEL=gemini-3.1-pro-preview)로 해야 대표성. 로컬 .env 기본 off 는 크레딧 절약용으로 유지.
+
+---
+
+## 2026-06-12 (5) — 엑셀 양식 보고서(이미지 포함) 생성 (backend+frontend)
+
+- 사용자 요구: 기존에 받은 엑셀 양식(하자점검_결과보고서.xlsx)에 이미지와 함께 기입.
+- backend:
+  - app/templates/defect_report_template.xlsx (양식 동봉, 배포 포함).
+  - app/services/excel_report.py: 양식 로드 → 시트1(점검개요+하자상세표 10행) + 시트2(하자 사진 삽입). 매핑: 우리 20종 code→양식 분류코드(A~L), 심각도 HIGH/MED/LOW→등급 C/B/A, code→위치/조치/기한.
+  - POST /report/excel: 프론트가 들고 있는 검출(이미지 base64 포함)을 payload 로 받아 양식 채워 xlsx 반환(DB/노드 무관, GPU/Fly 어디서든 동작). openpyxl(requirements 추가).
+- frontend:
+  - reportsApi.generateExcelReport: POST blob → 다운로드.
+  - ReportPanel '📊 엑셀 양식' 버튼: testDetections+defectStore 합쳐 id 중복제거 후 전송.
+- 검증: 실제 검출 11건으로 샘플 생성(178KB, 상세표·사진 삽입 확인). Desktop/DroneShot/_하자점검_결과보고서_SAMPLE.xlsx.
+- 비고: image_crop DB 컬럼은 deprecated(파일경로 방식) → 엑셀은 프론트 payload 방식으로 우회.

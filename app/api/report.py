@@ -10,10 +10,15 @@
 #       - DELETE /report/{id}     → 보고서 삭제
 # =============================================
 
+from datetime import datetime
+from typing import List, Optional
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse, Response
+from pydantic import BaseModel
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -273,3 +278,53 @@ async def delete_report(
     if not report:
         raise HTTPException(status_code=404, detail="보고서를 찾을 수 없습니다.")
     await db.delete(report)
+
+
+# ── 엑셀 양식 보고서(이미지 포함) ─────────────────────────────
+class ExcelDefect(BaseModel):
+    category_code: Optional[str] = None
+    defect_type: Optional[str] = None
+    severity: Optional[str] = None
+    confidence: Optional[float] = None
+    image_crop: Optional[str] = None          # base64(또는 data URL) — 양식 시트2 사진
+
+
+class ExcelReportRequest(BaseModel):
+    defects: List[ExcelDefect] = []
+    site_name: Optional[str] = ""
+    unit: Optional[str] = ""
+    inspector: Optional[str] = ""
+    inspect_area: Optional[str] = ""
+
+
+@router.post("/excel")
+async def generate_excel_report(
+    request: ExcelReportRequest,
+    org_tuple=Depends(get_current_org_member),
+):
+    """검출 하자 리스트(프론트의 testDetections/defects, 이미지 포함) → 제출용 엑셀 양식.
+
+    DB 가 아니라 요청 payload 로 받는다 — 프론트가 이미 들고 있는 검출+크롭을 그대로
+    양식에 채워 돌려준다(GPU/Fly 노드·image_crop 영속화와 무관하게 동작). 시트1=상세표,
+    시트2=하자 사진. 심각도 내림차순 정렬."""
+    from app.services.excel_report import build_excel_report
+
+    user, member, org = org_tuple
+    defects = [d.model_dump() for d in request.defects]
+    order = {"HIGH": 0, "MED": 1, "LOW": 2}
+    defects.sort(key=lambda x: (order.get((x.get("severity") or "LOW").upper(), 3),
+                                -(x.get("confidence") or 0)))
+    xlsx = await run_in_threadpool(
+        build_excel_report,
+        defects,
+        site_name=request.site_name or org.name,
+        unit=request.unit or "",
+        inspector=request.inspector or getattr(user, "name", "") or "",
+        inspect_area=request.inspect_area or "",
+    )
+    fn = f"하자점검_결과보고서_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return Response(
+        content=xlsx,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fn)}"},
+    )

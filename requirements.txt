@@ -74,3 +74,4 @@ sentry-sdk[fastapi]==2.61.1  # 운영 에러 모니터링 — DSN 미설정 시 
 # ── Test ───────────────────────────────────
 pytest==9.0.3
 pytest-asyncio==1.4.0
+openpyxl==3.1.5
