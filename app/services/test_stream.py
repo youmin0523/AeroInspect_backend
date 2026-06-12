@@ -924,6 +924,7 @@ class TestStreamService:
         kf = max(1.0, float(settings.VLM_KEYFRAME_INTERVAL_SEC))
         sample_interval = max(1, int(round(fps * kf)))
         frame_idx = 0
+        _video_tracks: List[dict] = []   # 시간적 합의용 하자 트랙 [{id, code, bbox, count, last_t}]
 
         try:
             while cap.isOpened():
@@ -951,6 +952,10 @@ class TestStreamService:
                         for det in dets:
                             if not det.get("bbox"):
                                 continue
+                            # 시간적 합의: 키프레임 간 같은 하자(카테고리+IoU) 추적 →
+                            # id 재사용(중복 카드 제거) + temporal_count(반복=신뢰도).
+                            # 단발 VLM 변동(검출↔미탐 flip)을 여러 프레임 누적으로 흡수.
+                            self._track_video_defect(det, video_t, _video_tracks)
                             det["_rgb_snapshot"] = rgb_snap
                             det["_video_timestamp_sec"] = video_t
                             det["_frame_w"] = fw
@@ -968,6 +973,52 @@ class TestStreamService:
             cap.release()
             print(f"[TestStream] 영상 inference 종료: {os.path.basename(filepath)} "
                   f"(샘플 {frame_idx // sample_interval}회)")
+
+    # 시간적 합의 매칭 파라미터
+    _TRACK_IOU = 0.3            # 같은 위치로 볼 IoU 하한
+    _TRACK_MAX_GAP_SEC = 8.0    # 이 시간 넘게 안 보이면 별개 하자(새 트랙)
+
+    @staticmethod
+    def _bbox_iou(a: dict, b: dict) -> float:
+        """bbox dict {x1,y1,x2,y2} IoU."""
+        x1 = max(a["x1"], b["x1"]); y1 = max(a["y1"], b["y1"])
+        x2 = min(a["x2"], b["x2"]); y2 = min(a["y2"], b["y2"])
+        inter = max(0, x2 - x1) * max(0, y2 - y1)
+        if inter <= 0:
+            return 0.0
+        aa = (a["x2"] - a["x1"]) * (a["y2"] - a["y1"])
+        bb = (b["x2"] - b["x1"]) * (b["y2"] - b["y1"])
+        return inter / (aa + bb - inter + 1e-9)
+
+    def _track_video_defect(self, det: dict, video_t: float, tracks: List[dict]) -> None:
+        """키프레임 간 같은 하자(카테고리+IoU)를 추적해 id 재사용 + temporal_count 부여.
+
+        매칭되면: 같은 트랙 id 로 통일(프론트가 같은 카드 갱신 → 중복 제거),
+                  count 증가(여러 프레임에 반복 → 신뢰도↑).
+        새 하자면: 새 트랙(count=1). 단발(count=1)은 노이즈 가능성, 반복(count>=2)은 신뢰.
+        실패해도 검출은 그대로(보수적) — det 에 _temporal_count 만 부여한다.
+        """
+        try:
+            bbox = det.get("bbox")
+            code = (det.get("defect_info") or {}).get("category_code")
+            if not bbox or not code:
+                det["_temporal_count"] = 1
+                return
+            for tr in tracks:
+                if (tr["code"] == code
+                        and (video_t - tr["last_t"]) <= self._TRACK_MAX_GAP_SEC
+                        and self._bbox_iou(bbox, tr["bbox"]) >= self._TRACK_IOU):
+                    tr["count"] += 1
+                    tr["bbox"] = bbox
+                    tr["last_t"] = video_t
+                    det["id"] = tr["id"]              # id 재사용 → 같은 카드 갱신
+                    det["_temporal_count"] = tr["count"]
+                    return
+            tracks.append({"id": det["id"], "code": code, "bbox": bbox,
+                           "count": 1, "last_t": video_t})
+            det["_temporal_count"] = 1
+        except Exception:
+            det["_temporal_count"] = 1
 
     # ── 이미지 detection 백그라운드 실행 + 브로드캐스트 ────────
     async def _detect_and_broadcast_image(
@@ -1324,6 +1375,9 @@ class TestStreamService:
             "onnx_conf": detection.get("onnx_conf"),
             "vlm_conf": detection.get("vlm_conf"),
             "agreement": detection.get("agreement"),
+            # 시간적 합의(4-3) — 영상에서 같은 하자가 몇 키프레임에 반복됐는지.
+            # 1=단발(노이즈 가능), >=2=반복 검출(신뢰). 프론트가 신뢰도 표기/필터에 사용.
+            "temporal_count": detection.get("_temporal_count", 1),
         }
         # 영상 직접재생 모드일 때만 채워지는 동기화용 메타.
         # 프론트 <video>.currentTime ↔ video_timestamp_sec 비교로 SVG 오버레이 동기화.
