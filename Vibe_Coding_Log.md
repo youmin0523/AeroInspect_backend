@@ -3657,3 +3657,67 @@ uploads/gazebo_worlds_real/
   - _track_video_defect/_bbox_iou 추가, _video_inference_loop 에 트랙 누적. 실패 시 보수적(검출 그대로).
 - 프론트 DefectCard: temporal_count≥2 시 "반복 N회" 신뢰 배지.
 - GPU VM 재배포 시 활성. 검증: ast OK + vite build OK.
+
+---
+
+## 2026-06-12 — 영상 검출: 장면전환 선별 + 자기일관성 투표 (긴 영상 현실화) (backend)
+
+- 긴 영상(20분 등)에서 1~2회 재생으로 확실한 검출:
+  - **장면전환 선별**: 1.5s마다 32x32 grayscale MAD로 화면 변화 감지 → 같은 화면 반복 분석 스킵(정적이면 max_gap=kf마다 1회). 긴 영상 VLM 호출 폭증 방지.
+  - **자기일관성 투표(_detect_all_voted)**: 분석 프레임마다 검출 N(3)회 '병렬' 호출 → 카테고리+IoU 클러스터 다수결. 과반 검출 OR 고신뢰(0.8+) 채택. VLM 단발 변동을 프레임당 흡수(영상 길이 무관, 병렬이라 ~1회 시간).
+  - broadcast 에 vote_count 동봉. 시간적 합의(B)와 병행 → 프레임내 투표 + 프레임간 합의 이중 안정화.
+- 검증: ast OK + 로컬 실행(장면전환 스킵·vote_count 동작 확인).
+
+---
+
+## 2026-06-12 (2) — 투표 필터 강화 + 테이프 무시 강화 (backend)
+
+- 로컬 렌더 검증 중 과다검출 발견(한 프레임 15건, 같은 코드 반복) → 투표가 union 처럼 동작.
+  - 원인: conf>=0.8 단발 전부 통과(ONNX 과신뢰 노이즈 홍수) + IoU 0.5 라 같은 하자 박스 변동이 안 합쳐져 단발로 흩어짐.
+  - 수정: 과반(2/3) 득표 필수, 단발은 conf>=0.90 만 예외. VOTE_IOU 0.5→0.3(박스 변동 합쳐 표 누적). (득표수,conf) 정렬 후 프레임당 8건 상한.
+  - 실측: 15건 → 7건(대부분 2~3표 재현분).
+- 테이프: inpaint(모자이크) 폐기 — 이미지에 테이프 그대로 둠. 대신 프롬프트 강화:
+  초록/형광 테이프 명시 + "테이프 있다고 거기 하자 있는 건 아니다, 표면 독립 판단, 테이프 없는 부위도 동일 기준" → 테이프 끌림 거짓양성 차단.
+
+---
+
+## 2026-06-12 (3) — 검출 → 보고서 연동: 업로드 검출을 defect_logs DB 저장 (backend)
+
+- 검증 결과: 보고서 기계(API·LLM·프론트 버튼)는 동작하나, **업로드 검출(test_stream)이 DB에 저장 안 돼** 보고서에 안 들어감(WS broadcast 만 함). 보고서는 defect_logs(DB)를 읽음.
+- 구현:
+  - test_stream `_broadcast_detection` 끝에서 `_persist_detection` → `defect_persistence.save_batch(site_id)`. 트랙 id 로 중복 제거(영상 같은 하자 1회만). '본 카드 = 보고서 등재'.
+  - `/test/start` 에서 로그인 사용자 org → 최신 site 해석(없으면 생성) → `set_site_id`. 실패해도 스트림은 계속(보고서 미연동만, start 안 깨짐).
+  - 이미지 경로도 `_detect_all_voted`(투표)로 통일.
+  - defect_source 는 enum(yolo_thermal|yolo_delam|wallpaper) — 하이브리드/VLM source(onnx+vlm·vlm·test_mock)는 무효라 None 으로 넣고 실제 source 는 raw_payload(detection_source)에 보존. (워킹 VLM 경로의 동일한 조용한 enum 실패도 우회.)
+- 검증: 로컬 DB 실제 save_batch=1 성공(테스트 행 정리). 배선/모델 정합 OK.
+- ⚠️ 배포 전제: test_stream 이 GPU VM 프록시 실행 시 GPU VM 에 DATABASE_URL(=Fly 동일 DB) 필요. 아니면 save_batch 가 버퍼 폴백되어 보고서 미반영.
+
+---
+
+## 2026-06-12 (4) — 검출 "중구난방" 근본수정: VLM-primary 에서 ONNX 단독 오탐 폐기 (backend)
+
+- 사용자 지적: 이미지 검출이 중구난방(코킹 필요없는데 코킹불량, 안 보이는 방수 들뜸, bbox 부정확).
+- 진단(로컬 실측):
+  - 로컬 .env VLM_DETECTION_ENABLED=False → 검출이 ONNX 단독이었음(VLM off). ONNX 는 코킹·걸레받이·방수를 conf 1.0 으로 남발(문서화된 약점) = 중구난방. (프로덕션 GPU 는 VLM on.)
+  - VLM 켜도 _merge_vlm_primary 가 'ONNX 단독(VLM 미검출)' 후보를 REVIEW 로 그대로 출력(line 354~). VLM 이 프레임 전체를 보고도 안 잡은 걸 ONNX 가 우김.
+  - 앙상블 기본값 "gemini-flash+gpt-4o" → gpt-4o TPM 429 빈발(앙상블 무력화) + gpt-4o 가 건설결함 오탐 추가.
+- 수정:
+  - hybrid_detector._merge_vlm_primary: VLM_PRIMARY_KEEP_ONNX_ONLY=False(기본)면 ONNX 단독 후보 폐기 → VLM 권위 우선(정확도). True 로 과거 동작 복원 가능.
+  - config: VLM_ENSEMBLE_ENABLED 기본 False(gpt-4o 429/노이즈 제거). 단일 gemini-3.1-pro + 자기일관성 투표로 신뢰도.
+- 실측(gemini-3.1-pro, 수정후): 코킹·걸레받이 ONNX 오탐 이미지 → 0건, 실제 도배들뜸(C-02)·창틀도장(E-02)만 VLM 근거와 함께 남음.
+- ⚠️ 로컬 검증은 env override(VLM_DETECTION_ENABLED=true, VLM_MODEL=gemini-3.1-pro-preview)로 해야 대표성. 로컬 .env 기본 off 는 크레딧 절약용으로 유지.
+
+---
+
+## 2026-06-12 (5) — 엑셀 양식 보고서(이미지 포함) 생성 (backend+frontend)
+
+- 사용자 요구: 기존에 받은 엑셀 양식(하자점검_결과보고서.xlsx)에 이미지와 함께 기입.
+- backend:
+  - app/templates/defect_report_template.xlsx (양식 동봉, 배포 포함).
+  - app/services/excel_report.py: 양식 로드 → 시트1(점검개요+하자상세표 10행) + 시트2(하자 사진 삽입). 매핑: 우리 20종 code→양식 분류코드(A~L), 심각도 HIGH/MED/LOW→등급 C/B/A, code→위치/조치/기한.
+  - POST /report/excel: 프론트가 들고 있는 검출(이미지 base64 포함)을 payload 로 받아 양식 채워 xlsx 반환(DB/노드 무관, GPU/Fly 어디서든 동작). openpyxl(requirements 추가).
+- frontend:
+  - reportsApi.generateExcelReport: POST blob → 다운로드.
+  - ReportPanel '📊 엑셀 양식' 버튼: testDetections+defectStore 합쳐 id 중복제거 후 전송.
+- 검증: 실제 검출 11건으로 샘플 생성(178KB, 상세표·사진 삽입 확인). Desktop/DroneShot/_하자점검_결과보고서_SAMPLE.xlsx.
+- 비고: image_crop DB 컬럼은 deprecated(파일경로 방식) → 엑셀은 프론트 payload 방식으로 우회.

@@ -22,9 +22,12 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
 from app.dependencies import (
     get_current_user,
+    get_db,
     get_rgb_camera,
     get_thermal_camera,
     get_ws_manager,
@@ -324,8 +327,42 @@ async def warmup_test_mode(_user=Depends(get_current_user)):
     return test_stream_service.models_status
 
 
+async def _resolve_and_set_site(user, db: AsyncSession) -> None:
+    """로그인 사용자의 org → site 를 해석해 test_stream 에 설정(보고서 연동).
+    검출이 그 site 로 defect_logs 에 저장되어 보고서(/report)에 잡히도록 한다.
+    org/site 가 없거나 DB 오류여도 스트림은 계속(site_id=None 으로 둠) — 절대 start 를 깨지 않음."""
+    from sqlalchemy import select, desc
+    from app.models.organization import OrganizationMember
+    from app.models.site import Site
+    from app.services.test_stream import test_stream_service
+
+    mres = await db.execute(
+        select(OrganizationMember)
+        .where(OrganizationMember.user_id == user.id,
+               OrganizationMember.status == "active")
+        .limit(1)
+    )
+    member = mres.scalar_one_or_none()
+    if not member:
+        test_stream_service.set_site_id(None)
+        return
+    org_id = member.organization_id
+    sres = await db.execute(
+        select(Site).where(Site.organization_id == org_id)
+        .order_by(desc(Site.created_at)).limit(1)
+    )
+    site = sres.scalar_one_or_none()
+    if site is None:
+        # site 가 하나도 없으면 보고서 연동용 기본 site 생성
+        site = Site(name="AeroInspect 테스트 점검", organization_id=org_id, created_by=user.id)
+        db.add(site)
+        await db.commit()
+        await db.refresh(site)
+    test_stream_service.set_site_id(site.id)
+
+
 @router.post("/test/start")
-async def start_test_mode(_user=Depends(get_current_user)):
+async def start_test_mode(_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """테스트 모드 초기화 + 재생 시작.
     모델 로드는 백그라운드 태스크로 분리 — Fly.io 콜드 스타트 시 11개 ONNX 로드가
     10~20초 걸려 `await` 동기 대기하면 frontend `<img>` 가 first-boundary 오기 전
@@ -344,11 +381,18 @@ async def start_test_mode(_user=Depends(get_current_user)):
     # (사전 warmup 으로 이미 로딩 중이면 _models_loading 가드로 to_thread 중복 로드도 방지.)
     if not test_stream_service._models_loaded and not test_stream_service._models_loading:
         asyncio.create_task(test_stream_service.load_models())
+    # 보고서 연동: 검출을 사용자 org 의 site 로 DB 저장하도록 site_id 설정.
+    # 실패해도 스트림은 계속(보고서 미연동만) — start 를 절대 막지 않는다.
+    try:
+        await _resolve_and_set_site(_user, db)
+    except Exception as e:
+        print(f"[test/start] site 해석 실패(검출 계속, 보고서 미연동): {e}")
     test_stream_service.start_playback()
     return {
         "status": "playing",
         "play_state": test_stream_service.play_state,
         "models_loaded": test_stream_service._models_loaded,
+        "site_bound": test_stream_service._site_id is not None,
     }
 
 

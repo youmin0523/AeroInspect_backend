@@ -351,7 +351,12 @@ class HybridDetector:
             if det is not None:
                 out.append(det)
 
-        # ONNX 단독(VLM 미검출) → REVIEW (ONNX recall 약점 보완 차원에서 폐기 않음)
+        # ONNX 단독(VLM 미검출) 처리.
+        # 기본(KEEP_ONNX_ONLY=False): 폐기 — VLM 이 프레임 전체를 보고도 안 잡은 걸 ONNX 가
+        #   우기는 건 대부분 오탐(코킹·방수·걸레받이 conf 1.0 남발 = '중구난방'). VLM 권위 우선.
+        # True: ONNX recall 보완 차원에서 REVIEW 로 유지(과거 동작).
+        if not settings.VLM_PRIMARY_KEEP_ONNX_ONLY:
+            return out
         for i, oc in enumerate(onnx_cands):
             if i in used_onnx:
                 continue

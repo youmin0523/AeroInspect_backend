@@ -146,6 +146,16 @@ class TestStreamService:
         # 프레임당 동시 표시할 최대 검출 수 — 여러 하자를 한 번에 표시하되,
         # 화면 박스 혼잡/카드 폭주를 막기 위한 상한 (신뢰도 내림차순 상위 N).
         self._MAX_DEFECTS_PER_FRAME: int = 8
+        # 보고서 연동 — 검출을 defect_logs DB 에 저장할 때 쓰는 site_id(세션 시작 시 설정).
+        # None 이면 site 미해석(저장은 되지만 org-site 조인 보고서엔 안 잡힘).
+        self._site_id: Optional[str] = None
+        # 영속화 중복 제거 — 같은 검출 id(영상은 트랙 id 재사용) 1회만 저장.
+        self._persisted_ids: set = set()
+
+    def set_site_id(self, site_id) -> None:
+        """보고서 연동용 site_id 설정 — 이후 검출이 이 site 로 DB 저장된다(세션 단위 갱신)."""
+        self._site_id = str(site_id) if site_id else None
+        self._persisted_ids.clear()   # 새 세션 = 중복필터 초기화(이전 세션 id 와 무관)
 
     # ── 재생 제어 ────────────────────────────
     @property
@@ -922,9 +932,13 @@ class TestStreamService:
         # (Live _vlm_keyframe_loop 와 동일 정책 — 영상 프레임 폭주로 VLM 일일상한/동시성 소진 방지.
         #  과거 fps/3(초당 3회)면 VLM 경로에서 즉시 쿼터 고갈.)
         kf = max(1.0, float(settings.VLM_KEYFRAME_INTERVAL_SEC))
-        sample_interval = max(1, int(round(fps * kf)))
+        # 장면전환 체크는 더 촘촘히(1.5s) — 장면이 바뀌면 즉시 분석, 정적이면 max_gap(kf)마다 1회.
+        check_interval = max(1, int(round(fps * 1.5)))
+        max_gap_sec = kf
         frame_idx = 0
         _video_tracks: List[dict] = []   # 시간적 합의용 하자 트랙 [{id, code, bbox, count, last_t}]
+        _last_sig = None                 # 장면전환 비교용 32x32 grayscale
+        _last_analyzed_t = -1e9
 
         try:
             while cap.isOpened():
@@ -938,12 +952,22 @@ class TestStreamService:
                 if not ret:
                     break
 
-                if frame_idx % sample_interval == 0:
+                if frame_idx % check_interval == 0:
                     video_t = frame_idx / fps if fps > 0 else 0.0
+                    # 장면전환 선별 — 같은 화면 반복 분석 방지(긴 영상 비용 절감).
+                    # 화면이 충분히 바뀌었거나(scene change), 안 바뀌어도 max_gap 경과 시 1회 분석.
+                    sig = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (32, 32)).astype(np.int16)
+                    changed = (_last_sig is None
+                               or float(np.abs(sig - _last_sig).mean()) >= self._SCENE_CHANGE_MAD)
+                    if not (changed or (video_t - _last_analyzed_t) >= max_gap_sec):
+                        frame_idx += 1
+                        await asyncio.sleep(0)
+                        continue
+                    _last_sig = sig
+                    _last_analyzed_t = video_t
                     # 영상 경로는 tier=2 (M4 thermal U-Net + M6 PatchCore 제외).
-                    # RGB 영상에 thermal 추론은 무의미하고 PatchCore는 무거워 60fps 동반 inference 시
-                    # 1 vCPU 결정적 병목. 핵심 RGB 결함(M1/M2/M3/M5)만 충분히 잡힌다.
-                    dets = await self._detect_all(frame, filepath, tier=2)
+                    # 자기일관성 투표(병렬 N회)로 단발 변동 흡수 → 1회 재생으로도 확실.
+                    dets = await self._detect_all_voted(frame, filepath, tier=2)
                     if dets:
                         # 같은 키프레임의 모든 하자를 동일 timestamp/스냅샷으로 broadcast
                         # → 프론트 DetectionOverlay 가 그 시점에 여러 박스를 동시 표시.
@@ -971,8 +995,7 @@ class TestStreamService:
             print(f"[TestStream] 영상 inference 오류: {e}")
         finally:
             cap.release()
-            print(f"[TestStream] 영상 inference 종료: {os.path.basename(filepath)} "
-                  f"(샘플 {frame_idx // sample_interval}회)")
+            print(f"[TestStream] 영상 inference 종료: {os.path.basename(filepath)}")
 
     # 시간적 합의 매칭 파라미터
     _TRACK_IOU = 0.3            # 같은 위치로 볼 IoU 하한
@@ -1020,6 +1043,68 @@ class TestStreamService:
         except Exception:
             det["_temporal_count"] = 1
 
+    # 자기일관성 투표 파라미터
+    _SELF_CONSISTENCY_VOTES = 3   # 같은 프레임 N회 병렬 검출 → 다수결(VLM 단발 변동 흡수)
+    _VOTE_IOU = 0.3               # 투표 클러스터 매칭 IoU(같은 하자의 박스 변동까지 합쳐 표 누적)
+    _VOTE_SINGLE_CONF = 0.90      # 단발(1표)이라도 채택할 고신뢰 하한(엄격 — 노이즈 차단)
+    _SCENE_CHANGE_MAD = 9.0       # 장면전환 판정 임계(32x32 grayscale MAD)
+
+    async def _detect_all_voted(self, frame: np.ndarray, filepath: str, tier: int = 2) -> List[dict]:
+        """자기일관성(self-consistency) 투표 — 같은 프레임에 검출을 N회 '병렬' 호출 후 다수결.
+
+        VLM 단발 변동(검출↔미탐 flip)을 한 프레임 안에서 흡수 → 1회 재생으로도 확실.
+        병렬 호출이라 영상 길이/프레임 수와 무관하게 프레임당 ~1회 호출 시간만 든다.
+        투표는 '필터'다: 실제 하자는 temp 낮아도 여러 run 에 반복 → 과반(2/3) 득표.
+        단발(1표)은 stochastic 노이즈로 보고 기각(단, conf>=0.90 초고신뢰만 예외).
+        같은 하자의 박스가 run 마다 조금 달라도 IoU 0.3 으로 합쳐 표를 누적한다.
+        채택분은 (득표수, conf) 내림차순 상위 _MAX_DEFECTS_PER_FRAME 건으로 제한(혼잡 방지).
+        """
+        votes = max(1, int(self._SELF_CONSISTENCY_VOTES))
+        results = await asyncio.gather(
+            *[self._detect_all(frame, filepath, tier=tier) for _ in range(votes)],
+            return_exceptions=True,
+        )
+        runs = [r for r in results if isinstance(r, list)]
+        if not runs:
+            return []
+        if len(runs) == 1:
+            for d in runs[0]:
+                d["_vote_count"] = 1
+            return runs[0][: self._MAX_DEFECTS_PER_FRAME]
+        clusters: List[dict] = []   # {code, rep, runs:set}
+        for ri, run in enumerate(runs):
+            for d in run:
+                if not d.get("bbox"):
+                    continue
+                code = (d.get("defect_info") or {}).get("category_code")
+                b = d["bbox"]
+                matched = None
+                best_iou = self._VOTE_IOU
+                for c in clusters:                     # 같은 코드 중 IoU 최대 클러스터에 합류
+                    if c["code"] != code:
+                        continue
+                    iou = self._bbox_iou(b, c["rep"]["bbox"])
+                    if iou >= best_iou:
+                        best_iou = iou; matched = c
+                if matched:
+                    matched["runs"].add(ri)
+                    if d.get("confidence", 0) > matched["rep"].get("confidence", 0):
+                        matched["rep"] = d
+                else:
+                    clusters.append({"code": code, "rep": d, "runs": {ri}})
+        majority = (len(runs) // 2) + 1
+        out = []
+        for c in clusters:
+            vc = len(c["runs"])
+            rep = c["rep"]
+            # 과반 득표 = 신뢰(채택). 1표라도 초고신뢰(>=0.90)면 안전상 채택, 그 외 단발은 기각.
+            if vc >= majority or rep.get("confidence", 0) >= self._VOTE_SINGLE_CONF:
+                rep["_vote_count"] = vc
+                out.append(rep)
+        # (득표수, conf) 내림차순 → 프레임당 상한(혼잡 방지)
+        out.sort(key=lambda d: (d.get("_vote_count", 1), d.get("confidence", 0)), reverse=True)
+        return out[: self._MAX_DEFECTS_PER_FRAME]
+
     # ── 이미지 detection 백그라운드 실행 + 브로드캐스트 ────────
     async def _detect_and_broadcast_image(
         self,
@@ -1037,8 +1122,9 @@ class TestStreamService:
         어긋나는 드리프트를 방지(store_defect_frame 으로 클릭 뷰가 정확한 프레임을 보여주도록)."""
         try:
             try:
+                # 이미지도 자기일관성 투표 — 단발 VLM 변동 흡수(영상 경로와 동일 신뢰도).
                 detections = await asyncio.wait_for(
-                    self._detect_all(frame, filepath),
+                    self._detect_all_voted(frame, filepath, tier=3),
                     timeout=settings.TEST_DETECT_TIMEOUT_SEC,
                 )
             except asyncio.TimeoutError:
@@ -1378,6 +1464,8 @@ class TestStreamService:
             # 시간적 합의(4-3) — 영상에서 같은 하자가 몇 키프레임에 반복됐는지.
             # 1=단발(노이즈 가능), >=2=반복 검출(신뢰). 프론트가 신뢰도 표기/필터에 사용.
             "temporal_count": detection.get("_temporal_count", 1),
+            # 자기일관성 투표 — 같은 프레임 N회 호출 중 몇 번 검출됐는지(과반=신뢰).
+            "vote_count": detection.get("_vote_count", 1),
         }
         # 영상 직접재생 모드일 때만 채워지는 동기화용 메타.
         # 프론트 <video>.currentTime ↔ video_timestamp_sec 비교로 SVG 오버레이 동기화.
@@ -1387,6 +1475,51 @@ class TestStreamService:
             data["frame_w"] = detection["_frame_w"]
             data["frame_h"] = detection["_frame_h"]
         await ws_manager.broadcast("defects", {"type": "defect.new", "data": data})
+
+        # ── 보고서 연동: 검출을 defect_logs DB 에 영속화(중복 제거) ──────
+        # WS broadcast 만으로는 프론트 임시 store 에만 쌓여 보고서(/report = DB 조회)에 안 들어감.
+        # '사용자가 본 카드 = 보고서 등재'가 되도록 broadcast 되는 검출을 DB 에 저장한다.
+        # 영상은 _track_video_defect 가 트랙 id 를 재사용 → 같은 하자는 1회만 저장.
+        await self._persist_detection(detection, info)
+
+    async def _persist_detection(self, detection: dict, info: dict) -> None:
+        """검출 1건을 defect_logs 에 저장(보고서 연동). site_id 미설정/DB 실패에도
+        스트림을 절대 깨지 않는다(전부 try/except + 보수적 스킵)."""
+        try:
+            did = detection.get("id")
+            bbox = detection.get("bbox") or {}
+            if not did or did in self._persisted_ids:
+                return
+            if not all(k in bbox for k in ("x1", "y1", "x2", "y2")):
+                return
+            self._persisted_ids.add(did)
+            if len(self._persisted_ids) > 5000:        # 메모리 가드(장시간 세션)
+                self._persisted_ids.clear()
+                self._persisted_ids.add(did)
+            # defect_source 는 enum(yolo_thermal|yolo_delam|wallpaper) — 하이브리드/VLM source
+            # (onnx+vlm·vlm·test_mock)는 무효라 None 으로 넣고, 실제 source 는 raw_payload 에 보존.
+            raw_src = detection.get("source")
+            valid_src = raw_src if raw_src in ("yolo_thermal", "yolo_delam", "wallpaper") else None
+            from app.services.defect_persistence import defect_persistence
+            await defect_persistence.save_batch(
+                detections=[{
+                    "bbox_xyxy": [bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]],
+                    "code": info.get("category_code"),
+                    "class_display_ko": info.get("defect_class_display_ko") or info.get("defect_type"),
+                    "defect_source": valid_src,
+                    "detection_source": raw_src,   # 실제 source(감사용) → raw_payload 에 보존
+                    "class": info.get("defect_class", "unknown"),
+                    "class_display_en": info.get("defect_class_display_en", ""),
+                    "severity": detection.get("severity", "LOW"),
+                    "conf": detection.get("confidence", 0.0),
+                    "accumulated_conf": detection.get("_vote_count"),
+                }],
+                frame_id=self._frame_counter,
+                tier=0,                       # 테스트/하이브리드 검출
+                site_id=self._site_id,
+            )
+        except Exception as e:
+            print(f"[TestStream] DB 저장 스킵(스트림 계속): {e}")
 
     # ── 라이브 오버레이 (numpy 프레임에 직접 그리기) ────────
     def _apply_live_overlay(
