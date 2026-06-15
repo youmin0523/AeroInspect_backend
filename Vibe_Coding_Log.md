@@ -3762,3 +3762,14 @@ uploads/gazebo_worlds_real/
 - 문제: GPU VM 월 누적 사용량이 Fly 재배포/재시작마다 0으로 리셋(인메모리 트래커라 휘발). 오늘 Fly 여러 번 배포 → 누적 무의미.
 - 수정: gpu_usage.py 를 DB 영속(gpu_usage 단일 행 id=1)으로 재작성. 첫 사용 시 CREATE TABLE IF NOT EXISTS 자체 부트스트랩(운영 create_all 스킵·마이그레이션 없이). 모든 메서드 async, KST 월 롤오버 유지. admin_gpu 엔드포인트가 await + DB 오류 시 GPU 제어 안 막게 try/except.
 - 검증: 로컬 — 새 트래커 인스턴스(재배포 시뮬)가 DB 누적 보존 확인, start/stop 누적 정상.
+
+
+---
+
+## 2026-06-15 — 의사색 열화상 단열 스크리닝 + 업로드 영상 채널 자동판별 (backend)
+
+- 업로드 영상 프레임 색(채도+초록우세비율)으로 thermal/rgb 자동 판별 → active_media.channel 노출, 검출 source_channel=thermal 로 Drone2 라우팅. (_classify_video_thermal, activate_video_mode)
+- thermal_pseudo.py(신규): FLIR iron 팔레트 LUT 역매핑 → 멀티스케일 DoG 점검출(점형 열교/결로) + 영역 냉각패치 + 방향성 band(코너). 고온원 마진·배경 halo 중성화·FLIR UI 로고 오탐 억제.
+- 의사색 단열 스크리닝을 ONNX 모델 게이트와 분리(순수 cv2) — 모델 미로드여도 동작. thermal.screening WS 이벤트로 broadcast 하되 보고서 DB(defect_logs) 미적재(Drone2 오버레이 전용, _broadcast_thermal_screening).
+- 코너 열교(얇고 약한 세로 띠)는 휴리스틱 한계로 과소검출 — band 검출기는 강한 띠만 보수적으로.
+- 검증: 채널판별 자체테스트, 런타임 E2E(스크리닝 broadcast), 실서버 HTTP+WS E2E PASS.
