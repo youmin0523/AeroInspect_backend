@@ -27,6 +27,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import settings
+from app.services.thermal_pseudo import detect_pseudocolor_anomalies
 
 # ── 한글 폰트 로드 (Windows: Malgun Gothic, 폴백: PIL 기본) ──
 _FONT_CACHE: Dict[int, ImageFont.FreeTypeFont] = {}
@@ -56,6 +57,15 @@ def _get_font(size: int = 16) -> ImageFont.FreeTypeFont:
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
 ALL_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
+
+# ── 열화상(FLIR 의사색) 자동 판별 임계값 ──────────────────────────────
+# 업로드 영상의 프레임 색 분포로 RGB vs 열화상(=Drone2)을 구분한다. 절대 판별이 아닌
+# 휴리스틱 — FLIR iron/rainbow 의사색은 (1) 채도가 매우 높고, (2) 자연 RGB 와 달리
+# '초록이 가장 밝은 채널'인 픽셀이 거의 없다(식생/자연광 부재). 두 신호를 AND.
+# 오분류 시 아래 값만 튜닝하면 됨.
+_THERMAL_SAT_MIN = 90          # 평균 채도(HSV S, 0-255) 하한
+_THERMAL_GREEN_DOM_MAX = 0.06  # '초록 우세' 픽셀 비율 상한 (의사색은 ~0)
+_THERMAL_SAMPLE_FRAMES = 12    # 판별에 쓸 균등 샘플 프레임 수
 
 # 테스트 이미지 디렉토리명 → 하자 카테고리 매핑 (목업 생성용)
 _DIR_TO_DEFECT = {
@@ -124,6 +134,9 @@ class TestStreamService:
         self._active_video_duration: float = 0.0
         self._active_video_frame_w: int = 0
         self._active_video_frame_h: int = 0
+        # 업로드 영상이 열화상(FLIR 의사색)인지 — 프레임 색 자동 판별 결과.
+        # True 면 프론트가 Drone2(thermal 피드)로 노출하고, 검출 source_channel 도 'thermal'.
+        self._active_video_is_thermal: bool = False
         self._video_inference_task: Optional[asyncio.Task] = None
         # 분석 완료 신호 — activate 시 False, inference loop 끝나면 True. 프론트 게이트가 이걸로
         # '완전 분석 후 재생'을 보장(불완전 재생→재생마다 박스 들쭉날쭉 방지).
@@ -212,6 +225,9 @@ class TestStreamService:
                 "duration_sec": self._active_video_duration,
                 "frame_w": self._active_video_frame_w,
                 "frame_h": self._active_video_frame_h,
+                # 영상 채널 — 프레임 색 자동 판별 결과. 'thermal'이면 프론트가 Drone2 피드로
+                # 재생(rgb 이면 Drone1). 검출 source_channel 과 일치시켜 인스펙션 뷰도 같은 드론에.
+                "channel": "thermal" if self._active_video_is_thermal else "rgb",
                 # 분석 완료 신호 — 프론트 게이트가 이 값이 True 일 때만 재생 시작 →
                 # 첫 재생부터 '모든' 키프레임 박스가 일관되게 뜬다(휴리스틱 타임아웃 불완전 재생 방지).
                 "analysis_complete": self._video_analysis_complete,
@@ -225,6 +241,7 @@ class TestStreamService:
         self._active_video_duration = 0.0
         self._active_video_frame_w = 0
         self._active_video_frame_h = 0
+        self._active_video_is_thermal = False
 
     def _cancel_video_inference(self) -> None:
         task = self._video_inference_task
@@ -367,6 +384,7 @@ class TestStreamService:
         self._active_video_duration = 0.0
         self._active_video_frame_w = 0
         self._active_video_frame_h = 0
+        self._active_video_is_thermal = False
         self._upload_index = 0
 
     # ── 모델 로드 ────────────────────────────
@@ -929,6 +947,49 @@ class TestStreamService:
         finally:
             cap.release()
 
+    def _classify_video_thermal(self, filepath: str) -> bool:
+        """업로드 영상의 프레임 색 분포로 FLIR 의사색(열화상) 여부를 추정.
+        - iron/rainbow 의사색: 채도 매우 높음 + '초록 우세' 픽셀이 거의 없음(자연광/식생 부재).
+        - 자연 RGB: 채도가 낮거나, 초록 우세 픽셀이 일정 비율 존재.
+        균등 샘플 프레임의 평균값으로 AND 판정. 실패/판별불가 시 False(=rgb) 폴백.
+        임계값은 모듈 상단 _THERMAL_* 상수."""
+        cap = cv2.VideoCapture(filepath)
+        if not cap.isOpened():
+            cap.release()
+            return False
+        try:
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            n = _THERMAL_SAMPLE_FRAMES
+            idxs = ([int(total * i / (n + 1)) for i in range(1, n + 1)]
+                    if total > 0 else list(range(n)))
+            sats: List[float] = []
+            green_fracs: List[float] = []
+            for fi in idxs:
+                if total > 0:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, fi)
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    continue
+                small = cv2.resize(frame, (128, 128))
+                sats.append(float(cv2.cvtColor(small, cv2.COLOR_BGR2HSV)[..., 1].mean()))
+                b = small[..., 0].astype(np.int16)
+                g = small[..., 1].astype(np.int16)
+                r = small[..., 2].astype(np.int16)
+                # 초록이 가장 밝은 채널인 픽셀(여유 8) — 자연 RGB 의 식생/벽 등. 의사색 iron 엔 거의 없음.
+                green_dom = (g > r + 8) & (g > b + 8)
+                green_fracs.append(float(green_dom.mean()))
+            if not sats:
+                return False
+            sat_mean = sum(sats) / len(sats)
+            green_frac = sum(green_fracs) / len(green_fracs)
+            is_thermal = (sat_mean >= _THERMAL_SAT_MIN and green_frac <= _THERMAL_GREEN_DOM_MAX)
+            print(f"[TestStream] 열화상 판별 {os.path.basename(filepath)}: "
+                  f"sat={sat_mean:.0f}(≥{_THERMAL_SAT_MIN}) green={green_frac:.3f}(≤{_THERMAL_GREEN_DOM_MAX}) "
+                  f"→ {'THERMAL(Drone2)' if is_thermal else 'rgb(Drone1)'}")
+            return is_thermal
+        finally:
+            cap.release()
+
     def activate_video_mode(self, filepath: str) -> bool:
         """업로드 영상 1개를 직접재생 모드로 전환. 메타 set + background inference task 발사.
         프론트가 /test/active 폴링/WS 으로 받아 <video> 로 직접 재생. 백엔드는 더 이상
@@ -943,13 +1004,16 @@ class TestStreamService:
         self._active_video_duration = duration
         self._active_video_frame_w = w
         self._active_video_frame_h = h
+        # 프레임 색 자동 판별 → 열화상이면 프론트가 Drone2 로 노출(+검출 채널 thermal).
+        self._active_video_is_thermal = self._classify_video_thermal(filepath)
         self._video_analysis_complete = False    # 새 영상 = 분석 다시 시작
         self._video_detection_count = 0
         # 이전 task 있으면 취소 후 새 task
         self._cancel_video_inference()
         self._video_inference_task = asyncio.create_task(self._video_inference_loop(filepath))
         print(f"[TestStream] 영상 직접재생 모드 진입: {self._active_video_filename} "
-              f"({fps:.1f}fps, {duration:.1f}s, {w}x{h})")
+              f"({fps:.1f}fps, {duration:.1f}s, {w}x{h}, "
+              f"채널={'thermal/Drone2' if self._active_video_is_thermal else 'rgb/Drone1'})")
         return True
 
     async def _video_inference_loop(self, filepath: str) -> None:
@@ -960,11 +1024,15 @@ class TestStreamService:
         # 콜드 스타트 시 모델 로드(10~20초)가 끝나기 전에 영상이 activate 될 수 있다.
         # 과거: 여기서 즉시 return → 영상은 재생되는데 검출이 영영 안 떠서 "로딩인지
         # 오류인지" 분간 안 되는 사고. 이제 로드 완료를 기다렸다가 추론을 시작한다.
+        # 단, 열화상 의사색 스크리닝은 ONNX 모델이 필요 없는 순수 cv2 경로이므로,
+        # 모델 게이트에 묶지 않는다 — 모델 미로드여도 스크리닝은 즉시 시작하고,
+        # 본 검출(_detect_all)만 모델 로드 후(루프 내 재확인) 수행한다.
         waited = 0.0
-        while not self._models_loaded and self._playing and waited < 30.0:
+        while (not self._models_loaded and self._playing and waited < 30.0
+               and not self._active_video_is_thermal):
             await asyncio.sleep(0.5)
             waited += 0.5
-        if not self._models_loaded:
+        if not self._models_loaded and not self._active_video_is_thermal:
             print(f"[TestStream] 모델 미로드(대기 {waited:.0f}s 초과) — 영상 inference 스킵")
             return
 
@@ -1011,10 +1079,18 @@ class TestStreamService:
                         continue
                     _last_sig = sig
                     _last_analyzed_t = video_t
+                    # 열화상 영상이면 의사색 단열 스크리닝(보고서 미적재 — Drone2 오버레이 전용).
+                    # 본 검출 파이프라인과 독립 — 점형 열교/결로·틈을 색 분포로 추가 표시.
+                    if self._active_video_is_thermal:
+                        anomalies = await asyncio.to_thread(detect_pseudocolor_anomalies, frame)
+                        if anomalies:
+                            asyncio.create_task(self._broadcast_thermal_screening(
+                                anomalies, video_t, frame.shape[1], frame.shape[0]))
                     # 영상 경로는 tier=2 (M4 thermal U-Net + M6 PatchCore 제외). 단일 검출 —
                     # 같은 하자가 여러 키프레임에 반복 검출(시간적 합의) + 프론트 dedup(id+ts) +
                     # 분석완료 후 재생으로 신뢰성 확보. 투표(3x)는 크레딧만 3배라 영상엔 미사용.
-                    dets = await self._detect_all(frame, filepath, tier=2)
+                    # 본 검출은 ONNX 모델 필요 — 미로드면 스킵(위 스크리닝만 수행). 재생 중 로드되면 자동 합류.
+                    dets = await self._detect_all(frame, filepath, tier=2) if self._models_loaded else None
                     if dets:
                         # 같은 키프레임의 모든 하자를 동일 timestamp/스냅샷으로 broadcast
                         # → 프론트 DetectionOverlay 가 그 시점에 여러 박스를 동시 표시.
@@ -1031,6 +1107,8 @@ class TestStreamService:
                             det["_video_timestamp_sec"] = video_t
                             det["_frame_w"] = fw
                             det["_frame_h"] = fh
+                            # 열화상 영상 검출은 thermal 채널 → 프론트가 Drone2 인스펙션 뷰로 라우팅.
+                            det["_source_channel"] = "thermal" if self._active_video_is_thermal else "rgb"
                             self._video_detection_count += 1
                             asyncio.create_task(self._broadcast_detection(det))
 
@@ -1469,6 +1547,23 @@ class TestStreamService:
         except Exception as e:
             print(f"[TestStream] 추론 오류 — mock 폴백 없이 None 반환: {e}")
             return None
+
+    # ── 의사색 단열 스크리닝 브로드캐스트 (보고서 미적재, Drone2 오버레이 전용) ────────
+    async def _broadcast_thermal_screening(self, anomalies: list, video_t: float,
+                                           fw: int, fh: int) -> None:
+        """열화상 영상 키프레임의 단열 의심부를 WS 로 전송. 본 검출과 달리 DB 적재/카드화 없음 —
+        프론트가 video_timestamp_sec 동기로 Drone2 위에 '단열 의심(스크리닝)' 오버레이만 띄운다."""
+        from app.core.ws_manager import ws_manager
+        await ws_manager.broadcast("defects", {
+            "type": "thermal.screening",
+            "data": {
+                "filename": self._active_video_filename,
+                "video_timestamp_sec": video_t,
+                "frame_w": fw,
+                "frame_h": fh,
+                "anomalies": anomalies,
+            },
+        })
 
     # ── 브로드캐스트 (결과를 WebSocket으로 전송) ────────
     async def _broadcast_detection(self, detection: dict) -> None:
