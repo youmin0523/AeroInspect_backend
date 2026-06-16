@@ -3773,3 +3773,8 @@ uploads/gazebo_worlds_real/
 - 의사색 단열 스크리닝을 ONNX 모델 게이트와 분리(순수 cv2) — 모델 미로드여도 동작. thermal.screening WS 이벤트로 broadcast 하되 보고서 DB(defect_logs) 미적재(Drone2 오버레이 전용, _broadcast_thermal_screening).
 - 코너 열교(얇고 약한 세로 띠)는 휴리스틱 한계로 과소검출 — band 검출기는 강한 띠만 보수적으로.
 - 검증: 채널판별 자체테스트, 런타임 E2E(스크리닝 broadcast), 실서버 HTTP+WS E2E PASS.
+
+---
+
+## 2026-06-16 — 보고서 저장 site 자동연결 (backend)
+- save_report: site_id 미지정 시 org 현장 자동연결(없으면 기본 생성) — 목록/조회 고아 방지. 실서버 E2E 8/8.

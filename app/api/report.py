@@ -128,9 +128,22 @@ async def save_report(
         )
         if not site:
             raise HTTPException(status_code=404, detail="해당 현장을 찾을 수 없습니다.")
+    else:
+        # site_id 미지정 시 org 의 최근 현장으로 자동 연결(없으면 기본 현장 생성).
+        # 목록/조회/삭제가 site→org 로 스코핑되므로, site 가 없으면 저장돼도 안 보이는 고아가 된다.
+        site = await db.scalar(
+            select(Site)
+            .where(Site.organization_id == org.id)
+            .order_by(desc(Site.created_at))
+            .limit(1)
+        )
+        if site is None:
+            site = Site(name="AeroInspect 점검", organization_id=org.id, created_by=user.id)
+            db.add(site)
+            await db.flush()
 
     report = Report(
-        site_id=payload.site_id,
+        site_id=site.id if site else payload.site_id,
         title=payload.title,
         building_name=payload.building_name,
         inspector_name=payload.inspector_name,
