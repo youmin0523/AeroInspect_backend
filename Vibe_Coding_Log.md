@@ -3787,3 +3787,4 @@ uploads/gazebo_worlds_real/
   - WS broadcast: "defects" 채널 { type:"thermal.screening.reviewed", data:{client_item_id, video_timestamp_sec, review_status, ...} } → 같은 세션 다른 화면 즉시 반영.
 - router.py 에 /thermal-screening prefix 등록(PROTECTED_RESPONSES).
 - 검증: py_compile OK, venv 로 스키마 검증 + app.api.router 전체 임포트 → /thermal-screening/review 등록 확인.
+- 회귀 테스트 추가(tests/test_thermal_screening_review.py, test_defects_api 패턴 미러링 — dependency_overrides + AsyncMock 으로 운영 DB 미접촉): confirmed→200+db.add(audit)+WS 1회 / 오탐 사유없음→400, 있음→200 / 잘못된 status→422 / 무인증→401. 실 ASGI 앱 통과 5/5 PASS.
