@@ -7,7 +7,7 @@
 
 from fastapi import APIRouter
 
-from app.api import auth, oauth, defects, stream, websocket, report, telemetry, slam, floorplan, ai_webhook, sites, notifications, chat, organization, detect, ws_stream, coverage, employee, admin_gpu, missions, contact, ai_chat, audit_logs
+from app.api import auth, oauth, defects, stream, websocket, report, telemetry, slam, floorplan, ai_webhook, sites, notifications, chat, organization, detect, ws_stream, coverage, employee, admin_gpu, missions, contact, ai_chat, audit_logs, thermal_screening
 from app.schemas.common import PROTECTED_RESPONSES, PUBLIC_RESPONSES, WEBHOOK_RESPONSES
 
 api_router = APIRouter()
@@ -33,6 +33,14 @@ api_router.include_router(
     defects.router,
     prefix="/defects",
     tags=["Defects"],
+    responses=PROTECTED_RESPONSES,
+)
+
+# 의사색 단열 스크리닝(보조) 검수 피드백 — 영속 레코드 없이 audit_logs 로 회수
+api_router.include_router(
+    thermal_screening.router,
+    prefix="/thermal-screening",
+    tags=["Thermal Screening"],
     responses=PROTECTED_RESPONSES,
 )
 

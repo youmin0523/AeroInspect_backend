@@ -3773,3 +3773,17 @@ uploads/gazebo_worlds_real/
 - 의사색 단열 스크리닝을 ONNX 모델 게이트와 분리(순수 cv2) — 모델 미로드여도 동작. thermal.screening WS 이벤트로 broadcast 하되 보고서 DB(defect_logs) 미적재(Drone2 오버레이 전용, _broadcast_thermal_screening).
 - 코너 열교(얇고 약한 세로 띠)는 휴리스틱 한계로 과소검출 — band 검출기는 강한 띠만 보수적으로.
 - 검증: 채널판별 자체테스트, 런타임 E2E(스크리닝 broadcast), 실서버 HTTP+WS E2E PASS.
+
+
+---
+
+## 2026-06-16 — 단열 스크리닝 검수 피드백 엔드포인트 (경량, audit_logs 기반) (backend)
+
+- 배경: 단열 스크리닝(thermal.screening)은 DB 영속 레코드 없이 WS 로만 방출 → 그동안 오탐 피드백 회수 경로가 없었음(단열 클래스는 오탐 최다). 프런트 검수 액션 parity 요구.
+- 결정(경량 선택): thermal_screening_items 테이블/마이그레이션을 새로 두지 않고, 검수 결과를 기존 audit_logs 에 적재(본 검출 flagged_false_positive 와 동일 export 경로). 영구 검수상태가 필요해지면 추후 테이블로 승격.
+- 신규 POST /api/v1/thermal-screening/review (app/api/thermal_screening.py, app/schemas/thermal_screening.py):
+  - body: 스크리닝 정체성(video_timestamp_sec 필수 + filename/frame/bbox/kind/severity/score/client_item_id) + review_status(confirmed|dismissed|flagged_false_positive) + review_note(오탐 필수).
+  - 인증: get_current_org_member(조직 격리). write_audit(resource_type="thermal_screening", resource_id=None, after.screening 에 bbox/score 보존, action=thermal_screening.review.*).
+  - WS broadcast: "defects" 채널 { type:"thermal.screening.reviewed", data:{client_item_id, video_timestamp_sec, review_status, ...} } → 같은 세션 다른 화면 즉시 반영.
+- router.py 에 /thermal-screening prefix 등록(PROTECTED_RESPONSES).
+- 검증: py_compile OK, venv 로 스키마 검증 + app.api.router 전체 임포트 → /thermal-screening/review 등록 확인.
