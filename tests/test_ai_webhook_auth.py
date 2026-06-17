@@ -12,7 +12,9 @@ tests/test_ai_webhook_auth.py
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient, ASGITransport
@@ -141,3 +143,62 @@ async def test_batch_without_header_returns_401(configured_secret, fake_db, fake
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/v1/ai/batch", json=payload)
     assert resp.status_code == 401
+
+
+@pytest.fixture
+def fake_db_persisting():
+    """flush 시 id/timestamp 를 채워 응답 직렬화까지 통과시키는 DB mock."""
+    db = AsyncMock()
+    _added: list = []
+
+    def _add(obj):
+        _added.append(obj)
+
+    async def _flush():
+        # 실제 DB flush 가 채우는 컬럼 기본값을 모사 (transient ORM 객체엔 미적용).
+        for obj in _added:
+            if getattr(obj, "id", None) is None:
+                obj.id = uuid4()
+            if getattr(obj, "timestamp", None) is None:
+                obj.timestamp = datetime.now(timezone.utc)
+            if getattr(obj, "review_status", None) is None:
+                obj.review_status = "pending"
+
+    db.add = _add
+    db.flush = _flush
+
+    async def _gen():
+        yield db
+
+    app.dependency_overrides[get_db] = _gen
+    yield db
+    app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_batch_with_null_area_does_not_crash(
+    configured_secret, fake_db_persisting, fake_ws_manager
+):
+    """area 가 없는 검출이 섞여도 500 이 아니라 201 로 저장되어야 한다.
+
+    회귀 방지: 배치 루프가 det.area.upper() 를 무가드 호출해 area=None 인
+    검출에서 AttributeError → 500 + 배치 전체 실패였다. (단건 /detection 은 이미 가드됨)
+    """
+    payload = {
+        "detections": [
+            {"severity": "HIGH", "confidence": 0.9},           # area 생략 → None (회귀 트리거)
+            {"area": "B", "severity": "LOW", "confidence": 0.5},  # 정상 area 동시 처리 확인
+        ]
+    }
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/ai/batch",
+            json=payload,
+            headers={"X-AI-Webhook-Secret": configured_secret},
+        )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["saved_count"] == 2
+    assert data["items"][0]["area"] is None
+    assert data["items"][1]["area"] == "B"

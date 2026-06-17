@@ -529,7 +529,10 @@ class StreamInferenceWorker:
                 if det_dicts:
                     await defect_persistence.save_batch(
                         detections=det_dicts,
-                        frame_id=self._submitted_count,
+                        # 캡처 당시 frame_id 사용 (브로드캐스트와 일치). 과거엔 증가 중인
+                        # self._submitted_count 를 넣어 DB 레코드가 broadcast 와 다른 frame_id 로
+                        # 저장돼, 검출-프레임 대응(감사 추적)이 어긋났다.
+                        frame_id=frame_id,
                         tier=0,  # VLM/하이브리드 경로 마커 (ONNX Tier 1~3과 구분)
                         lidar_pos=lidar_pos,
                     )

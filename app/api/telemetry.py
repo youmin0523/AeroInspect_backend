@@ -9,10 +9,11 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_current_user, get_db, get_ws_manager, verify_ai_webhook
+from app.dependencies import get_current_org_member, get_db, get_ws_manager, verify_ai_webhook
+from app.models.site import Site
 from app.models.telemetry import TelemetryLog
 from app.schemas.telemetry import (
     TelemetryCreate,
@@ -26,14 +27,32 @@ from app.services.telemetry_cache import telemetry_cache
 router = APIRouter()
 
 
+def _org_scope(org):
+    """org 소속 site 의 텔레메트리 + site 미지정(전역) 텔레메트리만 노출.
+
+    site_id 는 nullable(현장 미지정 비행 허용)이므로 NULL 은 모두에게 공개 유지하되,
+    다른 조직 site 에 묶인 텔레메트리(비행 경로/위치)는 교차 테넌트로 새지 않도록 차단.
+    """
+    return or_(
+        TelemetryLog.site_id.is_(None),
+        TelemetryLog.site_id.in_(
+            select(Site.id).where(Site.organization_id == org.id)
+        ),
+    )
+
+
 @router.get("/latest", response_model=Optional[TelemetryResponse])
 async def get_latest_telemetry(
     db: AsyncSession = Depends(get_db),
-    _user=Depends(get_current_user),
+    org_tuple=Depends(get_current_org_member),
 ):
-    """최신 드론 텔레메트리 1건 조회"""
+    """최신 드론 텔레메트리 1건 조회 (소속 조직 + 전역 비행만)"""
+    _user, _member, org = org_tuple
     result = await db.execute(
-        select(TelemetryLog).order_by(desc(TelemetryLog.timestamp)).limit(1)
+        select(TelemetryLog)
+        .where(_org_scope(org))
+        .order_by(desc(TelemetryLog.timestamp))
+        .limit(1)
     )
     row = result.scalar_one_or_none()
     if not row:
@@ -46,12 +65,14 @@ async def list_telemetry(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    _user=Depends(get_current_user),
+    org_tuple=Depends(get_current_org_member),
 ):
-    """텔레메트리 로그 목록 조회 (최신순)"""
-    query = select(TelemetryLog).order_by(desc(TelemetryLog.timestamp))
+    """텔레메트리 로그 목록 조회 (최신순, 소속 조직 + 전역 비행만)"""
+    _user, _member, org = org_tuple
+    scope = _org_scope(org)
+    query = select(TelemetryLog).where(scope).order_by(desc(TelemetryLog.timestamp))
 
-    count_query = select(func.count()).select_from(TelemetryLog)
+    count_query = select(func.count()).select_from(TelemetryLog).where(scope)
     total = await db.scalar(count_query)
 
     result = await db.execute(query.offset(offset).limit(limit))

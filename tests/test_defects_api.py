@@ -154,3 +154,16 @@ async def test_delete_without_auth_returns_401(unauth_client):
     async with unauth_client as ac:
         res = await ac.delete(f"/api/v1/defects/{fake_id}")
     assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_create_without_auth_returns_401(unauth_client):
+    """POST /defects 는 익명 호출을 허용하지 않는다 (get_current_org_member).
+
+    회귀 방지: 이 엔드포인트가 한때 무인증으로 임의의 하자 레코드 INSERT +
+    WS 브로드캐스트를 허용했었다. body 는 유효하게 보내고 인증만 누락시켜 401 을 확인.
+    """
+    body = {"severity": "HIGH", "confidence": 0.9}
+    async with unauth_client as ac:
+        res = await ac.post("/api/v1/defects", json=body)
+    assert res.status_code == 401

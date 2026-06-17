@@ -79,6 +79,7 @@ class ReportSaveRequest(BaseModel):
 class ReportSavedResponse(BaseModel):
     """저장된 보고서 응답"""
     id: UUID
+    site_id: Optional[UUID] = None  # 현장별 보고서 필터링(프론트 SiteReportsTab)에 필요
     title: Optional[str]
     building_name: Optional[str]
     inspector_name: Optional[str]

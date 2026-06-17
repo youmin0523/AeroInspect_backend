@@ -12,11 +12,15 @@ from uuid import UUID
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, get_current_org_member
 from app.models.site import Site
+from app.models.defect import DefectLog
+from app.models.report import Report
+from app.models.telemetry import TelemetryLog
+from app.services.image_storage import image_storage
 from app.schemas.site import (
     SiteCreate,
     SiteUpdate,
@@ -162,5 +166,27 @@ async def delete_site(
     site = result.scalar_one_or_none()
     if not site:
         raise HTTPException(status_code=404, detail="현장을 찾을 수 없습니다.")
+
+    # ── 자식 레코드 정리 ──────────────────────────────────────────────
+    # defect_logs / reports / telemetry_logs 의 site_id FK 에는 ondelete 가 없어
+    # (Postgres 기본 RESTRICT) 자식이 1건이라도 있으면 site 삭제가 IntegrityError(500)로
+    # 터졌다. DB 스키마(create_all/alembic 혼용) 상태와 무관하게 동작하도록 앱 레벨에서
+    # 자식을 먼저 제거한다. inspection_schedules 는 FK 가 ondelete=CASCADE 라 자동 정리됨.
+    crop_rows = await db.execute(
+        select(DefectLog.image_crop_path).where(
+            DefectLog.site_id == site.id,
+            DefectLog.image_crop_path.isnot(None),
+        )
+    )
+    crop_paths = [p for (p,) in crop_rows.all() if p]
+
+    await db.execute(sa_delete(DefectLog).where(DefectLog.site_id == site.id))
+    await db.execute(sa_delete(Report).where(Report.site_id == site.id))
+    await db.execute(sa_delete(TelemetryLog).where(TelemetryLog.site_id == site.id))
+
     await db.delete(site)
     await db.commit()
+
+    # 트랜잭션 커밋 성공 이후에만 크롭 이미지 파일 정리 (롤백 시 파일 보존)
+    for p in crop_paths:
+        image_storage.delete(p)

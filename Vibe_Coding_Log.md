@@ -3793,3 +3793,18 @@ uploads/gazebo_worlds_real/
 
 ## 2026-06-16 — 보고서 저장 site 자동연결 (backend)
 - save_report: site_id 미지정 시 org 현장 자동연결(없으면 기본 생성) — 목록/조회 고아 방지. 실서버 E2E 8/8.
+
+---
+
+## 2026-06-17 — 검증 발견 결함 일괄 수정 (인증/IDOR/크래시/정합) (backend)
+- defects: POST /defects 무인증 → get_current_org_member 필수(익명 INSERT/broadcast 차단). 실시간 경로는 defect_persistence(DB 직접)/ai_webhook 사용.
+- ai_webhook: /ai/batch 가 area=None 검출에서 det.area.upper() AttributeError(500) → 가드(단건 /detection 과 동일).
+- telemetry: GET 목록/최신이 org 스코핑 없이 전 조직 비행경로 노출 → (site_id IS NULL OR 내 org site) + get_current_org_member. 전역(현장 미지정) 비행은 유지.
+- sites: DELETE 시 defect/report/telemetry FK(ondelete 없음)로 IntegrityError(500) → 앱레벨 자식 cascade(이미지 파일 포함, inspection_schedule 은 DB CASCADE).
+- oauth: 이메일만으로 기존 로컬 계정 자동연결 → provider verified-email(Google verified_email / Kakao is_email_verified / Naver 이메일 존재) 일 때만 연결(계정 탈취 차단).
+- organization: update_member 마지막 owner 강등/비활성 차단 + admin 의 owner 수정 차단. _get_user_org 에 X-Organization-Id + joined_at DESC 결정적 선택(6개 엔드포인트 일관).
+- websocket: chat:{conversation_id} 구독 시 ConversationMember 멤버십 DB 검증(구독 IDOR 차단, 비멤버는 defects 폴백).
+- notifications: 읽음/전체읽음을 notifications:{uid} 채널로 전파(notification.read/read_all) — 다중 탭/기기 배지 동기화.
+- stream_inference: VLM 키프레임 DB 저장 frame_id 를 증가 카운터 대신 캡처값으로(broadcast 와 정합).
+- report schema: ReportSavedResponse 에 site_id 노출(프론트 현장별 보고서 필터링).
+- 회귀 테스트 11종 추가 + test_report_notifications 1종 정합화. pytest 306 passed / 11 skipped.
