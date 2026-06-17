@@ -78,7 +78,10 @@ async def list_audit_logs(
         conditions.append(AuditLog.organization_id == organization_id)
 
     if action:
-        conditions.append(AuditLog.action.like(f"{action}%"))
+        # LIKE 와일드카드(%, _)를 이스케이프 — 사용자 입력이 prefix 필터 의미를 벗어나
+        # 의도보다 많은 행을 매치하지 않도록.
+        escaped = action.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        conditions.append(AuditLog.action.like(f"{escaped}%", escape="\\"))
     if resource_type:
         conditions.append(AuditLog.resource_type == resource_type)
     if resource_id is not None:

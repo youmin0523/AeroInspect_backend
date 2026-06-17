@@ -40,11 +40,17 @@ def crop_roi(
     h, w = frame.shape[:2]
     cx, cy, bw, bh = bbox
 
+    # 여백은 박스 크기에 비례(전체 이미지 비율이 아님). 과거엔 padding 을 정규화 좌표에
+    # 그대로 더해 박스 크기와 무관하게 이미지의 padding*100% 를 더했고, 작은 박스는 과도하게
+    # 크롭됐다. alignment_detector._crop_roi 와 동일하게 박스 변에 비례시킨다.
+    pad_x = bw * padding
+    pad_y = bh * padding
+
     # 픽셀 좌표 변환 (여백 포함)
-    x1 = int((cx - bw / 2 - padding) * w)
-    y1 = int((cy - bh / 2 - padding) * h)
-    x2 = int((cx + bw / 2 + padding) * w)
-    y2 = int((cy + bh / 2 + padding) * h)
+    x1 = int((cx - bw / 2 - pad_x) * w)
+    y1 = int((cy - bh / 2 - pad_y) * h)
+    x2 = int((cx + bw / 2 + pad_x) * w)
+    y2 = int((cy + bh / 2 + pad_y) * h)
 
     # 이미지 경계 클리핑
     x1, y1 = max(0, x1), max(0, y1)

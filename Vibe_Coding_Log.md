@@ -3808,3 +3808,10 @@ uploads/gazebo_worlds_real/
 - stream_inference: VLM 키프레임 DB 저장 frame_id 를 증가 카운터 대신 캡처값으로(broadcast 와 정합).
 - report schema: ReportSavedResponse 에 site_id 노출(프론트 현장별 보고서 필터링).
 - 회귀 테스트 11종 추가 + test_report_notifications 1종 정합화. pytest 306 passed / 11 skipped.
+
+---
+
+## 2026-06-17 (2) — Low 등급 결함 정리 (backend)
+- image_utils.crop_roi: 여백(padding)을 정규화 좌표에 그대로 더해(이미지의 padding*100%) 작은 박스가 과도 크롭되던 것 → 박스 변에 비례(pad=box_edge*padding). alignment_detector._crop_roi 와 일관.
+- audit_logs: action prefix 필터의 LIKE 와일드카드(%, _) 이스케이프 — 사용자 입력이 의도보다 많은 행 매치하지 않도록.
+- 회귀 테스트 추가(tests/test_image_crop_roi.py): 박스 비례 여백/zero-padding. pytest 308 passed / 11 skipped.
