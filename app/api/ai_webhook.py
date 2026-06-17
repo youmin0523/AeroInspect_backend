@@ -162,7 +162,7 @@ async def receive_batch_detections(
     for det in payload.detections:
         image_crop_path = await image_storage.save_base64_jpeg(det.image_crop)
         defect = DefectLog(
-            area=det.area.upper(),
+            area=det.area.upper() if det.area else None,
             category_code=det.category_code,
             defect_type=det.defect_type,
             severity=det.severity.upper(),

@@ -186,12 +186,16 @@ async def get_defect(
 @router.post("", response_model=DefectLogResponse, status_code=201)
 async def create_defect(
     payload: DefectLogCreate,
+    org_tuple=Depends(get_current_org_member),
     db: AsyncSession = Depends(get_db),
     manager: ConnectionManager = Depends(get_ws_manager),
 ):
     """
     새 하자 탐지 결과 저장 후 WebSocket으로 실시간 브로드캐스트.
-    AI 파이프라인(defect_processor.py)에서 탐지 시 호출.
+
+    인증: 로그인 + 조직 소속 필수(get_current_org_member). 실시간 AI 파이프라인은
+    이 HTTP 엔드포인트가 아니라 defect_persistence(DB 직접 INSERT) / ai_webhook(/ai/batch,
+    HMAC 인증)을 사용한다. 따라서 본 엔드포인트는 익명 호출을 허용하지 않는다.
     """
     # Base64 이미지 → 파일 저장 (실패 시 None)
     image_crop_path = await image_storage.save_base64_jpeg(payload.image_crop)

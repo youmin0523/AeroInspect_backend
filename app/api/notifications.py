@@ -26,6 +26,7 @@ from app.schemas.notification import (
     NotificationUnreadCount,
 )
 from app.services.push_notifications import push_service
+from app.services.notification_service import notification_service
 
 router = APIRouter()
 
@@ -97,6 +98,8 @@ async def mark_as_read(
 
     notif.is_read = True
     await db.flush()
+    # 같은 사용자의 다른 세션/탭 배지 동기화 (WS 미전파로 배지 드리프트 방지)
+    await notification_service.broadcast_read(current_user.id, notif.id)
     return NotificationResponse.model_validate(notif)
 
 
@@ -112,6 +115,8 @@ async def mark_all_as_read(
         .where(Notification.is_read == False)  # noqa: E712
         .values(is_read=True)
     )
+    await db.flush()
+    await notification_service.broadcast_read_all(current_user.id)
     return {"updated": result.rowcount}
 
 

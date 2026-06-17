@@ -68,20 +68,35 @@ def _build_user_response(user: User, orgs=None) -> UserResponse:
     )
 
 
+def _email_link_forbidden() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "이미 가입된 이메일입니다. 소셜 계정의 이메일이 검증되지 않아 자동 연결할 수 없습니다. "
+            "비밀번호로 로그인한 뒤 소셜 계정을 연결해 주세요."
+        ),
+    )
+
+
 async def _find_or_create_oauth_user(
     db: AsyncSession,
     provider: str,
     oauth_id: str,
     email: str,
     name: str,
+    email_verified: bool = False,
 ) -> User:
     """
     OAuth 사용자를 조회하거나 신규 생성.
     - oauth_id 기준으로 먼저 검색
     - 없으면 email 기준 검색 (기존 일반 가입 계정에 OAuth 연결)
     - 둘 다 없으면 새 계정 생성
+
+    ⚠️ 보안: 기존 로컬 계정에 이메일로 자동 연결하는 것은 provider 가 그 이메일을
+    '검증됨'으로 보고한 경우(email_verified=True)에만 허용한다. 미검증 이메일 연결을
+    허용하면 공격자가 피해자 이메일로 소셜 계정을 만들어 피해자 계정을 탈취할 수 있다.
     """
-    # 1) oauth_id로 조회
+    # 1) oauth_id로 조회 (이미 연결된 소셜 계정 — 가장 신뢰 가능)
     result = await db.execute(
         select(User).where(User.oauth_provider == provider, User.oauth_id == oauth_id)
     )
@@ -89,16 +104,19 @@ async def _find_or_create_oauth_user(
     if user:
         return user
 
-    # 2) 동일 이메일 계정 존재 시 OAuth 연결 (대소문자 무시)
-    result = await db.execute(
-        select(User).where(func.lower(User.email) == func.lower(email))
-    )
-    user = result.scalar_one_or_none()
-    if user:
-        user.oauth_provider = provider
-        user.oauth_id = oauth_id
-        await db.flush()
-        return user
+    # 2) 동일 이메일 계정 존재 시 OAuth 연결 (대소문자 무시) — 검증된 이메일에 한함
+    if email:
+        result = await db.execute(
+            select(User).where(func.lower(User.email) == func.lower(email))
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            if not email_verified:
+                raise _email_link_forbidden()
+            user.oauth_provider = provider
+            user.oauth_id = oauth_id
+            await db.flush()
+            return user
 
     # 3) 신규 생성 (OAuth 전용: 비밀번호 없음)
     try:
@@ -107,7 +125,7 @@ async def _find_or_create_oauth_user(
             email=email,
             username=f"{provider}_{uuid.uuid4().hex[:8]}",
             password_hash=None,
-            name=name or email.split("@")[0],
+            name=name or (email.split("@")[0] if email else provider),
             phone="000-0000-0000",
             oauth_provider=provider,
             oauth_id=oauth_id,
@@ -116,16 +134,21 @@ async def _find_or_create_oauth_user(
         await db.flush()
         return user
     except IntegrityError:
+        # 동시 가입 경합 등으로 unique 제약 충돌 → 기존 계정 재조회.
+        # 이 경로의 연결도 검증된 이메일에 한해 허용(2)와 동일 정책).
         await db.rollback()
-        result = await db.execute(
-            select(User).where(func.lower(User.email) == func.lower(email))
-        )
-        user = result.scalar_one_or_none()
-        if user:
-            user.oauth_provider = provider
-            user.oauth_id = oauth_id
-            await db.flush()
-            return user
+        if email:
+            result = await db.execute(
+                select(User).where(func.lower(User.email) == func.lower(email))
+            )
+            user = result.scalar_one_or_none()
+            if user:
+                if not email_verified:
+                    raise _email_link_forbidden()
+                user.oauth_provider = provider
+                user.oauth_id = oauth_id
+                await db.flush()
+                return user
         raise HTTPException(status_code=409, detail="이메일 충돌이 발생했습니다. 다시 시도해 주세요.")
 
 
@@ -171,13 +194,15 @@ async def google_callback(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google 사용자 정보 조회 실패")
     profile = profile_resp.json()
 
-    # 3) DB 조회/생성
+    # 3) DB 조회/생성 — Google 은 verified_email/email_verified 로 검증 여부 보고
+    google_verified = bool(profile.get("verified_email") or profile.get("email_verified"))
     user = await _find_or_create_oauth_user(
         db,
         provider="google",
         oauth_id=profile["id"],
         email=profile.get("email", ""),
         name=profile.get("name", ""),
+        email_verified=google_verified,
     )
 
     # 4) JWT 발급
@@ -225,13 +250,15 @@ async def kakao_callback(
     profile = profile_resp.json()
     kakao_account = profile.get("kakao_account", {})
 
-    # 3) DB 조회/생성
+    # 3) DB 조회/생성 — Kakao 는 kakao_account.is_email_verified 로 검증 여부 보고
+    kakao_verified = bool(kakao_account.get("is_email_verified"))
     user = await _find_or_create_oauth_user(
         db,
         provider="kakao",
         oauth_id=str(profile["id"]),
         email=kakao_account.get("email", ""),
         name=kakao_account.get("profile", {}).get("nickname", ""),
+        email_verified=kakao_verified,
     )
 
     # 4) JWT 발급
@@ -277,13 +304,16 @@ async def naver_callback(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Naver 사용자 정보 조회 실패")
     response_data = profile_resp.json().get("response", {})
 
-    # 3) DB 조회/생성
+    # 3) DB 조회/생성 — Naver 는 가입 시 검증된 이메일만 /nid/me 로 반환(별도 플래그 없음).
+    # 따라서 이메일이 존재하면 검증된 것으로 간주한다.
+    naver_verified = bool(response_data.get("email"))
     user = await _find_or_create_oauth_user(
         db,
         provider="naver",
         oauth_id=response_data["id"],
         email=response_data.get("email", ""),
         name=response_data.get("name", ""),
+        email_verified=naver_verified,
     )
 
     # 4) JWT 발급

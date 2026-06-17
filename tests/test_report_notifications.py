@@ -111,7 +111,12 @@ async def test_save_report_notifies_a_b_c_union():
 
 @pytest.mark.asyncio
 async def test_save_report_without_site_skips_b():
-    """site_id 가 없으면 B(현장 관리자)는 비고, A + C 만 수신."""
+    """site_id 가 없고 조직에 기존 현장도 없으면, 기본 현장이 생성된다(created_by=요청자).
+
+    그 기본 현장의 관리자(B)는 요청자(A) 한 명뿐이므로 결과적으로 A + C 만 수신.
+    (save_report 가 site_id 미지정 시 '최근 현장 자동 연결, 없으면 기본 현장 생성'으로
+     바뀐 뒤의 동작을 반영 — scalar 가 None 을 반환하면 기본 현장 생성 경로를 탄다.)
+    """
     from app.api import report as report_module
     from app.models.organization import Organization
     from app.models.user import User
@@ -130,9 +135,9 @@ async def test_save_report_without_site_skips_b():
 
     admin_result = type("R", (), {"all": lambda self: [(org_admin_id,)]})()
 
-    # site_id 없음 → site 조회 scalar 호출 안 함
+    # site_id 없음 → 최근 현장 조회 scalar 가 None → 기본 현장 생성(created_by=요청자)
     db = _make_db_with_flush_populating(
-        scalar_side_effect=[],
+        scalar_side_effect=[None],
         execute_return=admin_result,
     )
 

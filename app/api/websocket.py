@@ -9,13 +9,17 @@
 # =============================================
 
 import asyncio
+from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from sqlalchemy import select
 
 from app.config import settings
 from app.core.jwt import decode_access_token
 from app.core.ws_manager import ConnectionManager
+from app.db.session import async_session_factory
 from app.dependencies import get_ws_manager
+from app.models.conversation_member import ConversationMember
 
 router = APIRouter()
 
@@ -23,7 +27,7 @@ STATIC_CHANNELS = {"defects", "telemetry", "thermal", "camera"}
 
 # 동적 채널 prefix — 사용자/대화방/알림별 개인 채널
 # notifications: / user: 는 본인 user_id 와 일치하는 토큰을 가진 경우에만 구독 허용
-# chat: 는 일단 토큰 보유만 검증 (멤버십은 broadcast 발행 측에서 이미 검증됨)
+# chat: 는 토큰 보유 + 대화방 멤버십(DB)까지 검증해야 구독 허용 (구독 IDOR 방지)
 _DYNAMIC_CHANNEL_PREFIXES = ("chat:", "user:", "notifications:")
 _USER_SCOPED_PREFIXES = ("user:", "notifications:")
 _AUTH_REQUIRED_PREFIXES = ("chat:", "user:", "notifications:")
@@ -42,6 +46,29 @@ def _channel_uid(channel: str) -> str | None:
         if channel.startswith(p):
             return channel[len(p):]
     return None
+
+
+async def _is_conversation_member(conversation_id: str, user_id: str | None) -> bool:
+    """token 사용자가 해당 대화방의 멤버인지 DB 로 확인 (chat 구독 IDOR 방지).
+
+    멤버십은 발행 측에서만 검증됐었어서, 비멤버가 대화방 UUID 로 구독하면 메시지를
+    실시간 수신할 수 있었다. 구독 시점에 짧은 세션으로 멤버십을 직접 검증한다.
+    """
+    if not user_id:
+        return False
+    try:
+        cid = UUID(conversation_id)
+        uid = UUID(user_id)
+    except (ValueError, TypeError, AttributeError):
+        return False
+    async with async_session_factory() as session:
+        found = await session.scalar(
+            select(ConversationMember.id).where(
+                ConversationMember.conversation_id == cid,
+                ConversationMember.user_id == uid,
+            )
+        )
+    return found is not None
 
 
 def _authorize_channel(channel: str, token_sub: str | None) -> bool:
@@ -107,6 +134,12 @@ async def websocket_endpoint(
         if not _authorize_channel(c, token_sub):
             rejected.append(c)
             continue
+        # chat: 채널은 토큰 보유뿐 아니라 대화방 멤버십까지 확인 (구독 IDOR 방지)
+        if c.startswith("chat:"):
+            conversation_id = c[len("chat:"):]
+            if not await _is_conversation_member(conversation_id, token_sub):
+                rejected.append(c)
+                continue
         authorized.append(c)
 
     # 폴백: 유효 채널 0개면 공개 채널 'defects' 부여

@@ -103,6 +103,20 @@ class NotificationService:
 
         return notifs
 
+    async def broadcast_read(self, user_id: UUID, notification_id: UUID) -> None:
+        """단건 읽음 처리를 같은 사용자의 모든 세션에 전파 (배지 동기화)."""
+        await self._ws.broadcast(f"notifications:{user_id}", {
+            "type": "notification.read",
+            "data": {"id": str(notification_id)},
+        })
+
+    async def broadcast_read_all(self, user_id: UUID) -> None:
+        """전체 읽음 처리를 같은 사용자의 모든 세션에 전파."""
+        await self._ws.broadcast(f"notifications:{user_id}", {
+            "type": "notification.read_all",
+            "data": {},
+        })
+
 
 # ── 모듈 레벨 싱글톤 ─────────────────────────
 from app.core.ws_manager import ws_manager  # noqa: E402

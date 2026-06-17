@@ -16,7 +16,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,14 +42,29 @@ router = APIRouter()
 
 
 # ── 헬퍼: 현재 사용자의 조직 조회 ─────────────
-async def _get_user_org(db: AsyncSession, user_id: UUID):
-    """현재 사용자가 소속된 Organization + OrganizationMember 반환"""
-    result = await db.execute(
+async def _get_user_org(db: AsyncSession, user_id: UUID, org_id: str | None = None):
+    """현재 사용자가 소속된 Organization + OrganizationMember 반환.
+
+    org_id(X-Organization-Id 헤더)가 주어지면 그 조직을, 없으면 가장 최근 가입 조직을
+    선택한다. get_current_org_member 와 동일한 선택 규칙이라, 다중 조직 사용자라도
+    멤버십·역할이 항상 동일한 (요청이 의도한) 조직을 가리킨다.
+    이전엔 ORDER BY 가 없어 임의 조직이 선택될 수 있었고 헤더도 무시했다.
+    """
+    query = (
         select(OrganizationMember, Organization)
         .join(Organization, Organization.id == OrganizationMember.organization_id)
         .where(OrganizationMember.user_id == user_id)
         .where(OrganizationMember.status == "active")
     )
+    if org_id:
+        try:
+            query = query.where(Organization.id == UUID(org_id))
+        except (ValueError, TypeError):
+            return None, None
+    else:
+        query = query.order_by(OrganizationMember.joined_at.desc())
+
+    result = await db.execute(query)
     row = result.first()
     if not row:
         return None, None
@@ -60,9 +75,10 @@ async def _get_user_org(db: AsyncSession, user_id: UUID):
 async def get_my_organization(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    x_organization_id: str | None = Header(None),
 ):
     """현재 사용자의 소속 조직 정보 조회"""
-    member, org = await _get_user_org(db, current_user.id)
+    member, org = await _get_user_org(db, current_user.id, x_organization_id)
     if not org:
         raise HTTPException(status_code=404, detail="소속된 조직이 없습니다.")
 
@@ -83,12 +99,13 @@ async def get_my_organization(
 async def list_organization_members(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    x_organization_id: str | None = Header(None),
 ):
     """
     같은 조직의 멤버 목록 조회 — 메신저 '새 대화' 팀원 목록에서 사용.
     active + invited 상태 멤버 모두 반환.
     """
-    member, org = await _get_user_org(db, current_user.id)
+    member, org = await _get_user_org(db, current_user.id, x_organization_id)
     if not org:
         raise HTTPException(status_code=404, detail="소속된 조직이 없습니다.")
 
@@ -176,13 +193,14 @@ async def invite_member(
     payload: InviteMemberRequest,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    x_organization_id: str | None = Header(None),
 ):
     """
     멤버 초대 (admin/owner 전용).
     이메일로 사용자를 찾아 invited 상태로 조직에 추가.
     """
     # 권한 확인
-    my_member, org = await _get_user_org(db, current_user.id)
+    my_member, org = await _get_user_org(db, current_user.id, x_organization_id)
     if not org:
         raise HTTPException(status_code=404, detail="소속된 조직이 없습니다.")
     if my_member.role not in ("owner", "admin"):
@@ -234,9 +252,10 @@ async def update_member(
     payload: UpdateMemberRequest,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    x_organization_id: str | None = Header(None),
 ):
     """멤버 부서/직위/권한/상태 수정 (admin/owner 전용)"""
-    my_member, org = await _get_user_org(db, current_user.id)
+    my_member, org = await _get_user_org(db, current_user.id, x_organization_id)
     if not org:
         raise HTTPException(status_code=404, detail="소속된 조직이 없습니다.")
     if my_member.role not in ("owner", "admin"):
@@ -253,6 +272,40 @@ async def update_member(
         raise HTTPException(status_code=404, detail="해당 멤버를 찾을 수 없습니다.")
 
     target_member, target_user = row
+
+    # ── 소유자 보호 가드 ───────────────────────────────────────────────
+    # remove_member 는 owner 제거를 막지만 update_member 에는 보호가 없어,
+    # admin 이 owner 를 강등/비활성화하거나, 마지막 owner 가 스스로 강등되어
+    # 조직이 무소유주(관리 복구 불가) 상태가 될 수 있었다.
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    target_is_owner = target_member.role == "owner"
+
+    # (1) admin 은 owner 를 수정할 수 없다 (owner 만 owner 를 다룰 수 있음).
+    if target_is_owner and my_member.role != "owner":
+        raise HTTPException(status_code=403, detail="관리자는 소유자 정보를 수정할 수 없습니다.")
+
+    # (2) 변경이 target 의 owner 자격을 박탈하는지 판정 (강등/비활성/퇴사처리).
+    revokes_ownership = target_is_owner and (
+        (payload.role is not None and payload.role != "owner")
+        or (payload.status is not None and payload.status != "active")
+        or (payload.ended_at is not None and payload.ended_at <= now)
+    )
+    if revokes_ownership:
+        other_active_owners = await db.scalar(
+            select(func.count(OrganizationMember.id)).where(
+                OrganizationMember.organization_id == org.id,
+                OrganizationMember.role == "owner",
+                OrganizationMember.status == "active",
+                OrganizationMember.user_id != user_id,
+            )
+        )
+        if not other_active_owners:
+            raise HTTPException(
+                status_code=400,
+                detail="마지막 소유자는 강등하거나 비활성화할 수 없습니다. 먼저 다른 소유자를 지정하세요.",
+            )
+
     if payload.role is not None:
         target_member.role = payload.role
     if payload.department is not None:
@@ -291,9 +344,10 @@ async def remove_member(
     user_id: UUID,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    x_organization_id: str | None = Header(None),
 ):
     """멤버 제거 (admin/owner 전용, owner 자신은 제거 불가)"""
-    my_member, org = await _get_user_org(db, current_user.id)
+    my_member, org = await _get_user_org(db, current_user.id, x_organization_id)
     if not org:
         raise HTTPException(status_code=404, detail="소속된 조직이 없습니다.")
     if my_member.role not in ("owner", "admin"):
@@ -341,6 +395,7 @@ async def assign_member(
     payload: AssignMemberRequest,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    x_organization_id: str | None = Header(None),
 ):
     """
     미소속 사용자를 조직에 배정.
@@ -356,7 +411,7 @@ async def assign_member(
         org = target_org
     else:
         # 일반 admin/owner → 자기 조직
-        member_row, org = await _get_user_org(db, current_user.id)
+        member_row, org = await _get_user_org(db, current_user.id, x_organization_id)
         if not org:
             raise HTTPException(status_code=403, detail="소속된 조직이 없습니다.")
         if member_row.role not in ("owner", "admin"):
