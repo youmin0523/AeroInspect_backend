@@ -3815,3 +3815,12 @@ uploads/gazebo_worlds_real/
 - image_utils.crop_roi: 여백(padding)을 정규화 좌표에 그대로 더해(이미지의 padding*100%) 작은 박스가 과도 크롭되던 것 → 박스 변에 비례(pad=box_edge*padding). alignment_detector._crop_roi 와 일관.
 - audit_logs: action prefix 필터의 LIKE 와일드카드(%, _) 이스케이프 — 사용자 입력이 의도보다 많은 행 매치하지 않도록.
 - 회귀 테스트 추가(tests/test_image_crop_roi.py): 박스 비례 여백/zero-padding. pytest 308 passed / 11 skipped.
+
+---
+
+## 2026-06-18 — 프로덕션 검출 WS 릴레이: defects 채널 전체 이벤트 중계 (backend)
+- 배경: 운영(Vercel→Fly→GPU VM) 경로에서 Fly 의 inference WS 릴레이가 `defect.new` 만 중계해, 열화상 영상의 `thermal.screening`(Drone2 단열 스크리닝 오버레이 + 프론트 분석게이트 프런티어)이 프론트까지 닿지 않았다. 로컬 dev(Vite 프록시 → GPU VM 직결)는 WS 가 GPU 에 직접 붙어 정상인데 운영만 누락.
+- 수정(inference_proxy._ws_relay_loop): 수신한 모든 `type` 보유 dict 이벤트를 Fly ws_manager 로 재broadcast → `thermal.screening` 포함, 향후 추가 이벤트도 자동 포함. 릴레이는 GPU 의 `defects` 채널만 구독(루프 없음)하고, 리뷰/삭제 등은 Fly 가 직접 처리·broadcast 하므로 중복 없음.
+- stale 헤더/인라인 주석(WS 다리 "미구현·런북 참고") 현행화 — 릴레이는 이미 구현·기동(main.py start_ws_relay, INFERENCE_PROXY_URL 설정 시).
+- 운영 전제 재명시: Fly·GPU `JWT_SECRET` 정합 필수(불일치 시 프록시되는 /test/start 401), 멀티머신 시 `WS_BACKEND=redis` 권장.
+- 검증: py_compile OK. (Fly 만 재배포하면 됨 — 릴레이는 Fly 에서 동작, GPU 는 이미 thermal.screening 정상 송출.)

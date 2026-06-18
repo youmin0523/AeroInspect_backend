@@ -7,12 +7,17 @@
 #   - 어떤 오류든 로컬 처리로 fallthrough — 프록시가 프로덕션을 절대 막지 않는다(fail-safe).
 #   - INFERENCE_PROXY_URL 미설정이면 완전 무동작(기존 동작 그대로, 무회귀).
 #
-# 주의(미완성/후속):
-#   - 검출 결과 WS(defect.new): GPU VM 의 ws_manager 가 broadcast 하므로, Fly WS 클라이언트
-#     (프론트)에 닿게 하려면 (a) 공유 Redis(WS_BACKEND=redis) 또는 (b) Fly→GCP WS 릴레이 필요.
-#     이 모듈은 HTTP 경로만 프록시한다. WS 다리는 활성화 런북 참고.
+# 검출 결과 WS 다리(구현됨 — 아래 _ws_relay_loop):
+#   GPU VM 의 ws_manager 가 검출 이벤트를 broadcast 하고 프론트는 Fly 의 WS 를 보므로,
+#   Fly 가 GPU 의 /ws?channels=defects 에 붙어(=공개 채널, 토큰 불요) 수신 이벤트를 Fly
+#   ws_manager 로 재broadcast 한다. defect.new 뿐 아니라 thermal.screening 등 defects 채널의
+#   모든 이벤트를 중계한다(start_ws_relay 는 INFERENCE_PROXY_URL 설정 시에만 기동).
+#
+# 주의(운영 전제):
 #   - 인증 정합: 프록시되는 제어 엔드포인트(/test/start 등)는 GPU VM 에서 토큰을 검증하므로
-#     Fly·GCP 의 JWT_SECRET 이 동일해야 한다(런북 참고). MJPEG/active/upload-file 은 public.
+#     Fly·GCP 의 JWT_SECRET 이 동일해야 한다(불일치 시 401). MJPEG/active/upload-file 은 public.
+#   - 멀티머신: Fly 가 여러 머신으로 뜨면 릴레이 머신과 프론트 WS 머신이 달라질 수 있으므로
+#     WS_BACKEND=redis(공유) 권장. 단일 머신이면 memory 백엔드로도 동작.
 #   - 업로드(대용량)는 클라이언트 수신 스트림을 그대로 GPU VM 으로 흘려보냄(버퍼링 X) → RAM 상수.
 # =============================================
 
@@ -182,9 +187,10 @@ async def _proxy_request(request: Request, target: str, path: str) -> Response:
 
 
 # ── WS 릴레이: GPU VM 의 검출 결과를 Fly WS 클라이언트(프론트)로 중계 ────────────
-# 검출(defect.new)은 GPU VM 의 ws_manager 가 broadcast 한다. 프론트는 Fly 의 WS 를 보므로,
-# 운영에서 검출 카드를 받으려면 GPU→Fly WS 다리가 필요. defects 채널은 공개(토큰 불필요)라
-# Fly 가 GPU 의 /ws?channels=defects 에 붙어 defect.new 를 받아 Fly ws_manager 로 재broadcast 한다.
+# 검출 이벤트(defect.new, thermal.screening 등)는 GPU VM 의 ws_manager 가 broadcast 한다.
+# 프론트는 Fly 의 WS 를 보므로, 운영에서 검출 카드/오버레이를 받으려면 GPU→Fly WS 다리가 필요.
+# defects 채널은 공개(토큰 불필요)라 Fly 가 GPU 의 /ws?channels=defects 에 붙어 그 채널의
+# 모든 이벤트를 받아 Fly ws_manager 로 재broadcast 한다.
 _relay_task: "asyncio.Task | None" = None
 
 
@@ -221,7 +227,15 @@ async def _ws_relay_loop() -> None:
                 async for raw in ws:
                     try:
                         data = json.loads(raw)
-                        if isinstance(data, dict) and data.get("type") == "defect.new":
+                        # GPU 가 defects 채널로 쏘는 '모든' 이벤트를 그대로 중계한다.
+                        # 과거엔 defect.new 만 중계 → thermal.screening(열화상 단열 스크리닝
+                        # 오버레이 + 프론트 분석게이트 프런티어)이 프로덕션에서 누락돼, 열화상
+                        # 영상이 운영 사이트에서 오버레이/재생게이트가 약해지는 사고가 있었다.
+                        # 이 릴레이는 GPU 의 defects 채널만 구독하고(=루프 없음), 그 채널 이벤트는
+                        # 전부 Fly 프론트로 가야 하므로 type 보유 dict 은 모두 재broadcast 한다
+                        # (향후 추가 이벤트 타입도 자동 포함). defect 리뷰/삭제 등은 Fly 가
+                        # 직접 처리·broadcast 하므로 GPU defects 채널엔 안 흘러와 중복 없음.
+                        if isinstance(data, dict) and data.get("type"):
                             # broadcast 가 멈춰도 read 루프 전체가 막히지 않도록 타임아웃.
                             await asyncio.wait_for(
                                 ws_manager.broadcast("defects", data),
